@@ -10,7 +10,7 @@ import CoreBluetooth
 final class DevicePickerWindowController: NSWindowController {
 
     /// The user picked a device and hit Connect.
-    var onSelect: ((CBPeripheral) -> Void)?
+    var onSelect: ((CoolerBLEManager.DiscoveredDevice) -> Void)?
     /// The user asked to start discovery over.
     var onScanAgain: (() -> Void)?
 
@@ -137,7 +137,7 @@ final class DevicePickerWindowController: NSWindowController {
 
     @objc private func connectTapped() {
         guard devices.indices.contains(tableView.selectedRow) else { return }
-        onSelect?(devices[tableView.selectedRow].peripheral)
+        onSelect?(devices[tableView.selectedRow])
         close()
     }
 

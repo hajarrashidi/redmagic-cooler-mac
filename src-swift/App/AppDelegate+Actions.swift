@@ -157,7 +157,7 @@ extension AppDelegate {
     func showDevicePicker() {
         if devicePicker == nil {
             let picker = DevicePickerWindowController()
-            picker.onSelect = { [weak self] peripheral in self?.ble.connect(to: peripheral) }
+            picker.onSelect = { [weak self] device in self?.ble.connect(to: device) }
             picker.onScanAgain = { [weak self] in
                 self?.ble.resetForRescan()
                 self?.ble.startScanning()

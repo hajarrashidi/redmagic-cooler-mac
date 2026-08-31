@@ -62,9 +62,15 @@ final class CoolerBLEManager: NSObject {
         let peripheral: CBPeripheral
         let name: String
         let rssi: Int
+        /// The model whose name hints matched this device.
+        let profile: DeviceProfile
     }
 
     weak var delegate: CoolerBLEManagerDelegate?
+
+    /// The model being driven. Set when discovery matches a device, and falls
+    /// back to the first registered profile until then — see `DeviceProfile`.
+    private(set) var profile: DeviceProfile = DeviceProfile.all[0]
 
     // ── Observable state ─────────────────────────────────────────────────────
 
@@ -106,17 +112,6 @@ final class CoolerBLEManager: NSObject {
     private var userRequestedDisconnect = false
 
     private var characteristics: [CBUUID: CBCharacteristic] = [:]
-
-    private static let serviceUUID = CBUUID(string: Config.GATT.service)
-    // Resolved once: `CBUUID(string:)` parses on every call, and these are
-    // compared for every characteristic on every notification.
-    private static let coolingModeUUID = CBUUID(string: Config.GATT.coolingMode)
-    private static let fanSpeedUUID    = CBUUID(string: Config.GATT.fanSpeed)
-    private static let lightModeUUID   = CBUUID(string: Config.GATT.lightMode)
-    private static let tempThreshUUID  = CBUUID(string: Config.GATT.tempThresh)
-    private static let hallUUID        = CBUUID(string: Config.GATT.hall)
-    private static let telemetryUUID   = CBUUID(string: Config.GATT.telemetry)
-    private static let autoTempUUID    = CBUUID(string: Config.GATT.autoTemp)
 
     override init() {
         super.init()
@@ -161,6 +156,12 @@ final class CoolerBLEManager: NSObject {
                 return
             }
 
+            // Re-match the profile from the saved name, in case a different
+            // model was used last time. Falls back to the current profile when
+            // macOS has no name cached.
+            if let name = known.name, let matched = DeviceProfile.matching(deviceName: name) {
+                profile = matched
+            }
             EventLogger.record("BLE — reconnecting to known peripheral")
             beginConnect(to: known)
             return
@@ -183,13 +184,14 @@ final class CoolerBLEManager: NSObject {
         return central.retrievePeripherals(withIdentifiers: [uuid]).first
     }
 
-    /// Connects to a peripheral the user picked in the device chooser.
-    func connect(to peripheral: CBPeripheral) {
+    /// Connects to a device the user picked in the device chooser.
+    func connect(to device: DiscoveredDevice) {
         central.stopScan()
         scanSettleTimer?.invalidate()
         scanSettleTimer = nil
         candidates = []
-        beginConnect(to: peripheral)
+        profile = device.profile
+        beginConnect(to: device.peripheral)
     }
 
     /// The single entry point for initiating a connection. Arms a watchdog
@@ -287,13 +289,13 @@ final class CoolerBLEManager: NSObject {
     /// device needs them separated in time.
     func setMode(_ mode: CoolingMode) {
         self.mode = mode
-        write([mode.rawValue], to: Self.coolingModeUUID)
+        write([mode.rawValue], to: profile.coolingModeUUID)
     }
 
     func setFanPercent(_ percent: UInt8) {
         let clamped = min(percent, 100)
         fanPercent = clamped
-        write([clamped], to: Self.fanSpeedUUID)
+        write([clamped], to: profile.fanSpeedUUID)
     }
 
     /// Applies a mode and fan speed together, in the order the cooler expects.
@@ -323,21 +325,21 @@ final class CoolerBLEManager: NSObject {
     ///
     /// The colour bytes are honoured by the monochrome-breath (3), stroke (4)
     /// and static effects and ignored by the rest. `effect` is deliberately
-    /// unclamped: the probe scripts in the repo root write bytes above the
+    /// unclamped: the probe scripts in `tools/probe/` write bytes above the
     /// range the UI exposes, to map undocumented effects.
     func setLight(effect: UInt8, color: RGB = .black) {
-        write([effect] + color.bytes, to: Self.lightModeUUID)
+        write([effect] + color.bytes, to: profile.lightModeUUID)
     }
 
     /// The device's own auto-engage threshold, in °C. Independent of this app's
     /// autopilot; the UI leaves it alone, but the CLI can probe it.
     func setTempThreshold(_ celsius: UInt8) {
-        write([min(celsius, 60)], to: Self.tempThreshUUID)
+        write([min(celsius, 60)], to: profile.tempThreshUUID)
     }
 
     /// Toggles the device's built-in temperature automation.
     func setDeviceAutoTemp(_ enabled: Bool) {
-        write([enabled ? 1 : 0], to: Self.autoTempUUID)
+        write([enabled ? 1 : 0], to: profile.autoTempUUID)
     }
 }
 
@@ -372,15 +374,15 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         let name = peripheral.name
             ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String
             ?? ""
-        let lowercased = name.lowercased()
-        guard Config.BLE.nameHints.contains(where: lowercased.contains) else { return }
+        guard let matched = DeviceProfile.matching(deviceName: name) else { return }
         guard !candidates.contains(where: { $0.peripheral.identifier == peripheral.identifier })
         else { return }
 
         candidates.append(DiscoveredDevice(
             peripheral: peripheral,
             name: name.isEmpty ? peripheral.identifier.uuidString : name,
-            rssi: RSSI.intValue))
+            rssi: RSSI.intValue,
+            profile: matched))
         EventLogger.record("BLE — found \"\(name)\" at \(RSSI) dBm")
         setPhase(.connecting(name: name.isEmpty ? nil : name))
 
@@ -403,7 +405,7 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
                                   forKey: Config.Key.preferredDevice)
         EventLogger.record("BLE — connected to \(peripheral.name ?? "cooler")")
         setPhase(.discoveringServices)
-        peripheral.discoverServices([Self.serviceUUID])
+        peripheral.discoverServices([profile.serviceUUID])
     }
 
     func centralManager(_ central: CBCentralManager,
@@ -460,7 +462,7 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
 extension CoolerBLEManager: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard let service = peripheral.services?.first(where: { $0.uuid == Self.serviceUUID })
+        guard let service = peripheral.services?.first(where: { $0.uuid == profile.serviceUUID })
         else { return }
         setPhase(.discoveringCharacteristics)
         peripheral.discoverCharacteristics(nil, for: service)
@@ -473,11 +475,9 @@ extension CoolerBLEManager: CBPeripheralDelegate {
 
         // Match on CBUUID rather than uuidString: CoreBluetooth shortens 128-bit
         // UUIDs in the Bluetooth base range to their 16-bit form ("1011"), so
-        // comparing against the full-length strings in Config never matches.
-        let notifying: Set<CBUUID> = [Self.hallUUID, Self.telemetryUUID]
-        let readable: Set<CBUUID> = [Self.coolingModeUUID, Self.fanSpeedUUID,
-                                     Self.lightModeUUID, Self.tempThreshUUID,
-                                     Self.autoTempUUID]
+        // comparing against full-length UUID strings never matches.
+        let notifying = profile.notifyingUUIDs
+        let readable = profile.readableUUIDs
 
         for characteristic in discovered {
             let uuid = characteristic.uuid
@@ -499,51 +499,35 @@ extension CoolerBLEManager: CBPeripheralDelegate {
         guard let data = characteristic.value, !data.isEmpty else { return }
 
         switch characteristic.uuid {
-        case Self.coolingModeUUID:
+        case profile.coolingModeUUID:
             mode = CoolingMode(rawValue: data[0])
             delegate?.bleManagerDidChangeSettings(self)
 
-        case Self.fanSpeedUUID:
+        case profile.fanSpeedUUID:
             fanPercent = data[0]
             delegate?.bleManagerDidChangeSettings(self)
 
-        case Self.lightModeUUID:
+        case profile.lightModeUUID:
             lightMode = data[0]
             delegate?.bleManagerDidChangeSettings(self)
 
-        case Self.tempThreshUUID:
+        case profile.tempThreshUUID:
             tempThreshold = data[0]
             delegate?.bleManagerDidChangeSettings(self)
 
-        case Self.autoTempUUID:
+        case profile.autoTempUUID:
             deviceAutoTemp = data[0] != 0
             delegate?.bleManagerDidChangeSettings(self)
 
-        case Self.hallUUID:
-            // Byte 0 == 4 means the magnetic mount is seated.
-            delegate?.bleManager(self, didChangeMountAttached: data[0] == 4)
+        case profile.hallUUID:
+            delegate?.bleManager(self, didChangeMountAttached: profile.decodeMountAttached(data))
 
-        case Self.telemetryUUID:
-            guard let telemetry = Self.decodeTelemetry(data) else { return }
+        case profile.telemetryUUID:
+            guard let telemetry = profile.decodeTelemetry(data) else { return }
             delegate?.bleManager(self, didReceive: telemetry)
 
         default:
             break
         }
-    }
-
-    /// Decodes a telemetry frame.
-    ///
-    /// Layout, from the captures in `docs/FINDINGS.md`:
-    /// `[0]=0xAA marker, [2]=cold °C, [3]=hot °C, [7]=ambient °C,`
-    /// `[13..14]=fan RPM little-endian`. Older firmware sends a shorter frame
-    /// that stops before the RPM field.
-    private static func decodeTelemetry(_ data: Data) -> CoolerTelemetry? {
-        guard data.count >= 8, data[0] == 0xAA else { return nil }
-        let rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
-        return CoolerTelemetry(coldC: Int(data[2]),
-                               hotC: Int(data[3]),
-                               ambientC: Int(data[7]),
-                               fanRPM: rpm)
     }
 }

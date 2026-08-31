@@ -164,7 +164,7 @@ thin bash CLI (`./cooler`) in front of it. See the
 
 ### LED effect bytes
 
-Probed on-device with `probe_light.sh`; full sweep in
+Probed on-device with `tools/probe/probe_light.sh`; full sweep in
 [`led_mapping.md`](led_mapping.md). The app uses:
 
 | Byte | Behaviour                                | Uses RGB |

@@ -1,0 +1,114 @@
+import Foundation
+import CoreBluetooth
+
+/// Everything the app knows about one cooler model, gathered in one place:
+/// how to recognise it in a scan, which GATT characteristics drive it, and how
+/// to decode its telemetry frames.
+///
+/// This is the single seam for supporting another device. To add a model,
+/// define a new profile below and append it to `all` — the rest of the app is
+/// model-agnostic and follows whichever profile matched during discovery.
+/// The full walkthrough is in `docs/ADDING_DEVICES.md`.
+///
+/// The UUIDs are stored pre-parsed as `CBUUID` because they're compared for
+/// every characteristic on every notification, and `CBUUID(string:)` parses
+/// on each call.
+struct DeviceProfile {
+
+    /// Human-readable model name, for logs and the device picker.
+    let modelName: String
+
+    /// Lowercased substrings that identify this model in a scan result.
+    ///
+    /// Matching is by advertised *name* because these devices omit their
+    /// service UUID from the scan record — filtering a scan by service would
+    /// never find them.
+    let nameHints: [String]
+
+    /// The vendor GATT service that carries all the control characteristics.
+    let serviceUUID: CBUUID
+
+    // ── Characteristics ──────────────────────────────────────────────────────
+
+    /// Write `[mode]` — see `CoolingMode`.
+    let coolingModeUUID: CBUUID
+    /// Write `[percent]`, 0–100.
+    let fanSpeedUUID: CBUUID
+    /// Write `[effect, R, G, B]` — see `LedEffect`.
+    let lightModeUUID: CBUUID
+    /// Write `[celsius]`. The device's own auto-engage threshold.
+    let tempThreshUUID: CBUUID
+    /// Notify. Reports whether the magnetic mount is seated.
+    let hallUUID: CBUUID
+    /// Notify. Periodic telemetry frames, decoded by `decodeTelemetry`.
+    let telemetryUUID: CBUUID
+    /// Write `[0|1]`. Enables the device's built-in temperature automation.
+    let autoTempUUID: CBUUID
+
+    // ── Frame decoding ───────────────────────────────────────────────────────
+
+    /// Decodes one frame from `telemetryUUID`, or returns `nil` for frames
+    /// that don't parse (wrong marker, truncated).
+    let decodeTelemetry: (Data) -> CoolerTelemetry?
+
+    /// Whether a hall-sensor frame means the magnetic mount is attached.
+    let decodeMountAttached: (Data) -> Bool
+
+    // ── Derived ──────────────────────────────────────────────────────────────
+
+    /// Characteristics to subscribe to.
+    var notifyingUUIDs: Set<CBUUID> { [hallUUID, telemetryUUID] }
+
+    /// Characteristics whose value is read once at connect to seed the caches.
+    var readableUUIDs: Set<CBUUID> {
+        [coolingModeUUID, fanSpeedUUID, lightModeUUID, tempThreshUUID, autoTempUUID]
+    }
+
+    // ── Registry ─────────────────────────────────────────────────────────────
+
+    /// Every model the app can drive, in match order. Add new profiles here.
+    static let all: [DeviceProfile] = [.vcCooler6Pro]
+
+    /// The profile whose name hints match an advertised device name, if any.
+    static func matching(deviceName: String) -> DeviceProfile? {
+        let lowercased = deviceName.lowercased()
+        return all.first { $0.nameHints.contains(where: lowercased.contains) }
+    }
+}
+
+// ── Known models ─────────────────────────────────────────────────────────────
+
+extension DeviceProfile {
+
+    /// REDMAGIC VC Cooler 6 Pro (advertises as `RM Magcooler 6pro`).
+    ///
+    /// The protocol was reverse-engineered from BLE captures and the vendor
+    /// APK; every byte here is documented in `docs/FINDINGS.md`.
+    static let vcCooler6Pro = DeviceProfile(
+        modelName: "REDMAGIC VC Cooler 6 Pro",
+        nameHints: ["magcooler", "rm cooler"],
+        serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
+        coolingModeUUID: CBUUID(string: "00001011-0000-1000-8000-00805f9b34fb"),
+        fanSpeedUUID:    CBUUID(string: "00001012-0000-1000-8000-00805f9b34fb"),
+        lightModeUUID:   CBUUID(string: "00001013-0000-1000-8000-00805f9b34fb"),
+        tempThreshUUID:  CBUUID(string: "00001014-0000-1000-8000-00805f9b34fb"),
+        hallUUID:        CBUUID(string: "00001015-0000-1000-8000-00805f9b34fb"),
+        telemetryUUID:   CBUUID(string: "00001016-0000-1000-8000-00805f9b34fb"),
+        autoTempUUID:    CBUUID(string: "00001018-0000-1000-8000-00805f9b34fb"),
+        decodeTelemetry: { data in
+            // `[0]=0xAA marker, [2]=cold °C, [3]=hot °C, [7]=ambient °C,
+            //  [13..14]=fan RPM little-endian`. Older firmware sends a shorter
+            // frame that stops before the RPM field.
+            guard data.count >= 8, data[0] == 0xAA else { return nil }
+            let rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
+            return CoolerTelemetry(coldC: Int(data[2]),
+                                   hotC: Int(data[3]),
+                                   ambientC: Int(data[7]),
+                                   fanRPM: rpm)
+        },
+        decodeMountAttached: { data in
+            // Byte 0 == 4 means the magnetic mount is seated (5 = detached).
+            !data.isEmpty && data[0] == 4
+        }
+    )
+}

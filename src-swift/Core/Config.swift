@@ -1,41 +1,17 @@
 import Foundation
 
-/// Compile-time configuration: the cooler's GATT contract, the keys we persist
-/// under, and the tuning constants for the control loop.
+/// Compile-time configuration: the keys we persist under and the tuning
+/// constants for the control loop.
 ///
-/// Everything here is a fact about the hardware or a deliberate tuning choice.
-/// Values discovered by probing the device are documented in `docs/FINDINGS.md`.
+/// Everything here is a deliberate tuning choice or a fact about the app
+/// itself. Facts about the *hardware* — GATT UUIDs, discovery name hints,
+/// telemetry frame layouts — live in `BLE/DeviceProfile.swift`, one profile
+/// per supported model.
 enum Config {
 
-    // ── GATT contract ────────────────────────────────────────────────────────
-
-    /// The cooler's vendor service. Note it is *not* advertised in the scan
-    /// record, so discovery matches on device name instead (see `BLE.nameHints`).
-    enum GATT {
-        static let service = "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"
-
-        /// Write `[mode]` — see `CoolingMode`.
-        static let coolingMode = "00001011-0000-1000-8000-00805f9b34fb"
-        /// Write `[percent]`, 0–100. Firmware maps this to a U-shaped RPM curve.
-        static let fanSpeed    = "00001012-0000-1000-8000-00805f9b34fb"
-        /// Write `[effect, R, G, B]` — see `LedEffect`.
-        static let lightMode   = "00001013-0000-1000-8000-00805f9b34fb"
-        /// Write `[celsius]`, 0–60. The device's own auto-engage threshold.
-        static let tempThresh  = "00001014-0000-1000-8000-00805f9b34fb"
-        /// Notify. Byte 0 == 4 means the magnetic mount is attached.
-        static let hall        = "00001015-0000-1000-8000-00805f9b34fb"
-        /// Notify. `[0xAA, _, cold, hot, _, _, _, ambient, …, rpmLo, rpmHi]`.
-        static let telemetry   = "00001016-0000-1000-8000-00805f9b34fb"
-        /// Write `[0|1]`. Enables the device's own temperature automation.
-        static let autoTemp    = "00001018-0000-1000-8000-00805f9b34fb"
-    }
-
-    // ── Device discovery ─────────────────────────────────────────────────────
+    // ── BLE timing ───────────────────────────────────────────────────────────
 
     enum BLE {
-        /// Lowercased substrings that identify a cooler in a scan result.
-        static let nameHints = ["magcooler", "rm cooler"]
-
         /// How long to keep collecting scan hits before offering a picker.
         static let scanSettleWindow: TimeInterval = 4.0
         /// Delay before retrying after a dropped or failed link.
