@@ -6,6 +6,9 @@ import AppKit
 /// dozen implicitly-unwrapped optionals, and so `refresh()` reads as a list of
 /// assignments against a named group rather than a wall of `itemFoo.isHidden`.
 struct MenuRows {
+    let updateBanner: NSMenuItem
+    let skipUpdate: NSMenuItem
+    let updateSeparator: NSMenuItem
     let connect: NSMenuItem
     let devicePicker: NSMenuItem
     let modeSwitch: NSMenuItem
@@ -33,6 +36,24 @@ extension AppDelegate: NSMenuDelegate {
         let width = UIStyle.menuWidth
         menu = NSMenu()
         menu.delegate = self
+
+        // ── Update notice ────────────────────────────────────────────────────
+        // Above everything else: it's the one row about the app itself rather
+        // than the cooler, and it only ever appears when there is news. All
+        // three items hide together, so normally the menu opens on the card.
+        updateBanner = BannerView(width: width)
+        updateBanner.onClick = { [weak self] in self?.openReleasePage() }
+        let updateBannerItem = wrap(updateBanner)
+        updateBannerItem.isHidden = true
+        menu.addItem(updateBannerItem)
+
+        let skipUpdate = actionItem("Skip This Version", #selector(skipThisVersion))
+        skipUpdate.isHidden = true
+        menu.addItem(skipUpdate)
+
+        let updateSeparator = NSMenuItem.separator()
+        updateSeparator.isHidden = true
+        menu.addItem(updateSeparator)
 
         // ── Status card ──────────────────────────────────────────────────────
         statusCard = StatusCardView(width: width)
@@ -133,7 +154,10 @@ extension AppDelegate: NSMenuDelegate {
         menu.addItem(actionItem("Quit RedMagic Cooler", #selector(quitApp),
                                 symbol: "xmark.circle"))
 
-        rows = MenuRows(connect: connect,
+        rows = MenuRows(updateBanner: updateBannerItem,
+                        skipUpdate: skipUpdate,
+                        updateSeparator: updateSeparator,
+                        connect: connect,
                         devicePicker: devicePickerItem,
                         modeSwitch: modeSwitchItem,
                         autoOptions: autoOptionsItem,

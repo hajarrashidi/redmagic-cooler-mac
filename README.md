@@ -82,10 +82,13 @@ Download the DMG from the
 [latest release](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest),
 open it, and drag **RedMagic Cooler** to Applications.
 
-Releases from **v2.1** onward are signed with a Developer ID certificate and
-notarized by Apple, so the app opens without any Gatekeeper warnings. (If you
-are on an older release, either upgrade or clear its quarantine flag with
-`xattr -rd com.apple.quarantine "/Applications/RedMagic Cooler.app"`.)
+Releases are signed with a Developer ID certificate and notarized by Apple, so
+the app opens without any Gatekeeper warnings.
+
+The app checks for a newer release on GitHub each time it starts, and shows a
+banner at the top of the menu when one is out. It never downloads or installs
+anything itself — the banner opens the release page, and updating stays a
+deliberate drag to Applications.
 
 ### Option 2 — Build from source
 

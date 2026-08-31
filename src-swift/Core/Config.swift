@@ -46,6 +46,30 @@ enum Config {
         static let ledHue          = "LedHue"              // Double, 0…1
         static let breathStyle     = "BreathStyle"         // BreathStyle.rawValue
         static let cachedMacModel  = "CachedMacModelName"
+        static let skippedVersion  = "SkippedUpdateVersion" // String, a release tag
+        static let lastUpdateCheck = "LastUpdateCheck"      // Double, epoch seconds
+    }
+
+    // ── Updates ──────────────────────────────────────────────────────────────
+
+    /// Where `UpdateChecker` looks, and how often.
+    enum Updates {
+        /// The repository releases are published from.
+        static let repository = "hajarrashidi/redmagic-cooler-mac"
+
+        /// `/releases/latest` already excludes drafts and prereleases, so
+        /// nothing needs filtering on our side.
+        static let latestReleaseAPI = URL(
+            string: "https://api.github.com/repos/\(repository)/releases/latest")!
+
+        /// Fallback landing page, used if a release ever omits its own URL.
+        static let releasesPage = URL(
+            string: "https://github.com/\(repository)/releases/latest")!
+
+        /// Minimum gap between network checks. Persisted, so it survives relaunch.
+        static let checkInterval: TimeInterval = 24 * 60 * 60
+        /// Give up quickly — a missed check just retries tomorrow.
+        static let requestTimeout: TimeInterval = 10
     }
 
     // ── Control loop timing ──────────────────────────────────────────────────
@@ -58,6 +82,10 @@ enum Config {
         /// How often settings are re-asserted to the device, in ticks of `poll`.
         /// The cooler occasionally drops a write; this makes state self-healing.
         static let heartbeatEveryTicks = 30
+        /// How often to *consider* an update check, in ticks of `poll`.
+        /// `UpdateChecker` throttles the actual request to `Updates.checkInterval`;
+        /// this only decides how promptly a long-running app notices it is due.
+        static let updateCheckEveryTicks = 3_600
         /// How long controls stay disabled after a user-initiated change, so a
         /// second command can't race the first.
         static let switchLockout: TimeInterval = 1.4

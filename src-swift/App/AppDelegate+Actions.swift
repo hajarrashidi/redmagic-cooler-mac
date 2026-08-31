@@ -172,6 +172,21 @@ extension AppDelegate {
         refresh()
     }
 
+    // ── Updates ──────────────────────────────────────────────────────────────
+
+    /// Opens the release page in the browser. The app deliberately installs
+    /// nothing itself — see `UpdateChecker` for why.
+    func openReleasePage() {
+        guard let update = updates.available else { return }
+        NSWorkspace.shared.open(update.page)
+        EventLogger.record("update page opened: \(update.tag)")
+    }
+
+    @objc func skipThisVersion() {
+        updates.skipAvailable()
+        refresh()
+    }
+
     // ── Settings ─────────────────────────────────────────────────────────────
 
     @objc func setIndicatorStyle(_ sender: NSMenuItem) {

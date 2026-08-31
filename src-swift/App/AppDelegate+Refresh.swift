@@ -13,11 +13,30 @@ extension AppDelegate {
         let coolerOn = connected && ble.mode.isOn
         let isManual = (appMode == .manual)
 
+        refreshUpdateNotice()
         refreshControls(connected: connected, isManual: isManual)
         refreshVisibility(connected: connected, coolerOn: coolerOn, isManual: isManual)
         refreshSettingsItems()
         refreshStatusItemButton(coolerOn: coolerOn)
         refreshStatusCard(connected: connected)
+    }
+
+    // ── Update notice ────────────────────────────────────────────────────────
+
+    /// Shows the update row only while a newer, unskipped release is known.
+    /// Independent of the connection state — a pending update is worth seeing
+    /// whether or not a cooler is attached.
+    private func refreshUpdateNotice() {
+        let update = updates.available
+        rows.updateBanner.isHidden = (update == nil)
+        rows.skipUpdate.isHidden = (update == nil)
+        rows.updateSeparator.isHidden = (update == nil)
+
+        guard let update else { return }
+        updateBanner.configure(style: .info,
+                               text: "Version \(update.displayVersion) available",
+                               symbol: "arrow.down.circle.fill",
+                               showSpinner: false)
     }
 
     // ── Control values ───────────────────────────────────────────────────────

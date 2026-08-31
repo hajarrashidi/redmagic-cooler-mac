@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var ble: CoolerBLEManager!
     var autopilot: AutopilotPolicy!
     var led: LedController!
+    var updates: UpdateChecker!
 
     // ── Menu ─────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Custom rows. Held so `refresh()` can update and show/hide them without
     /// rebuilding the menu, which would close it under the user's cursor.
     var statusCard: StatusCardView!
+    var updateBanner: BannerView!
     var devicePicker: DevicePickerView!
     var modeSwitch: ModeSwitchView!
     var autoOptions: AutoOptionsView!
@@ -101,6 +103,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ble.delegate = self
         led = LedController(ble: ble)
 
+        // Built before the menu, which wires a banner straight to it.
+        updates = UpdateChecker()
+        updates.onChange = { [weak self] in self?.refresh() }
+
         buildStatusItem()
         buildMenu()
 
@@ -114,6 +120,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The friendly Mac name needs system_profiler, which is far too slow to
         // block launch on; refresh the menu once it lands.
         SystemInfo.resolveModelName { [weak self] _ in self?.refresh() }
+
+        // Every launch, deliberately unthrottled: opening the app is exactly
+        // when a user wants to know they're behind. One request per launch is
+        // nothing against GitHub's unauthenticated budget, and it still stamps
+        // the clock, so the periodic check below stays a day behind it.
+        updates.check()
 
         writeProbeSnapshot()
         ble.startScanning()
@@ -154,6 +166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // cheap insurance against the UI and the hardware silently diverging.
         if ble.isConnected, tickCount.isMultiple(of: Config.Timing.heartbeatEveryTicks) {
             ble.reassertCurrentSettings()
+        }
+
+        // Only so an app left running for days still notices a release; the
+        // once-a-day throttle lives in UpdateChecker.
+        if tickCount.isMultiple(of: Config.Timing.updateCheckEveryTicks) {
+            updates.checkIfDue()
         }
 
         refresh()
