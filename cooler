@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+# cooler — REDMAGIC Cooler 6 Pro controller (native Swift backend)
+#
+# Commands:
+#   cooler               open the menu-bar app (default)
+#   cooler on [low|medium|max]   start cooling at a fixed level
+#   cooler auto [standard|custom]  autopilot — follows Mac temperature
+#   cooler off           stop cooling
+#   cooler fan <0-100>   set fan speed
+#   cooler status        quick status readout
+#   cooler monitor [s]   live temperature stream
+#   cooler log [-f]      timeline of heat + cooler actions (-f to follow)
+#   cooler gui           open the menu-bar app
+#
+# The Swift menu-bar app (RedMagic Cooler.app) is the daemon. CLI commands
+# talk to it through the IPC files it watches:
+#   ~/.cooler_cmd.json    command drop (app polls every 1 s)
+#   ~/.cooler_status.json live telemetry cache written by the app
+#   ~/.cooler.log         timeline of heat/cooler events
+#   ~/.cooler.pid         PID of the running app process
+
+set -euo pipefail
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_BUNDLE="$DIR/RedMagic Cooler.app"
+STATUS_FILE="$HOME/.cooler_status.json"
+CMD_FILE="$HOME/.cooler_cmd.json"
+PID_FILE="$HOME/.cooler.pid"
+LOG_FILE="$HOME/.cooler.log"
+STATUS_FRESH=15   # seconds — status older than this is considered stale
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+app_running() {
+    if [[ -f "$PID_FILE" ]]; then
+        local pid
+        pid="$(cat "$PID_FILE" 2>/dev/null)" || return 1
+        kill -0 "$pid" 2>/dev/null
+    else
+        return 1
+    fi
+}
+
+ensure_app() {
+    if ! app_running; then
+        echo "Starting RedMagic Cooler…"
+        open -a "$APP_BUNDLE" --args "$@"
+        # Give the app a moment to write its PID file
+        local i=0
+        while [[ $i -lt 20 ]] && ! app_running; do
+            sleep 0.5
+            (( i++ )) || true
+        done
+    fi
+}
+
+send_cmd() {
+    # Write a JSON command drop for the running app to pick up within ~1 s.
+    local json="$1"
+    ensure_app
+    printf '%s' "$json" > "$CMD_FILE"
+}
+
+read_status() {
+    [[ -f "$STATUS_FILE" ]] || return 1
+    local ts now age
+    if command -v python3 &>/dev/null; then
+        ts=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('ts',0))" < "$STATUS_FILE" 2>/dev/null) || return 1
+        now=$(python3 -c "import time; print(int(time.time()))" 2>/dev/null)
+        age=$(( now - ${ts%.*} ))
+    else
+        # jq fallback
+        ts=$(jq -r '.ts // 0' "$STATUS_FILE" 2>/dev/null) || return 1
+        now=$(date +%s)
+        age=$(( now - ${ts%.*} ))
+    fi
+    [[ $age -lt $STATUS_FRESH ]]
+}
+
+jq_field() {
+    # jq_field <file> <key> <default>
+    local file="$1" key="$2" default="${3:-—}"
+    if command -v jq &>/dev/null; then
+        jq -r ".$key // \"$default\"" "$file" 2>/dev/null || echo "$default"
+    else
+        python3 -c "import json,sys; d=json.load(open('$file')); print(d.get('$key','$default'))" 2>/dev/null || echo "$default"
+    fi
+}
+
+print_status() {
+    if [[ ! -f "$STATUS_FILE" ]]; then
+        echo "Cooling  : (no data — is RedMagic Cooler.app running?)"
+        return
+    fi
+
+    local state level auto_on fan_pct mode_name thermal cpu_c cold_c hot_c ambient_c fan_rpm hall profile
+    state=$(jq_field "$STATUS_FILE" state "?")
+    level=$(jq_field "$STATUS_FILE" level "?")
+    auto_on=$(jq_field "$STATUS_FILE" auto "false")
+    fan_pct=$(jq_field "$STATUS_FILE" fan_pct "—")
+    mode_name=$(jq_field "$STATUS_FILE" mode_name "—")
+    thermal=$(jq_field "$STATUS_FILE" thermal "—")
+    cpu_c=$(jq_field "$STATUS_FILE" cpu_c "—")
+    cold_c=$(jq_field "$STATUS_FILE" cold_c "—")
+    hot_c=$(jq_field "$STATUS_FILE" hot_c "—")
+    ambient_c=$(jq_field "$STATUS_FILE" ambient_c "—")
+    fan_rpm=$(jq_field "$STATUS_FILE" fan_rpm "—")
+    hall=$(jq_field "$STATUS_FILE" hall "—")
+    profile=$(jq_field "$STATUS_FILE" profile "—")
+
+    case "$state" in
+        on)           echo "Cooling  : ON ($level)" ;;
+        connecting)   echo "Cooling  : connecting…" ;;
+        reconnecting) echo "Cooling  : ON ($level) — reconnecting…" ;;
+        *)            echo "Cooling  : OFF" ;;
+    esac
+
+    if [[ "$auto_on" == "true" ]]; then
+        echo "Autopilot: ON ($profile) — Mac: ${cpu_c}°C, $thermal"
+    fi
+    if [[ "$state" == "on" ]]; then
+        echo "TEC mode : $mode_name"
+    fi
+    if [[ "$fan_pct" != "—" ]]; then
+        local rpm_s=""
+        [[ "$fan_rpm" != "—" && "$fan_rpm" != "null" ]] && rpm_s="  (${fan_rpm} RPM)"
+        echo "Fan      : ${fan_pct}%${rpm_s}"
+    fi
+    if [[ "$cold_c" != "—" && "$cold_c" != "null" ]]; then
+        echo "Cold     : ${cold_c}°C"
+        echo "Hot      : ${hot_c}°C"
+        echo "Ambient  : ${ambient_c}°C"
+    fi
+    if [[ "$hall" == "true" ]]; then
+        echo "Attached : YES — device detected"
+    elif [[ "$hall" == "false" ]]; then
+        echo "Attached : NO — no device"
+    fi
+
+    if app_running; then
+        local pid
+        pid="$(cat "$PID_FILE" 2>/dev/null)"
+        echo "App      : running  pid=$pid"
+    else
+        echo "App      : stopped"
+    fi
+}
+
+stream_monitor() {
+    local seconds="${1:-30}"
+    echo "Streaming ${seconds}s from app — Ctrl-C to stop"
+    echo "(cold = cooler plate temp; CPU = Mac SoC die temp)"
+    printf '%-10s  %6s  %6s  %9s  %6s  %9s\n' "time" "cold" "hot" "ambient" "CPU" "Mac"
+    local deadline=$(( $(date +%s) + seconds ))
+    local last_ts=""
+    while [[ $(date +%s) -lt $deadline ]]; do
+        if [[ -f "$STATUS_FILE" ]]; then
+            local ts cold hot ambient cpu_c thermal
+            ts=$(jq_field "$STATUS_FILE" ts "0")
+            if [[ "$ts" != "$last_ts" ]]; then
+                cold=$(jq_field "$STATUS_FILE" cold_c "—")
+                hot=$(jq_field "$STATUS_FILE" hot_c "—")
+                ambient=$(jq_field "$STATUS_FILE" ambient_c "—")
+                cpu_c=$(jq_field "$STATUS_FILE" cpu_c "—")
+                thermal=$(jq_field "$STATUS_FILE" thermal "—")
+                if [[ "$cold" != "—" && "$cold" != "null" ]]; then
+                    local t
+                    t=$(date +"%H:%M:%S")
+                    local cpu_s="—"
+                    [[ "$cpu_c" != "—" && "$cpu_c" != "null" ]] && cpu_s="${cpu_c}°C"
+                    printf '%-10s  %5s°C  %5s°C  %8s°C  %6s  %9s\n' \
+                        "$t" "$cold" "$hot" "$ambient" "$cpu_s" "$thermal"
+                    last_ts="$ts"
+                fi
+            fi
+        fi
+        sleep 0.25
+    done
+}
+
+# ── main dispatch ─────────────────────────────────────────────────────────────
+
+CMD="${1:-gui}"
+ARG="${2:-}"
+
+case "$CMD" in
+    on)
+        level="${ARG:-medium}"
+        case "$level" in
+            low)    send_cmd '{"cooling_mode":1,"auto_mode":false}' ;;
+            medium) send_cmd '{"cooling_mode":2,"auto_mode":false}' ;;
+            max)    send_cmd '{"cooling_mode":8,"auto_mode":false}' ;;
+            *)      echo "Unknown level '$level'. Use: low | medium | max"; exit 1 ;;
+        esac
+        echo "Cooling ON ($level)"
+        ;;
+
+    auto)
+        profile="${ARG:-standard}"
+        case "$profile" in
+            standard|custom) ;;
+            *) echo "Unknown profile '$profile'. Use: standard | custom"; exit 1 ;;
+        esac
+        send_cmd "{\"auto_mode\":true,\"auto_profile\":\"$profile\"}"
+        echo "Autopilot ON ($profile)"
+        ;;
+
+    off)
+        send_cmd '{"cooling_mode":3,"auto_mode":false}'
+        echo "Cooling OFF"
+        ;;
+
+    fan)
+        [[ -z "$ARG" ]] && { echo "Usage: cooler fan <0-100>"; exit 1; }
+        pct="$ARG"
+        send_cmd "{\"fan_speed\":$pct}"
+        echo "Fan speed → ${pct}%"
+        ;;
+
+    status)
+        print_status
+        ;;
+
+    monitor)
+        stream_monitor "${ARG:-30}"
+        ;;
+
+    log)
+        if [[ ! -f "$LOG_FILE" ]]; then
+            echo "(no events yet — start the app first)"
+            exit 0
+        fi
+        if [[ "$ARG" == "-f" || "$ARG" == "--follow" || "$ARG" == "follow" ]]; then
+            tail -n 25 -f "$LOG_FILE"
+        else
+            tail -n 25 "$LOG_FILE"
+        fi
+        ;;
+
+    gui|"")
+        open -a "$APP_BUNDLE"
+        ;;
+
+    -h|--help|help)
+        grep '^#' "$0" | grep -v '#!/' | sed 's/^# \?//'
+        ;;
+
+    *)
+        echo "Unknown command: $CMD"
+        echo "Run 'cooler --help' for usage."
+        exit 1
+        ;;
+esac
