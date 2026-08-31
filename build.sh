@@ -15,8 +15,8 @@ cd "$(dirname "$0")"
 
 APP="RedMagic Cooler.app"
 BUNDLE_ID="com.redmagic.cooler"
-VERSION="2.0"
-BUILD="3"
+VERSION="2.1"
+BUILD="4"
 
 # ── 1. Compile ────────────────────────────────────────────────────────────────
 # main.swift must come last: swiftc treats the final file as the entry point

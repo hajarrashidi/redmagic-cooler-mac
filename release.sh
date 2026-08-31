@@ -29,14 +29,17 @@ cd "$(dirname "$0")"
 
 APP="RedMagic Cooler.app"
 VOLUME="RedMagic Cooler"
-VERSION="${1:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-    "$APP/Contents/Info.plist" 2>/dev/null || echo dev)}"
-DMG="dist/RedMagic-Cooler-${VERSION}.dmg"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
 # ── 1. Build ──────────────────────────────────────────────────────────────────
 ./build.sh
+
+# Read the version *after* building, or the DMG would be named for whatever
+# stale bundle was lying around from a previous build.
+VERSION="${1:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+    "$APP/Contents/Info.plist" 2>/dev/null || echo dev)}"
+DMG="dist/RedMagic-Cooler-${VERSION}.dmg"
 
 # ── 2. Sign ───────────────────────────────────────────────────────────────────
 # The hardened runtime is required for notarization. It's harmless without it.

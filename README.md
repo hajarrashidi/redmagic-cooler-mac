@@ -78,31 +78,14 @@ macOS will ask for Bluetooth permission on first launch.
 
 ### Option 1 — Download the release
 
-1. Download the DMG from the
-   [latest release](https://github.com/hajarrashidi/redmagic-cooler-mac/releases),
-   open it, and drag **RedMagic Cooler** to Applications.
-2. Clear the download-quarantine flag once:
+Download the DMG from the
+[latest release](https://github.com/hajarrashidi/redmagic-cooler-mac/releases),
+open it, and drag **RedMagic Cooler** to Applications.
 
-   ```bash
-   xattr -rd com.apple.quarantine "/Applications/RedMagic Cooler.app"
-   ```
-
-3. Launch the app. From now on it opens like any other app.
-
-<details>
-<summary>Why is step 2 needed?</summary>
-
-The published builds are not yet notarized by Apple, and current macOS
-versions refuse to launch un-notarized downloads outright — depending on the
-version, the dialog claims the app "is damaged" or that it can't be checked
-for malicious software, and the old **Open Anyway** escape hatch is no longer
-reliably offered. The app itself is fine; macOS is objecting to the missing
-notarization ticket, not to anything in the bundle. Clearing the quarantine
-flag tells Gatekeeper you trust this download. (If your macOS version does
-still show **Open Anyway** at the bottom of **System Settings → Privacy &
-Security** after a failed launch, that route works too.)
-
-</details>
+Releases from **v2.1** onward are signed with a Developer ID certificate and
+notarized by Apple, so the app opens without any Gatekeeper warnings. (If you
+are on an older release, either upgrade or clear its quarantine flag with
+`xattr -rd com.apple.quarantine "/Applications/RedMagic Cooler.app"`.)
 
 ### Option 2 — Build from source
 
