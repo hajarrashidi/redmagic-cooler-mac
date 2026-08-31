@@ -14,6 +14,17 @@ new `DeviceProfile`. This guide walks the whole path. Read
 [`FINDINGS.md`](FINDINGS.md) alongside it — that's the finished worked example
 for the 6 Pro, and other REDMAGIC coolers will likely look very similar.
 
+**Pull requests are very welcome.** The 6 Pro is the only cooler the author
+owns, so every other model depends entirely on someone who has the hardware
+being willing to poke at it. If you own one, the work below is the whole job —
+and it is genuinely small once the bytes are known.
+
+You don't have to finish to be useful. If you stall halfway, open an issue with
+what you have: the advertised name alone tells the next person where to start,
+and a GATT dump saves them an evening. A profile that drives fan and cooling
+but not the LED is still worth merging — the app degrades feature by feature,
+so a partial profile is a working cooler rather than a broken app.
+
 ## What you need
 
 - The cooler, and a Mac.
@@ -28,12 +39,25 @@ for the 6 Pro, and other REDMAGIC coolers will likely look very similar.
 ## Step 1 — Find the device's advertised name
 
 REDMAGIC coolers don't advertise their service UUID, so this app discovers
-them by **name substring**. Scan with your BLE explorer while the cooler is
-powered and note the exact advertised name (the 6 Pro shows up as
-`RM Magcooler 6pro`).
+them by **name substring**. Scan while the cooler is powered and note the exact
+advertised name (the 6 Pro shows up as `RM Magcooler 6pro`).
 
-Pick a lowercase substring of it that's unlikely to match anything else —
-that'll be the profile's `nameHints` entry.
+The app can do this part for you. Open **Change Device…** — coolers it
+recognises by vendor name but has no profile for are listed under *NOT
+SUPPORTED YET*, greyed out, with their advertised name shown. If yours isn't
+there, tick **Show all devices** to list every named BLE device in range and
+find it that way. Either route gives you the string you need without installing
+anything else.
+
+A BLE explorer still helps for the steps below, and is the fallback if the app
+shows nothing at all.
+
+Pick a lowercase substring of the name that's unlikely to match anything else —
+that'll be the profile's `nameHints` entry. Keep it specific: it is matched
+against every device in Bluetooth range, so a hint like `cooler` will collide
+with unrelated hardware. If the name is also plausibly another REDMAGIC cooler,
+add it to `DeviceProfile.vendorHints` too, so devices the app can't yet drive
+are still listed for the next person.
 
 ## Step 2 — Map the GATT table
 

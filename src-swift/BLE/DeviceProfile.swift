@@ -74,6 +74,24 @@ struct DeviceProfile {
         let lowercased = deviceName.lowercased()
         return all.first { $0.nameHints.contains(where: lowercased.contains) }
     }
+
+    /// Loose substrings suggesting a vendor cooler the app has *no* profile for.
+    ///
+    /// Deliberately broader than any profile's `nameHints`, and used only to
+    /// decide what to *show*. A device matching these but no profile is listed
+    /// in the picker as unsupported and cannot be connected to — the app has no
+    /// idea what its bytes mean. The point is that its owner can see the app
+    /// noticed it, and read `docs/ADDING_DEVICES.md` rather than concluding the
+    /// app is broken.
+    static let vendorHints = [
+        "redmagic", "red magic", "magcooler", "magic cooler",
+        "rm cooler", "vc cooler", "nubia",
+    ]
+
+    static func looksLikeVendorDevice(deviceName: String) -> Bool {
+        let lowercased = deviceName.lowercased()
+        return vendorHints.contains(where: lowercased.contains)
+    }
 }
 
 // ── Known models ─────────────────────────────────────────────────────────────
@@ -86,7 +104,12 @@ extension DeviceProfile {
     /// APK; every byte here is documented in `docs/FINDINGS.md`.
     static let vcCooler6Pro = DeviceProfile(
         modelName: "REDMAGIC VC Cooler 6 Pro",
-        nameHints: ["magcooler", "rm cooler"],
+        // Only names this model is actually known to advertise. `rm cooler`
+        // used to live here as a guess at sibling models, which meant any
+        // "RM Cooler 5" in range was silently driven with 6 Pro byte layouts.
+        // It now sits in `vendorHints`, so an unknown RM cooler is listed as
+        // unsupported instead of being written to on a hunch.
+        nameHints: ["magcooler"],
         serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
         coolingModeUUID: CBUUID(string: "00001011-0000-1000-8000-00805f9b34fb"),
         fanSpeedUUID:    CBUUID(string: "00001012-0000-1000-8000-00805f9b34fb"),

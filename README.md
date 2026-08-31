@@ -52,17 +52,39 @@ another device.
 | Model | Year | Control | Works with this app? |
 |-------|------|---------|----------------------|
 | [VC Cooler 6 Pro](https://redmagic.tech/products/redmagic-vc-cooler-6-pro) | 2025 | Bluetooth LE (Goper app) | ✅ **Supported** — the device the protocol was mapped on |
-| VC Cooler 6 / 6 Air | 2025 | Bluetooth LE (Goper app) | ⚠️ Untested — same generation, protocol likely close |
-| [VC Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro) | 2024 | Bluetooth LE (Goper app) | ⚠️ Untested — BLE-controlled, worth trying |
+| VC Cooler 6 / 6 Air | 2025 | Bluetooth LE (Goper app) | ⚠️ Not supported — same generation, protocol likely close |
+| [VC Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro) | 2024 | Bluetooth LE (Goper app) | ⚠️ Not supported — BLE-controlled, likely portable |
 | Dual-Core Ice Dock | 2022 | Bluetooth LE (Equipment app) | ❌ Older app family, protocol unknown |
 | Turbo Cooler / Gen 4 | 2023 | Mechanical button | ❌ No radio to talk to |
 | Ice Dock | 2020 | None | ❌ No radio |
 
-If you own one of the untested BLE models, the app may already discover it —
-scan matching is by name substring (`magcooler`, `rm cooler`) — and if the
-firmware shares the 6 Pro's GATT layout it may simply work. If not, adding a
-model is a documented, deliberately small job: see
-[Adding support for another cooler](#adding-support-for-another-cooler).
+**Only the 6 Pro is supported.** The app ships one device profile and will not
+try to drive hardware it has no profile for — without one it knows neither
+which characteristics to write nor what the telemetry means, so "just try it"
+would mean sending guessed bytes to a thermoelectric cooler.
+
+It still helps you if you own something else. Open **Change Device…** and the
+picker lists every nearby cooler it can see, including the ones it can't drive,
+so you can read off the advertised name; tick **Show all devices** if yours
+doesn't show up under a recognisable name. That name is step one of the porting
+guide.
+
+### We'd love your help supporting more models
+
+If you own any other REDMAGIC cooler, **please try it and send a PR** — that is
+the only way this list grows. Neither of the untested models above is one the
+author owns, so the protocol work simply can't happen without people who have
+the hardware.
+
+Adding a model is deliberately small: one new `DeviceProfile`, no changes
+anywhere else in the app.
+[docs/ADDING_DEVICES.md](docs/ADDING_DEVICES.md) walks the whole path, and
+[docs/FINDINGS.md](docs/FINDINGS.md) is the finished worked example for the
+6 Pro to copy from.
+
+Partial results are welcome too. If you get part-way and stall, open an issue
+with whatever you found — the advertised name alone, or a GATT dump — and it
+gives the next person with that cooler a running start.
 
 ## Installation
 

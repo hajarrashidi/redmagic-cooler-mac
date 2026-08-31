@@ -164,12 +164,24 @@ extension AppDelegate {
     }
 
     /// Connects only after an explicit click on a discovered device row.
+    ///
+    /// Unsupported rows are unclickable in the picker and refused again by the
+    /// manager, so `profile` is non-nil in practice; the guard keeps this
+    /// honest rather than force-unwrapping a promise made two layers away.
     func selectDiscoveredDevice(_ device: CoolerBLEManager.DiscoveredDevice) {
+        guard let profile = device.profile else { return }
         isSelectingDevice = false
         turnOffOnConnect = true
         ble.connect(to: device)
-        EventLogger.record("device selected: \(device.profile.modelName)")
+        EventLogger.record("device selected: \(profile.modelName)")
         refresh()
+    }
+
+    /// Opens the porting guide, for someone whose cooler the app can see but
+    /// has no profile for.
+    func openAddingDevicesGuide() {
+        NSWorkspace.shared.open(Config.Links.addingDevices)
+        EventLogger.record("adding-devices guide opened")
     }
 
     // ── Updates ──────────────────────────────────────────────────────────────

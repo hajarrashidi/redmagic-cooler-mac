@@ -58,6 +58,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Whether the magnetic mount is seated.
     var mountAttached: Bool?
 
+    /// Infers the cooler's physical power switch being off while still linked.
+    var switchMonitor = PhysicalSwitchMonitor()
+    /// When the newest telemetry frame arrived, seeded at connect so silence
+    /// from a device that never reports at all is still measurable.
+    var lastTelemetryAt: TimeInterval?
+
     /// Discovery results are being shown inside the status menu until the user
     /// explicitly chooses one. This stays true even for a single result.
     var isSelectingDevice = false
@@ -156,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         handlePendingProbeCommand()
         thermal = ThermalMonitor.read()
+        updateSwitchMonitor()
 
         if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
             runAutopilot()

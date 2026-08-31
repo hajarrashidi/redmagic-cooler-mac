@@ -81,7 +81,14 @@ extension AppDelegate {
         rows.modeSwitch.isHidden = !connected
         rows.autoOptions.isHidden = !connected || isManual
         rows.coolingSlider.isHidden = !connected || !isManual
-        rows.manualWarning.isHidden = !connected || !(isManual && coolerOn) || isSwitching
+        let deviceOff = connected && switchMonitor.looksPoweredOff
+        rows.deviceOffBanner.isHidden = !deviceOff
+
+        // The manual reminder is about the cooler staying on. While its own
+        // switch is off it is not on, and stacking two warnings would bury the
+        // one that actually explains what the user is seeing.
+        rows.manualWarning.isHidden =
+            !connected || !(isManual && coolerOn) || isSwitching || deviceOff
         rows.switchingBanner.isHidden = !connected || !isSwitching
 
         // LED controls only mean something while the cooler is running; when
@@ -179,7 +186,8 @@ extension AppDelegate {
             deviceModelName: ble.profile?.modelName,
             appMode: appMode,
             autoProfile: autopilot.profile,
-            fanTint: led.fanTint(dieC: thermal.dieTemperatureC)))
+            fanTint: led.fanTint(dieC: thermal.dieTemperatureC),
+            deviceLooksPoweredOff: switchMonitor.looksPoweredOff))
     }
 
 }

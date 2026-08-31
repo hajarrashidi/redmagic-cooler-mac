@@ -2,6 +2,13 @@ import AppKit
 
 /// Auto-mode options: pick the Standard profile, or Custom with a user-chosen
 /// engage temperature. Shown only while the cooling switch is on Auto.
+///
+/// Both profiles show a labelled **engage threshold** — the die temperature at
+/// which the first cooling step kicks in — because that is the number that
+/// explains the autopilot's behaviour, and leaving it implicit made the bare
+/// slider read as an unlabelled setting. Only Custom gets the slider: Standard's
+/// ladder is fixed, and its 40 °C engage point sits below the slider's own
+/// minimum, so a disabled slider could not even be positioned honestly.
 final class AutoOptionsView: NSView {
 
     var onProfile: ((AutoProfile) -> Void)?
@@ -15,55 +22,76 @@ final class AutoOptionsView: NSView {
                                                trackingMode: .selectOne,
                                                target: nil, action: nil)
     private let profileName = NSTextField(labelWithString: AutoProfile.standard.displayName)
+    private let thresholdTitle = NSTextField(labelWithString: "ENGAGE THRESHOLD")
     private let descriptionLabel = NSTextField(
         labelWithString: "Cools automatically as your Mac heats up.")
     private let slider = NSSlider()
     private let valueLabel = NSTextField(labelWithString: "")
 
+    /// Not flipped: y is measured from the bottom, as elsewhere in this view.
+    private enum Layout {
+        static let height: CGFloat = 104
+        static let headerY: CGFloat = 88
+        static let segmentedY: CGFloat = 56
+        static let thresholdY: CGFloat = 34
+        static let sliderY: CGFloat = 8
+        static let descriptionY: CGFloat = 10
+    }
+
     init(width: CGFloat) {
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 80))
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: Layout.height))
 
         let header = NSTextField(labelWithString: "AUTO MODE")
         header.font = UIStyle.sectionFont
         header.textColor = .tertiaryLabelColor
-        header.frame = NSRect(x: hPad, y: 64, width: 150, height: 13)
+        header.frame = NSRect(x: hPad, y: Layout.headerY, width: 150, height: 13)
         addSubview(header)
 
         profileName.font = UIStyle.captionFont
         profileName.textColor = .secondaryLabelColor
         profileName.alignment = .right
-        profileName.frame = NSRect(x: width - hPad - 120, y: 64, width: 120, height: 13)
+        profileName.frame = NSRect(x: width - hPad - 120, y: Layout.headerY,
+                                   width: 120, height: 13)
         addSubview(profileName)
 
         segmented.segmentStyle = .rounded
         segmented.selectedSegment = 0
         segmented.target = self
         segmented.action = #selector(segmentChanged)
-        segmented.frame = NSRect(x: hPad, y: 34, width: width - hPad * 2, height: 24)
+        segmented.frame = NSRect(x: hPad, y: Layout.segmentedY,
+                                 width: width - hPad * 2, height: 24)
         segmented.autoresizingMask = .width
         addSubview(segmented)
 
-        // Standard and Custom share this row: the description shows for one,
-        // the slider and its readout for the other.
+        // The threshold row is always present, so the number that drives the
+        // autopilot is never hidden behind a profile name.
+        thresholdTitle.font = UIStyle.sectionFont
+        thresholdTitle.textColor = .tertiaryLabelColor
+        thresholdTitle.frame = NSRect(x: hPad, y: Layout.thresholdY, width: 160, height: 13)
+        addSubview(thresholdTitle)
+
+        valueLabel.font = UIStyle.valueFont
+        valueLabel.alignment = .right
+        valueLabel.frame = NSRect(x: width - hPad - 80, y: Layout.thresholdY - 2,
+                                  width: 80, height: 16)
+        addSubview(valueLabel)
+
+        // Standard and Custom share the bottom row: the description shows for
+        // one, the slider for the other.
         descriptionLabel.font = UIStyle.captionFont
         descriptionLabel.textColor = .tertiaryLabelColor
-        descriptionLabel.frame = NSRect(x: hPad, y: 8, width: width - hPad * 2, height: 16)
+        descriptionLabel.frame = NSRect(x: hPad, y: Layout.descriptionY,
+                                        width: width - hPad * 2, height: 16)
         addSubview(descriptionLabel)
 
         slider.minValue = Config.Autopilot.customEngageMinC
         slider.maxValue = Config.Autopilot.customEngageMaxC
         slider.target = self
         slider.action = #selector(sliderMoved)
-        slider.frame = NSRect(x: hPad, y: 6, width: width - hPad * 2 - 60, height: 20)
+        slider.frame = NSRect(x: hPad, y: Layout.sliderY, width: width - hPad * 2, height: 20)
         slider.autoresizingMask = .width
         slider.isHidden = true
         addSubview(slider)
-
-        valueLabel.font = UIStyle.valueFont
-        valueLabel.alignment = .right
-        valueLabel.frame = NSRect(x: width - hPad - 56, y: 6, width: 56, height: 16)
-        valueLabel.isHidden = true
-        addSubview(valueLabel)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -86,12 +114,16 @@ final class AutoOptionsView: NSView {
         profileName.stringValue = profile.displayName
         descriptionLabel.isHidden = isCustom
         slider.isHidden = !isCustom
-        valueLabel.isHidden = !isCustom
-        if isCustom { updateValueLabel() }
+        updateValueLabel()
     }
 
+    /// Standard's threshold is a fixed property of its ladder; Custom's is
+    /// whatever the slider currently reads.
     private func updateValueLabel() {
-        valueLabel.stringValue = "≥ " + SystemInfo.formatTemp(slider.doubleValue)
+        let celsius = (profile == .custom)
+            ? slider.doubleValue
+            : Config.Autopilot.standardEngageC
+        valueLabel.stringValue = "≥ " + SystemInfo.formatTemp(celsius)
     }
 
     @objc private func segmentChanged() {

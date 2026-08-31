@@ -111,8 +111,8 @@ final class AutopilotPolicy {
             // The cooler plate sits on the Mac's chassis, so it earns its keep
             // while the machine is merely warm — not only under sustained load.
             // Engage early and ramp quickly.
-            engagePoints = [(40, 1), (50, 2), (62, 3), (74, 4)]
-            ledGreenC = 40
+            engagePoints = [(Config.Autopilot.standardEngageC, 1), (50, 2), (62, 3), (74, 4)]
+            ledGreenC = Config.Autopilot.standardEngageC
             ledRedC = 78
         }
 

@@ -72,6 +72,15 @@ enum Config {
         static let requestTimeout: TimeInterval = 10
     }
 
+    // ── Links ────────────────────────────────────────────────────────────────
+
+    enum Links {
+        /// The porting guide, offered in the device picker to whoever has a
+        /// cooler the app can see but has no profile for.
+        static let addingDevices = URL(
+            string: "https://github.com/\(Updates.repository)/blob/main/docs/ADDING_DEVICES.md")!
+    }
+
     // ── Control loop timing ──────────────────────────────────────────────────
 
     enum Timing {
@@ -103,6 +112,10 @@ enum Config {
         static let hysteresisC: Double = 5.0
         /// How long the temperature must stay low before stepping down a tier.
         static let cooldownDwell: TimeInterval = 15.0
+
+        /// Where the Standard profile's first cooling step engages (°C). Fixed,
+        /// but read by the UI so the menu can show the threshold it will use.
+        static let standardEngageC: Double = 40.0
 
         static let customEngageDefaultC: Double = 65.0
         static let customEngageMinC: Double = 45.0

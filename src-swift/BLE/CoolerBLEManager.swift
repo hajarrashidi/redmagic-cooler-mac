@@ -59,11 +59,36 @@ struct CoolerTelemetry {
 final class CoolerBLEManager: NSObject {
 
     struct DiscoveredDevice {
+
+        /// How well the app knows a discovered device.
+        ///
+        /// Only `.supported` is connectable. The other two exist so the picker
+        /// can *show* a cooler it can't drive: silently dropping it, as the app
+        /// used to, left the owner of a newer model staring at "no supported
+        /// coolers found" with no way to tell whether the app had even seen it.
+        enum Support {
+            /// A registered profile matched by name. Drivable.
+            case supported(DeviceProfile)
+            /// Recognisably a vendor cooler, but no profile matches.
+            case unsupported
+            /// Any other named device. Listed only when the user asks to see
+            /// everything, so a cooler advertising an unexpected name is still
+            /// findable — that name is step one of the porting guide.
+            case other
+        }
+
         let peripheral: CBPeripheral
         let name: String
         let rssi: Int
-        /// The model whose name hints matched this device.
-        let profile: DeviceProfile
+        let support: Support
+
+        /// The model to drive this device with, or `nil` if the app has none.
+        var profile: DeviceProfile? {
+            guard case .supported(let profile) = support else { return nil }
+            return profile
+        }
+
+        var isSupported: Bool { profile != nil }
     }
 
     weak var delegate: CoolerBLEManagerDelegate?
@@ -185,6 +210,22 @@ final class CoolerBLEManager: NSObject {
         EventLogger.record("BLE — scanning for device selection")
         setPhase(.scanning)
         central.scanForPeripherals(withServices: nil, options: nil)
+        // Armed up front, not just on a hit: a scan that finds nothing must
+        // still end in a picker that says so, rather than spinning forever.
+        armScanSettleTimer()
+    }
+
+    /// Ends the scan after a quiet period and hands the results to the picker.
+    private func armScanSettleTimer() {
+        scanSettleTimer?.invalidate()
+        scanSettleTimer = Timer.scheduledTimer(
+            withTimeInterval: Config.BLE.scanSettleWindow, repeats: false
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.central.stopScan()
+            self.setPhase(.idle)
+            self.delegate?.bleManager(self, needsDeviceSelection: self.candidates)
+        }
     }
 
     /// The previously-connected peripheral, if one is saved and macOS still
@@ -197,12 +238,21 @@ final class CoolerBLEManager: NSObject {
     }
 
     /// Connects to a device the user picked in the device chooser.
+    ///
+    /// Unsupported devices are listed in that chooser but refused here: without
+    /// a profile the app knows neither which characteristics to drive nor what
+    /// its telemetry means, so connecting could only write guessed bytes to
+    /// unfamiliar hardware.
     func connect(to device: DiscoveredDevice) {
+        guard let chosen = device.profile else {
+            EventLogger.record("BLE — refusing unsupported device \"\(device.name)\"")
+            return
+        }
         central.stopScan()
         scanSettleTimer?.invalidate()
         scanSettleTimer = nil
         candidates = []
-        profile = device.profile
+        profile = chosen
         beginConnect(to: device.peripheral)
     }
 
@@ -387,27 +437,41 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         let name = peripheral.name
             ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String
             ?? ""
-        guard let matched = DeviceProfile.matching(deviceName: name) else { return }
+        // An unnamed device can be neither identified nor usefully reported.
+        guard !name.isEmpty else { return }
         guard !candidates.contains(where: { $0.peripheral.identifier == peripheral.identifier })
         else { return }
 
-        candidates.append(DiscoveredDevice(
-            peripheral: peripheral,
-            name: name.isEmpty ? peripheral.identifier.uuidString : name,
-            rssi: RSSI.intValue,
-            profile: matched))
-        EventLogger.record("BLE — found \"\(name)\" at \(RSSI) dBm")
-        // Restart the settle window on each hit so nearby coolers appearing a
-        // moment later still make it into the picker.
-        scanSettleTimer?.invalidate()
-        scanSettleTimer = Timer.scheduledTimer(
-            withTimeInterval: Config.BLE.scanSettleWindow, repeats: false
-        ) { [weak self] _ in
-            guard let self else { return }
-            central.stopScan()
-            self.setPhase(.idle)
-            self.delegate?.bleManager(self, needsDeviceSelection: self.candidates)
+        let support: DiscoveredDevice.Support
+        if let matched = DeviceProfile.matching(deviceName: name) {
+            support = .supported(matched)
+        } else if DeviceProfile.looksLikeVendorDevice(deviceName: name) {
+            support = .unsupported
+        } else {
+            support = .other
         }
+
+        candidates.append(DiscoveredDevice(peripheral: peripheral,
+                                           name: name,
+                                           rssi: RSSI.intValue,
+                                           support: support))
+
+        switch support {
+        case .supported:
+            EventLogger.record("BLE — found supported \"\(name)\" at \(RSSI) dBm")
+        case .unsupported:
+            EventLogger.record("BLE — found unsupported vendor device \"\(name)\" at \(RSSI) dBm")
+        case .other:
+            // Logging every BLE device in radio range would drown the timeline.
+            return
+        }
+
+        // Restart the settle window on each *cooler* hit so one appearing a
+        // moment later still makes it into the picker. Deliberately not for
+        // unrelated devices: in a busy room they arrive continuously, and
+        // extending the deadline for each would keep the picker from ever
+        // appearing.
+        armScanSettleTimer()
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {

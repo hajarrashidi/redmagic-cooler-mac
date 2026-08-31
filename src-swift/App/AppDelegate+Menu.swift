@@ -16,6 +16,7 @@ struct MenuRows {
     let coolingSlider: NSMenuItem
     let manualWarning: NSMenuItem
     let switchingBanner: NSMenuItem
+    let deviceOffBanner: NSMenuItem
     let ledSeparator: NSMenuItem
     let effect: NSMenuItem
     let breathToggle: NSMenuItem
@@ -70,6 +71,7 @@ extension AppDelegate: NSMenuDelegate {
         devicePicker = DevicePickerView(width: width)
         devicePicker.onSelect = { [weak self] in self?.selectDiscoveredDevice($0) }
         devicePicker.onScanAgain = { [weak self] in self?.scanAgainForDevices() }
+        devicePicker.onOpenGuide = { [weak self] in self?.openAddingDevicesGuide() }
         let devicePickerItem = wrap(devicePicker)
         devicePickerItem.isHidden = true
         menu.addItem(devicePickerItem)
@@ -99,6 +101,15 @@ extension AppDelegate: NSMenuDelegate {
                                           symbol: "arrow.triangle.2.circlepath",
                                           spinner: true))
         menu.addItem(switchingBanner)
+
+        // The app can command this cooler over Bluetooth but cannot override
+        // its physical switch, so when that switch is off every control in the
+        // menu silently does nothing. Say so rather than let the user conclude
+        // the app is broken.
+        let deviceOffBanner = wrap(banner(width, .warning,
+                                          "Cooler's power switch is off",
+                                          symbol: "power.circle.fill"))
+        menu.addItem(deviceOffBanner)
 
         // ── LED ──────────────────────────────────────────────────────────────
         let ledSeparator = NSMenuItem.separator()
@@ -146,9 +157,13 @@ extension AppDelegate: NSMenuDelegate {
                                       symbol: "arrow.right.to.line.compact")
         menu.addItem(startAtLogin)
 
-        let changeDevice = actionItem("Change Device…", #selector(changeDevice),
-                                      symbol: "antenna.radiowaves.left.and.right")
-        menu.addItem(changeDevice)
+        // A custom row, not a plain item: this one has to leave the menu open,
+        // because everything it does — the inline picker, the scan progress —
+        // is displayed in the rows above it.
+        let changeDeviceRow = MenuActionRow(width: width, title: "Change Device…",
+                                            symbol: "antenna.radiowaves.left.and.right")
+        changeDeviceRow.onClick = { [weak self] in self?.changeDevice() }
+        menu.addItem(wrap(changeDeviceRow))
 
         menu.addItem(.separator())
         menu.addItem(actionItem("Quit RedMagic Cooler", #selector(quitApp),
@@ -164,6 +179,7 @@ extension AppDelegate: NSMenuDelegate {
                         coolingSlider: coolingSliderItem,
                         manualWarning: manualWarning,
                         switchingBanner: switchingBanner,
+                        deviceOffBanner: deviceOffBanner,
                         ledSeparator: ledSeparator,
                         effect: effectItem,
                         breathToggle: breathToggleItem,

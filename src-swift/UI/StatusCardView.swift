@@ -10,7 +10,14 @@ import AppKit
 /// tree of views being shown and hidden.
 final class StatusCardView: NSView {
 
-    static let height: CGFloat = 178
+    /// Derived from the panels rather than hand-tuned, so restyling a font or
+    /// changing the padding can't leave the last row clipped.
+    static var height: CGFloat {
+        // Split into named parts: as one expression the type-checker crawls.
+        let header: CGFloat = pad + logoSize + headerGap * 2
+        let panels: CGFloat = macPanelHeight + panelGap + devicePanelHeight
+        return header + panels + pad
+    }
 
     /// Everything the card draws, passed in one value so the view holds no
     /// opinions about where any of it came from.
@@ -26,6 +33,11 @@ final class StatusCardView: NSView {
         var autoProfile: AutoProfile = .standard
         /// Tint for the animated fan — mirrors the active LED colour.
         var fanTint: NSColor = .secondaryLabelColor
+        /// The cooler is linked and commanded on, but its physical switch looks
+        /// to be off. The fan is then drawn still: showing it spinning while the
+        /// hardware sits idle is the single most misleading thing this card can
+        /// do, because the spin is the main "it's working" cue.
+        var deviceLooksPoweredOff = false
     }
 
     private var model = ViewModel()
@@ -41,6 +53,27 @@ final class StatusCardView: NSView {
     // ── Metrics ──────────────────────────────────────────────────────────────
 
     private static let pad = UIStyle.hPad
+    /// Vertical breathing room inside a section panel.
+    private static let panelPad: CGFloat = 14
+    /// Margin between a panel's edge and the menu's, so the panels read as
+    /// cards sitting *in* the menu rather than as full-bleed bands.
+    private static let panelInset: CGFloat = 8
+    /// Horizontal breathing room inside a panel.
+    private static let panelContentPad: CGFloat = 12
+    /// Left edge of anything drawn inside a panel.
+    ///
+    /// Deliberately indented past `pad`, which stays where AppKit puts the text
+    /// of the plain items further down the menu. Raising `pad` itself to gain a
+    /// margin would drag those out of alignment; indenting only panel content
+    /// is the same arrangement System Settings uses — a section label at the
+    /// window inset, with its group box content sitting further in.
+    private static let panelContentX = panelInset + panelContentPad
+    private static let panelGap: CGFloat = 10
+    private static let panelRadius: CGFloat = 9
+    private static let logoSize: CGFloat = 18
+    /// Gap below the brand header, used twice: once by the header's own
+    /// bottom margin and once before the first panel.
+    private static let headerGap: CGFloat = 7
     private static let headerFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
     private static let tempFont = NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .light)
     private static let stateFont = NSFont.systemFont(ofSize: 11, weight: .regular)
@@ -71,6 +104,7 @@ final class StatusCardView: NSView {
         guard animationTimer == nil else { return }
         let timer = Timer(timeInterval: Self.frameInterval, repeats: true) { [weak self] _ in
             guard let self, self.model.isConnected else { return }
+            guard !self.model.deviceLooksPoweredOff else { return }
             let zone = self.model.mode.zone.rawValue
             guard zone > 0 else { return }
             self.fanAngle -= CGFloat(zone) * Self.spinRatePerZone
@@ -88,19 +122,58 @@ final class StatusCardView: NSView {
 
     // ── Drawing ──────────────────────────────────────────────────────────────
 
+    /// The zone the fan glyph should read as. Distinct from the commanded mode:
+    /// with no link, or with the device's own switch off, nothing is actually
+    /// spinning however the app has set it.
+    private var runningZone: CoolingMode.Zone {
+        guard model.isConnected, !model.deviceLooksPoweredOff else { return .off }
+        return model.mode.zone
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         var y = Self.pad
         drawBrandHeader(y: &y)
-        drawDivider(y: &y, gapAfter: 10)
-        drawMacSection(y: &y)
-        drawDivider(y: &y, gapAfter: 8)
-        drawDeviceSection(y: &y)
+        y += Self.headerGap
+
+        // Each group sits on its own surface. Hairline dividers put the Mac's
+        // readings and the cooler's in one undifferentiated column, which read
+        // as a single list of numbers rather than two sources; panels make the
+        // boundary obvious at a glance. Settings keeps its own titled group
+        // further down the menu.
+        drawPanel(at: y, height: Self.macPanelHeight)
+        var macY = y + Self.panelPad
+        drawMacSection(y: &macY)
+        y += Self.macPanelHeight + Self.panelGap
+
+        drawPanel(at: y, height: Self.devicePanelHeight)
+        var deviceY = y + Self.panelPad
+        drawDeviceSection(y: &deviceY)
     }
+
+    private func drawPanel(at y: CGFloat, height: CGFloat) {
+        let inset = Self.panelInset
+        let rect = NSRect(x: inset, y: y, width: bounds.width - inset * 2, height: height)
+        NSColor.labelColor.withAlphaComponent(0.045).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: Self.panelRadius,
+                     yRadius: Self.panelRadius).fill()
+    }
+
+    // Measured once from the fonts themselves, so `height` below stays correct
+    // if any of them are restyled — a hand-tuned card height silently clips its
+    // last row the moment a font changes.
+    private static let tempTextHeight = UIStyle.text("0", tempFont).size().height
+    private static let cellLabelHeight = UIStyle.text("A", cellLabelFont).size().height
+    private static let cellValueHeight = UIStyle.text("0", UIStyle.valueFont).size().height
+
+    static let macPanelHeight =
+        panelPad + 13 + tempTextHeight + 6 + 4 + panelPad
+    static let devicePanelHeight =
+        panelPad + 14 + cellLabelHeight + 2 + cellValueHeight + panelPad
 
     /// Logo, title, spinning fan and the mode badge.
     private func drawBrandHeader(y: inout CGFloat) {
         let pad = Self.pad
-        let logoSize: CGFloat = 18
+        let logoSize = Self.logoSize
         RedMagicLogo.drawR(in: NSRect(x: pad, y: y + 1, width: logoSize, height: logoSize))
 
         let title = UIStyle.text("REDMAGIC COOLER", Self.headerFont)
@@ -112,18 +185,18 @@ final class StatusCardView: NSView {
                                  width: fanSize, height: fanSize),
                       angleRadians: fanAngle,
                       color: model.fanTint,
-                      zone: model.isConnected ? model.mode.zone : .off)
+                      zone: runningZone)
 
         let (badgeText, badgeColor) = modeBadge()
         let badge = UIStyle.text(badgeText, Self.badgeFont, badgeColor)
         badge.draw(at: NSPoint(x: bounds.width - pad - badge.size().width, y: y + 5))
 
-        y += logoSize + 8
+        y += logoSize + Self.headerGap
     }
 
     /// Mac model, thermal pressure, die temperature and the heat bar.
     private func drawMacSection(y: inout CGFloat) {
-        let pad = Self.pad
+        let pad = Self.panelContentX
         UIStyle.text(SystemInfo.macModel, UIStyle.sectionFont, .tertiaryLabelColor)
             .draw(at: NSPoint(x: pad, y: y))
 
@@ -138,11 +211,11 @@ final class StatusCardView: NSView {
         y += tempHeight + 6
 
         drawHeatBar(y: y)
-        y += 4 + 10
+        y += 4
     }
 
     private func drawHeatBar(y: CGFloat) {
-        let pad = Self.pad
+        let pad = Self.panelContentX
         let width = bounds.width - pad * 2
         let track = NSRect(x: pad, y: y, width: width, height: 4)
 
@@ -161,7 +234,7 @@ final class StatusCardView: NSView {
 
     /// Cooler telemetry, or the connection phase when there's no link.
     private func drawDeviceSection(y: inout CGFloat) {
-        let pad = Self.pad
+        let pad = Self.panelContentX
         let deviceTitle = model.deviceModelName?.uppercased() ?? "COOLER"
         UIStyle.text(deviceTitle, UIStyle.sectionFont, .tertiaryLabelColor)
             .draw(at: NSPoint(x: pad, y: y))
@@ -211,12 +284,6 @@ final class StatusCardView: NSView {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private func drawDivider(y: inout CGFloat, gapAfter: CGFloat) {
-        NSColor.separatorColor.setFill()
-        NSRect(x: Self.pad, y: y, width: bounds.width - Self.pad * 2, height: 0.5).fill()
-        y += 0.5 + gapAfter
-    }
 
     private func phaseColor() -> NSColor {
         switch model.phase {
