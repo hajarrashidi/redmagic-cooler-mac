@@ -11,7 +11,7 @@ driven by your Mac's actual die temperature.**
 [![Latest release](https://img.shields.io/github/v/release/hajarrashidi/redmagic-cooler-mac)](https://github.com/hajarrashidi/redmagic-cooler-mac/releases)
 [![License: MIT](https://img.shields.io/github/license/hajarrashidi/redmagic-cooler-mac)](LICENSE)
 
-<img src="docs/screenshot.png" width="297" alt="The menu, showing Mac temperature, cooler telemetry and the autopilot controls">
+<img src="docs/screenshot.png" width="324" alt="The menu, showing Mac temperature, cooler telemetry and the autopilot controls">
 
 </div>
 
