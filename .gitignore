@@ -1,5 +1,6 @@
 # Build output
 applet_bin
+dist/
 *.dSYM/
 RedMagic Cooler.app/
 

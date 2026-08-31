@@ -30,17 +30,28 @@ you're doing something similar with another device.
 
 ## Install
 
+Grab the DMG from [Releases](https://github.com/hajarrashidi/redmagic-cooler-mac/releases),
+open it, and drag the app to Applications.
+
+The app isn't notarized by Apple, so the first launch takes an extra step:
+macOS will refuse to open it and say it can't check for malicious software.
+Go to **System Settings > Privacy & Security**, scroll to the bottom, and click
+**Open Anyway** next to the message about RedMagic Cooler. You only do this
+once.
+
+(If you've seen the old right-click-and-pick-Open trick, that stopped working
+in macOS 15. System Settings is the only route now.)
+
+Or build it yourself, which sidesteps the whole thing:
+
 ```bash
 git clone https://github.com/hajarrashidi/redmagic-cooler-mac.git
 cd redmagic-cooler-mac
 ./build.sh --run
 ```
 
-You need the Xcode command-line tools (`xcode-select --install`). macOS will ask
-for Bluetooth permission the first time.
-
-The build is ad-hoc signed, so if Gatekeeper complains, right-click the app and
-pick Open once.
+You need the Xcode command-line tools (`xcode-select --install`). Either way,
+macOS asks for Bluetooth permission on first launch.
 
 ## Using it
 
@@ -126,6 +137,7 @@ evening.
 ```
 cooler                bash CLI
 build.sh              compiles src-swift into the app bundle
+release.sh            builds a DMG, optionally signed and notarized
 src-swift/
   App/                lifecycle, menu, actions, UI refresh, BLE callbacks
   Core/               domain logic: autopilot, thermal, LED, config, logging
