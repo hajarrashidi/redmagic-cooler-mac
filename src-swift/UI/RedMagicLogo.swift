@@ -9,15 +9,20 @@ import AppKit
 enum RedMagicLogo {
     static let brandRed = NSColor(red: 0.89, green: 0.11, blue: 0.13, alpha: 1)
 
-    /// NSImage of the R mark. Pass `template: true` for a menu-bar icon (system tints it).
-    static func image(size: CGFloat, template: Bool = false) -> NSImage {
-        let color: NSColor = template ? .black : brandRed
-        let img = NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
-            drawR(in: rect, color: color)
+    /// An `NSImage` of the mark.
+    ///
+    /// - Parameter template: marks the image as a template, so AppKit tints it
+    ///   rather than using the drawn colour. The menu-bar item relies on this:
+    ///   its `contentTintColor` is what actually decides the final colour, so
+    ///   the colour drawn here is irrelevant beyond producing the right alpha.
+    static func image(size: CGFloat, color: NSColor = brandRed,
+                      template: Bool = false) -> NSImage {
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
+            drawR(in: rect, color: template ? .black : color)
             return true
         }
-        img.isTemplate = template
-        return img
+        image.isTemplate = template
+        return image
     }
 
     /// Draw the R mark into the current graphics context.

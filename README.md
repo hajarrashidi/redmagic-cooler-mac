@@ -13,6 +13,8 @@ So this is that: a menu-bar app that speaks the cooler's BLE protocol, plus an
 autopilot that ramps cooling up and down based on your Mac's actual die
 temperature.
 
+<img src="docs/screenshot.png" width="297" alt="The menu, showing Mac temperature, cooler telemetry and the autopilot controls">
+
 The protocol isn't documented anywhere. I worked it out from BLE packet captures
 and the vendor APK; the notes are in [docs/FINDINGS.md](docs/FINDINGS.md) if
 you're doing something similar with another device.
@@ -138,6 +140,8 @@ evening.
 cooler                bash CLI
 build.sh              compiles src-swift into the app bundle
 release.sh            builds a DMG, optionally signed and notarized
+tools/make-icon.sh    regenerates the app icon from the in-app vector logo
+Resources/            AppIcon.icns, copied into the bundle at build time
 src-swift/
   App/                lifecycle, menu, actions, UI refresh, BLE callbacks
   Core/               domain logic: autopilot, thermal, LED, config, logging

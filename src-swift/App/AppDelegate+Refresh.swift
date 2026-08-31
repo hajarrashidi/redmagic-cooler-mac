@@ -118,18 +118,30 @@ extension AppDelegate {
             button.contentTintColor = nil
 
         case .icon:
-            button.image = RedMagicLogo.image(size: 16, template: true)
             button.imagePosition = temperature.isEmpty ? .imageOnly : .imageLeading
             button.title = temperature.isEmpty ? "" : " \(temperature)"
-            // Tinted only while actively cooling: a coloured glyph in the menu
-            // bar should mean something is happening.
+
+            // Drawn in its final colour rather than tinted: macOS manages the
+            // tint of *template* images in the menu bar itself and ignores
+            // contentTintColor there, so a template mark can't be forced white.
+            //
+            // White by default, heat-graded while the cooler is actually
+            // running — so a coloured mark always means something is happening
+            // — and dimmed while there's no link.
+            let markColor: NSColor
             if !ble.isConnected {
-                button.contentTintColor = .tertiaryLabelColor
+                markColor = NSColor.white.withAlphaComponent(0.55)
             } else if coolerOn {
-                button.contentTintColor = UIStyle.heatColor(thermal.dieTemperatureC)
+                markColor = UIStyle.heatColor(thermal.dieTemperatureC)
             } else {
-                button.contentTintColor = nil
+                markColor = .white
             }
+
+            if markColor != menuBarIconColor {
+                menuBarIconColor = markColor
+                button.image = RedMagicLogo.image(size: 16, color: markColor)
+            }
+            button.contentTintColor = nil
         }
     }
 

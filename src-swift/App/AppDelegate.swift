@@ -67,6 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// commanded off once the link is up — a known-safe starting state.
     var turnOffOnConnect = false
 
+    /// Colour the menu-bar mark was last drawn in. The image is redrawn only
+    /// when this changes, so the 1 Hz refresh doesn't churn the menu bar.
+    var menuBarIconColor: NSColor?
+
     private var tickTimer: Timer?
     private var tickCount = 0
 
@@ -125,9 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem.button else { return }
-        button.image = RedMagicLogo.image(size: 16, template: true)
         button.imagePosition = .imageOnly
-        button.contentTintColor = .tertiaryLabelColor
     }
 
     /// Routes SIGTERM — sent by a newer instance asking us to quit — through

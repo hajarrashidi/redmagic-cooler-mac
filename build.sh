@@ -43,6 +43,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 mv applet_bin "$APP/Contents/MacOS/applet"
 chmod +x "$APP/Contents/MacOS/applet"
 
+# Regenerate with tools/make-icon.sh if the mark ever changes.
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -53,7 +56,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>CFBundleExecutable</key>
 	<string>applet</string>
 	<key>CFBundleIconFile</key>
-	<string>applet</string>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>$BUNDLE_ID</string>
 	<key>CFBundleInfoDictionaryVersion</key>
