@@ -30,19 +30,48 @@ you're doing something similar with another device.
 - Live telemetry from the cooler: cold plate, hot side, ambient, fan RPM
 - A shell CLI for scripting, with no dependencies
 
+## Supported coolers
+
+REDMAGIC has shipped a lot of coolers over the years. Only some of them have a
+radio at all, and only one has had its protocol mapped for this app so far:
+
+| Model | Year | Control | Works with this app? |
+|-------|------|---------|----------------------|
+| [VC Cooler 6 Pro](https://redmagic.tech/products/redmagic-vc-cooler-6-pro) | 2025 | Bluetooth LE (Goper app) | **Yes** — this is the device the protocol was mapped on |
+| VC Cooler 6 / 6 Air | 2025 | Bluetooth LE (Goper app) | Untested. Same generation as the 6 Pro, so the protocol is probably close — see below |
+| [VC Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro) | 2024 | Bluetooth LE (Goper app) | Untested. BLE-controlled, worth trying |
+| Dual-Core Ice Dock | 2022 | Bluetooth LE (Equipment app) | No — older app family, protocol unknown |
+| Turbo Cooler / Gen 4 | 2023 | mechanical button | Never — there's no radio to talk to |
+| Ice Dock | 2020 | none | Never — no radio |
+
+If you have one of the untested BLE models, the app may already discover it —
+scan matching is by name substring (`magcooler`, `rm cooler`) — and if the
+firmware shares the 6 Pro's GATT layout it may just work. If it doesn't,
+adding a model is a documented, deliberately small job: see
+[Adding another cooler](#adding-another-cooler).
+
 ## Install
 
 Grab the DMG from [Releases](https://github.com/hajarrashidi/redmagic-cooler-mac/releases),
 open it, and drag the app to Applications.
 
-The app isn't notarized by Apple, so the first launch takes an extra step:
-macOS will refuse to open it and say it can't check for malicious software.
-Go to **System Settings > Privacy & Security**, scroll to the bottom, and click
-**Open Anyway** next to the message about RedMagic Cooler. You only do this
-once.
+The app isn't notarized by Apple — notarization needs a paid developer
+account — so Gatekeeper refuses to launch the download. Depending on your
+macOS version it either claims the app "is damaged", or says it can't be
+checked for malicious software; recent versions no longer reliably offer the
+old **Open Anyway** escape hatch at all. The app is fine — macOS is objecting
+to the missing notarization ticket, not to anything in the bundle.
 
-(If you've seen the old right-click-and-pick-Open trick, that stopped working
-in macOS 15. System Settings is the only route now.)
+The fix is to clear the download-quarantine flag once, after copying the app
+to Applications:
+
+```bash
+xattr -rd com.apple.quarantine "/Applications/RedMagic Cooler.app"
+```
+
+After that it opens like any other app. (If your macOS version does still show
+an **Open Anyway** button at the bottom of **System Settings > Privacy &
+Security** after a failed launch, that route works too.)
 
 Or build it yourself, which sidesteps the whole thing:
 
@@ -134,28 +163,47 @@ own; and quitting holds termination open until the disconnect is confirmed.
 If you're writing something for this device, those two are where you'll lose an
 evening.
 
+## Adding another cooler
+
+Everything model-specific — the scan name to match, the GATT service and
+characteristic UUIDs, how to decode a telemetry frame — lives in a single
+file, [`src-swift/BLE/DeviceProfile.swift`](src-swift/BLE/DeviceProfile.swift).
+The rest of the app is model-agnostic and follows whichever profile matched
+during discovery, so supporting a new cooler means reverse-engineering its
+protocol and writing one new profile.
+
+[docs/ADDING_DEVICES.md](docs/ADDING_DEVICES.md) is the full walkthrough: how
+to find the device's advertised name, map its GATT table, capture what the
+vendor app sends, and verify the result with the probe scripts in
+[`tools/probe/`](tools/probe/). [docs/FINDINGS.md](docs/FINDINGS.md) is the
+finished worked example for the 6 Pro.
+
 ## Layout
 
 ```
-cooler                bash CLI
-build.sh              compiles src-swift into the app bundle
-release.sh            builds a DMG, optionally signed and notarized
-tools/make-icon.sh    regenerates the app icon from the in-app vector logo
-Resources/            AppIcon.icns, copied into the bundle at build time
+cooler                  bash CLI
+build.sh                compiles src-swift into the app bundle
+release.sh              builds a DMG, optionally signed and notarized
+Resources/              AppIcon.icns, copied into the bundle at build time
 src-swift/
-  App/                lifecycle, menu, actions, UI refresh, BLE callbacks
-  Core/               domain logic: autopilot, thermal, LED, config, logging
-  BLE/                CoreBluetooth: discovery, connection, GATT I/O
-  IPC/                the file protocol shared with the CLI
-  UI/                 AppKit views (custom-drawn menu rows)
-docs/FINDINGS.md      protocol notes: GATT map, frame layout, mode bytes
-docs/AUTOPILOT.md     how the autopilot and the LED heat gauge work
-docs/led_mapping.md   probed LED effect bytes
-probe_*.sh            scripts used to map the protocol
+  App/                  lifecycle, menu, actions, UI refresh, BLE callbacks
+  Core/                 domain logic: autopilot, thermal, LED, config, logging
+  BLE/                  CoreBluetooth I/O, plus DeviceProfile — the one file
+                        that knows which cooler models exist
+  IPC/                  the file protocol shared with the CLI
+  UI/                   AppKit views (custom-drawn menu rows)
+docs/FINDINGS.md        protocol notes: GATT map, frame layout, mode bytes
+docs/ADDING_DEVICES.md  how to add support for another cooler model
+docs/AUTOPILOT.md       how the autopilot and the LED heat gauge work
+docs/led_mapping.md     probed LED effect bytes
+tools/make-icon.sh      regenerates the app icon from the in-app vector logo
+tools/probe/            developer scripts used to map the protocol — these
+                        drive the running app over IPC and are not part of it
 ```
 
 `Core/` has no AppKit in it, so the interesting logic — the autopilot especially
-— can be read without wading through view code.
+— can be read without wading through view code. Everything under `tools/` is
+for people hacking on the project, not for running it.
 
 ## Requirements
 
@@ -163,7 +211,8 @@ probe_*.sh            scripts used to map the protocol
 - Apple Silicon (the die-temperature read is Apple Silicon only; an Intel Mac
   will fall back to the OS thermal state and the autopilot will be much less
   useful)
-- A REDMAGIC VC Cooler 6 Pro
+- A REDMAGIC VC Cooler 6 Pro (see [Supported coolers](#supported-coolers) for
+  the rest of the lineup)
 
 ## Caveats
 

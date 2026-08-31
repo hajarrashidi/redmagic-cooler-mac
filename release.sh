@@ -7,9 +7,10 @@
 #
 # Signing depends on what's in your environment:
 #
-#   Nothing set                 ad-hoc signature. Free, but Gatekeeper blocks
-#                               the download until the user allows it by hand
-#                               (see "Installing" in the README).
+#   Nothing set                 ad-hoc signature. Free, but Gatekeeper refuses
+#                               to open the downloaded app at all on current
+#                               macOS — users must strip the quarantine flag by
+#                               hand (see "Install" in the README).
 #
 #   DEVELOPER_ID set            signs with your Developer ID Application cert.
 #                               Requires a paid Apple Developer account.
@@ -45,7 +46,8 @@ if [[ -n "${DEVELOPER_ID:-}" ]]; then
         --sign "$DEVELOPER_ID" "$APP"
 else
     echo "==> No DEVELOPER_ID set; keeping the ad-hoc signature"
-    echo "    Users will need to allow the app in System Settings on first launch."
+    echo "    Downloads will be blocked by Gatekeeper until the user removes"
+    echo "    the quarantine flag — see the Install section of the README."
 fi
 
 # ── 3. Lay out the disk image ─────────────────────────────────────────────────
