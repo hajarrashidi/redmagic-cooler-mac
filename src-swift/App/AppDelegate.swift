@@ -85,6 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        // The menu and picker are designed against the light palette — heat
+        // colours read best on white — so the app opts out of dark mode.
+        // Belt-and-braces with NSRequiresAquaSystemAppearance in Info.plist.
+        NSApp.appearance = NSAppearance(named: .aqua)
+
         // Hand the Bluetooth link over from any previous instance before doing
         // anything else — the cooler allows only one connection, so until the
         // old process exits this one cannot connect at all.

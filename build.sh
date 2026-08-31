@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 APP="RedMagic Cooler.app"
 BUNDLE_ID="com.redmagic.cooler"
 VERSION="2.0"
-BUILD="2"
+BUILD="3"
 
 # ── 1. Compile ────────────────────────────────────────────────────────────────
 # main.swift must come last: swiftc treats the final file as the entry point
@@ -72,6 +72,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
+	<true/>
+	<key>NSRequiresAquaSystemAppearance</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>This app needs Bluetooth to connect to and control the REDMAGIC Cooler 6 Pro.</string>
