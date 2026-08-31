@@ -131,7 +131,7 @@ final class StatusCardView: NSView {
         y += 13
 
         let temp = UIStyle.text(SystemInfo.formatTemp(model.dieTempC),
-                                Self.tempFont, UIStyle.heatColor(model.dieTempC))
+                                Self.tempFont, UIStyle.textHeatColor(model.dieTempC))
         let tempHeight = temp.size().height
         temp.draw(in: NSRect(x: pad, y: y, width: 160, height: tempHeight))
         y += tempHeight + 6

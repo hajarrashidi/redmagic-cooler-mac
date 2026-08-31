@@ -52,4 +52,12 @@ enum UIStyle {
         default:    return .systemRed
         }
     }
+
+    /// Heat colour for *text*. Identical to `heatColor` except the cool range
+    /// reads in plain black — a big green number looked like a status light,
+    /// not a reading. The warning colours stay so heat still stands out.
+    static func textHeatColor(_ celsius: Double?) -> NSColor {
+        guard let celsius, celsius >= 60 else { return .labelColor }
+        return heatColor(celsius)
+    }
 }
