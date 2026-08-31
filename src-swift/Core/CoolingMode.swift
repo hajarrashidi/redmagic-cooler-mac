@@ -71,14 +71,4 @@ struct CoolingMode: RawRepresentable, Equatable, Hashable {
         default:       return "On"
         }
     }
-
-    /// Stable lowercase identifier used in the IPC status file and the log.
-    var slug: String {
-        switch zone {
-        case .off:    return "off"
-        case .low:    return "low"
-        case .medium: return "medium"
-        case .max:    return "max"
-        }
-    }
 }

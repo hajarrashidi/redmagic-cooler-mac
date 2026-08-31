@@ -149,26 +149,27 @@ extension AppDelegate {
 
     @objc func changeDevice() {
         UserDefaults.standard.removeObject(forKey: Config.Key.preferredDevice)
-        ble.resetForRescan()
-        showDevicePicker()
-        ble.startScanning()
+        scanAgainForDevices()
     }
 
-    func showDevicePicker() {
-        if devicePicker == nil {
-            let picker = DevicePickerWindowController()
-            picker.onSelect = { [weak self] device in self?.ble.connect(to: device) }
-            picker.onScanAgain = { [weak self] in
-                self?.ble.resetForRescan()
-                self?.ble.startScanning()
-            }
-            devicePicker = picker
-        }
-        devicePicker?.setScanning(true)
-        devicePicker?.showWindow(nil)
-        // An .accessory app has no Dock icon to click, so bring the picker
-        // forward explicitly or it opens behind whatever the user was using.
-        NSApp.activate(ignoringOtherApps: true)
+    /// Enters the inline picker state and starts discovery over. The picker is
+    /// an ordinary row in the status menu, so no separate app window appears.
+    func scanAgainForDevices() {
+        isSelectingDevice = true
+        devicePicker.setScanning(true)
+        ble.resetForRescan()
+        ble.startScanning()
+        EventLogger.record("device scan requested")
+        refresh()
+    }
+
+    /// Connects only after an explicit click on a discovered device row.
+    func selectDiscoveredDevice(_ device: CoolerBLEManager.DiscoveredDevice) {
+        isSelectingDevice = false
+        turnOffOnConnect = true
+        ble.connect(to: device)
+        EventLogger.record("device selected: \(device.profile.modelName)")
+        refresh()
     }
 
     // ── Settings ─────────────────────────────────────────────────────────────

@@ -25,15 +25,18 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-CMD_FILE="$HOME/.cooler_cmd.json"
+STATUS_FILE="$HOME/.redmagic_probe_status.json"
+CMD_FILE="$HOME/.redmagic_probe_command.json"
 OUT="$DIR/led_mapping.md"
 
 FROM="${1:-0}"
 TO="${2:-15}"
 read -r CR CG CB <<< "${COLOR:-255 0 0}"   # test colour, default red
 
-if [[ ! -f "$HOME/.cooler.pid" ]]; then
-    echo "RedMagic Cooler app doesn't appear to be running. Start it first (open the app)."
+if [[ ! -f "$STATUS_FILE" ]] || ! python3 -c \
+    "import json,time; d=json.load(open('$STATUS_FILE')); assert d.get('connected') and time.time()-d.get('ts',0)<5" \
+    2>/dev/null; then
+    echo "No connected probe build found. Run ./build.sh --with-probes --run first."
     exit 1
 fi
 

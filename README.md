@@ -2,14 +2,15 @@
 
 # RedMagic Cooler for macOS
 
-**Control a REDMAGIC magnetic cooler from the Mac menu bar, with an autopilot
-driven by your Mac's actual die temperature.**
+**Automatically cool your Mac from the menu bar: the app turns the cooler on
+as your Mac heats up, ramps its power with the temperature, and turns it off
+again once cooling is no longer needed.**
 
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue)](#requirements)
 [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-native-black)](#requirements)
 [![Swift](https://img.shields.io/badge/Swift-AppKit%20%2B%20CoreBluetooth-orange)](#project-layout)
-[![Latest release](https://img.shields.io/github/v/release/hajarrashidi/redmagic-cooler-mac)](https://github.com/hajarrashidi/redmagic-cooler-mac/releases)
-[![License: MIT](https://img.shields.io/github/license/hajarrashidi/redmagic-cooler-mac)](LICENSE)
+[![Latest release](https://img.shields.io/badge/release-latest-blue)](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 <img src="docs/screenshot.png" width="324" alt="The menu, showing Mac temperature, cooler telemetry and the autopilot controls">
 
@@ -45,7 +46,6 @@ another device.
   (green when cool, red when hot)
 - **Live telemetry** — cold plate, hot side, ambient and fan RPM, streamed
   from the cooler
-- **Scriptable CLI** — a dependency-free shell client for automation
 
 ## Supported devices
 
@@ -79,7 +79,7 @@ macOS will ask for Bluetooth permission on first launch.
 ### Option 1 — Download the release
 
 Download the DMG from the
-[latest release](https://github.com/hajarrashidi/redmagic-cooler-mac/releases),
+[latest release](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest),
 open it, and drag **RedMagic Cooler** to Applications.
 
 Releases from **v2.1** onward are signed with a Developer ID certificate and
@@ -89,8 +89,8 @@ are on an older release, either upgrade or clear its quarantine flag with
 
 ### Option 2 — Build from source
 
-Building locally sidesteps Gatekeeper entirely. You need the Xcode
-command-line tools (`xcode-select --install`):
+Building locally sidesteps Gatekeeper entirely. You need Apple's Xcode
+developer tools (`xcode-select --install`):
 
 ```bash
 git clone https://github.com/hajarrashidi/redmagic-cooler-mac.git
@@ -100,31 +100,15 @@ cd redmagic-cooler-mac
 
 ## Usage
 
-### Menu-bar app
+On first launch — and after choosing **Change Device** — available supported
+coolers appear directly inside the same menu. Click the device you want before
+the app connects; selection is explicit even when the list contains only one
+option.
 
-Everything day-to-day lives in the menu: switch between **Auto** and
-**Manual**, set the manual power level, pick LED effects and colours, and
-watch live telemetry from the cooler. The menu-bar icon itself shows the Mac's
-current die temperature, tinted by heat.
-
-### Command line
-
-```
-cooler                          open the menu-bar app
-cooler on [low|medium|max]      fixed cooling level
-cooler auto [standard|custom]   temperature-driven
-cooler off                      stop cooling
-cooler fan <0-100>              set fan speed
-cooler status                   quick status readout
-cooler monitor                  live telemetry stream
-cooler log -f                   follow the decision log
-```
-
-The CLI does not talk to the cooler itself. The device only accepts one
-Bluetooth connection at a time, so the app owns it and the CLI leaves JSON
-command files in `$HOME` for the app to pick up. That also means `status` and
-`monitor` are free — they read a cache the app keeps current rather than
-fighting for the connection.
+After connecting, everything day-to-day stays in that menu: switch between
+**Auto** and **Manual**, set the manual power level, pick LED effects and
+colours, and watch live telemetry. The menu-bar icon shows the Mac's current
+die temperature, tinted by heat.
 
 ## How the autopilot works
 
@@ -186,7 +170,6 @@ lose an evening.
 ### Project layout
 
 ```
-cooler                  bash CLI
 build.sh                compiles src-swift into the app bundle
 release.sh              builds a DMG, optionally signed and notarized
 Resources/              AppIcon.icns, copied into the bundle at build time
@@ -195,15 +178,13 @@ src-swift/
   Core/                 domain logic: autopilot, thermal, LED, config, logging
   BLE/                  CoreBluetooth I/O, plus DeviceProfile — the one file
                         that knows which cooler models exist
-  IPC/                  the file protocol shared with the CLI
+  Probe/                narrow developer-only bridge for protocol experiments
   UI/                   AppKit views (custom-drawn menu rows)
 docs/FINDINGS.md        protocol notes: GATT map, frame layout, mode bytes
 docs/ADDING_DEVICES.md  how to add support for another cooler model
 docs/AUTOPILOT.md       how the autopilot and the LED heat gauge work
 docs/led_mapping.md     probed LED effect bytes
-tools/make-icon.sh      regenerates the app icon from the in-app vector logo
-tools/probe/            developer scripts used to map the protocol — these
-                        drive the running app over IPC and are not part of it
+tools/probe/            developer-only protocol experiments; not app controls
 ```
 
 `Core/` contains no AppKit, so the interesting logic — the autopilot
@@ -215,9 +196,9 @@ especially — can be read without wading through view code. Everything under
 Everything model-specific — the scan name to match, the GATT service and
 characteristic UUIDs, how to decode a telemetry frame — lives in a single
 file, [`src-swift/BLE/DeviceProfile.swift`](src-swift/BLE/DeviceProfile.swift).
-The rest of the app is model-agnostic and follows whichever profile matched
-during discovery, so supporting a new cooler means reverse-engineering its
-protocol and writing one new profile.
+The rest of the app is model-agnostic and follows the profile for whichever
+discovered cooler the user selects, so supporting a new cooler means
+reverse-engineering its protocol and writing one new profile.
 
 [docs/ADDING_DEVICES.md](docs/ADDING_DEVICES.md) is the full walkthrough: how
 to find the device's advertised name, map its GATT table, capture what the

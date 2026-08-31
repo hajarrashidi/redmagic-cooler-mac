@@ -42,7 +42,6 @@ enum Config {
         static let autoProfile     = "AutoProfile"         // AutoProfile.rawValue
         static let customEngageC   = "CustomEngageTempC"   // Double, °C
         static let manualStep      = "ManualSliderStep"    // Int, 0…9
-        static let manualFanSpeed  = "ManualFanSpeed"      // Int, 0…100
         static let ledEffect       = "LedEffect"           // LedEffect.rawValue
         static let ledHue          = "LedHue"              // Double, 0…1
         static let breathStyle     = "BreathStyle"         // BreathStyle.rawValue
@@ -52,7 +51,7 @@ enum Config {
     // ── Control loop timing ──────────────────────────────────────────────────
 
     enum Timing {
-        /// Master tick: telemetry refresh, IPC poll, UI refresh.
+        /// Master tick: telemetry refresh, control loop, and UI refresh.
         static let poll: TimeInterval = 1.0
         /// How often the autopilot re-evaluates, in ticks of `poll`.
         static let autopilotEveryTicks = 3
@@ -82,16 +81,12 @@ enum Config {
         static let customEngageMaxC: Double = 85.0
     }
 
-    // ── Runtime IPC files ────────────────────────────────────────────────────
+    // ── Diagnostics ──────────────────────────────────────────────────────────
 
-    /// Files in `$HOME` shared with the `cooler` CLI. See `IPC/` and the header
-    /// comment in `cooler` for the protocol.
     enum Paths {
         private static let home = FileManager.default.homeDirectoryForCurrentUser
 
-        static let pid    = home.appendingPathComponent(".cooler.pid")
-        static let status = home.appendingPathComponent(".cooler_status.json")
-        static let command = home.appendingPathComponent(".cooler_cmd.json")
         static let log    = home.appendingPathComponent(".cooler.log")
     }
+
 }

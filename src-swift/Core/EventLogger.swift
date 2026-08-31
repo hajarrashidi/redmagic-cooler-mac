@@ -1,6 +1,6 @@
 import Foundation
 
-/// Append-only timeline of heat and cooler events, tailed by `cooler log`.
+/// Append-only diagnostic timeline of heat and cooler events.
 ///
 /// Writes are appends, not rewrites: the previous implementation read the whole
 /// file, re-joined it and wrote it back on *every* line, which is O(file) per

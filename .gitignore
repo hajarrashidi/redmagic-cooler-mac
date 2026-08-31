@@ -14,8 +14,7 @@ RedMagic Cooler.app/
 *.swp
 *~
 
-# Runtime state written by the app (lives in $HOME; ignored if copied here)
-.cooler.pid
-.cooler_status.json
-.cooler_cmd.json
+# Runtime diagnostics/developer-probe state (normally lives in $HOME)
 .cooler.log
+.redmagic_probe_status.json
+.redmagic_probe_command.json

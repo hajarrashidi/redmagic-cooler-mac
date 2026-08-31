@@ -1,15 +1,22 @@
 # Protocol probe scripts
 
-Developer tools, not part of the app. These are the scripts used to
-reverse-engineer the cooler's protocol, kept here so the results in
+Developer-only experiment harnesses, not part of the app or its user
+interface. These are the scripts used to reverse-engineer the cooler's
+protocol, kept here so the results in
 [`docs/FINDINGS.md`](../../docs/FINDINGS.md) are reproducible and so anyone
 adding support for a new cooler model (see
 [`docs/ADDING_DEVICES.md`](../../docs/ADDING_DEVICES.md)) can re-run the same
 experiments against their device.
 
-They drive the cooler through the app's IPC files (`~/.cooler_cmd.json` /
-`~/.cooler_status.json`), so **the menu-bar app must be running and connected**
-before you start any of them.
+The scripts communicate with the running app through a narrow developer-only
+JSON bridge (`~/.redmagic_probe_command.json` and
+`~/.redmagic_probe_status.json`). The bridge carries only the raw values needed
+for these experiments and is not present in release builds. Build and launch a
+local probe-enabled app, connect the cooler, and then start a probe:
+
+```bash
+./build.sh --with-probes --run
+```
 
 | Script           | What it maps                                                       |
 |------------------|--------------------------------------------------------------------|

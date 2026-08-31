@@ -1,8 +1,9 @@
 # Autopilot — how automatic cooling works
 
 Auto mode runs the cooler **based on how hot your Mac actually is**. It turns
-the cooler on when the Mac heats up, ramps it as things get hotter, and eases it
-back off once the Mac cools down — with no input from you.
+the cooler on when the Mac heats up, ramps its power as the temperature rises,
+and turns it fully off once the Mac has cooled and no longer needs it — with no
+input from you.
 
 This doc covers the signal it watches, the levels it picks, the exact
 temperatures it engages at, and how to tune it.
@@ -89,13 +90,7 @@ capped so a high engage point can't push it past 95 °C.
 For reference, Apple Silicon typically idles around **40–45 °C** and climbs
 toward **95–100 °C** (where it throttles) under sustained heavy load.
 
-```bash
-./cooler auto            # standard (default)
-./cooler auto standard
-./cooler auto custom     # uses the engage point saved from the app
-```
-
-…or switch live in the menu-bar app.
+Choose **Standard** or **Custom** from the Auto Mode row in the menu-bar app.
 
 ---
 
@@ -191,16 +186,9 @@ Mac 33°C (nominal)  → cooler off, fan 0%
 
 ## Using it
 
-```bash
-./cooler auto       # start automatic, temperature-driven cooling
-./cooler status     # live die °C, current tier, fan
-./cooler monitor    # stream die °C + cooler temps
-./cooler log -f     # follow the decision timeline live
-./cooler off        # stop
-```
-
-Prefer a fixed level? `./cooler on [low|medium|max]` runs the cooler at a
-constant level regardless of temperature.
+Choose **Auto** in the menu for temperature-driven cooling, then select the
+**Standard** profile or set a **Custom** engage temperature. Choose **Manual**
+for a fixed level regardless of temperature, or use **Turn Off** to stop.
 
 ---
 

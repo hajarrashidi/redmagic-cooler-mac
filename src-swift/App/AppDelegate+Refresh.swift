@@ -52,10 +52,12 @@ extension AppDelegate {
     // ── Row visibility ───────────────────────────────────────────────────────
 
     private func refreshVisibility(connected: Bool, coolerOn: Bool, isManual: Bool) {
-        // Until the cooler connects, offer only a Connect button — every other
-        // control is meaningless, and misleading, without a live link.
-        rows.connect.isHidden = connected
-        if !connected { refreshConnectItem() }
+        // Discovery choices replace the Connect item in-place. Keeping both in
+        // the same menu avoids opening a separate chooser window, while every
+        // result still requires an explicit click.
+        rows.connect.isHidden = connected || isSelectingDevice
+        rows.devicePicker.isHidden = connected || !isSelectingDevice
+        if !connected && !isSelectingDevice { refreshConnectItem() }
 
         rows.modeSwitch.isHidden = !connected
         rows.autoOptions.isHidden = !connected || isManual
@@ -155,32 +157,10 @@ extension AppDelegate {
             telemetry: telemetry,
             isConnected: connected,
             phase: ble.phase,
+            deviceModelName: ble.profile?.modelName,
             appMode: appMode,
             autoProfile: autopilot.profile,
             fanTint: led.fanTint(dieC: thermal.dieTemperatureC)))
     }
 
-    // ── Status snapshot for the CLI ──────────────────────────────────────────
-
-    func writeStatusSnapshot() {
-        IPCBridge.write(StatusSnapshot(
-            timestamp: Date().timeIntervalSince1970,
-            state: ble.isConnected ? "on" : "connecting",
-            level: appMode == .auto ? AppMode.auto.rawValue : ble.mode.slug,
-            isAuto: appMode == .auto,
-            fanPercent: Int(ble.fanPercent),
-            modeName: ble.mode.slug,
-            thermalState: thermal.thermalState.rawValue,
-            cpuC: thermal.dieTemperatureC,
-            profile: autopilot.profile.rawValue,
-            led: led.lastWrittenColor.map { [Int($0.r), Int($0.g), Int($0.b)] },
-            lightMode: ble.lightMode.map(Int.init),
-            tempThreshold: ble.tempThreshold.map(Int.init),
-            deviceAutoTemp: ble.deviceAutoTemp,
-            mountAttached: mountAttached,
-            coldC: telemetry?.coldC,
-            hotC: telemetry?.hotC,
-            ambientC: telemetry?.ambientC,
-            fanRPM: telemetry?.fanRPM))
-    }
 }

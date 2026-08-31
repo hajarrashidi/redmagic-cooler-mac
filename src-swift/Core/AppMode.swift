@@ -2,15 +2,15 @@ import Foundation
 
 /// Which control loop owns the cooler.
 ///
-/// Persisted verbatim in `UserDefaults` and mirrored into the IPC status file,
-/// so the raw values are part of the CLI's contract — don't rename them.
+/// Persisted verbatim in `UserDefaults`, so changing the raw values requires a
+/// migration for existing users.
 enum AppMode: String {
     /// The autopilot follows Mac temperature and drives the cooler itself.
     case auto
     /// The user's slider position is held until they change it.
     case manual
 
-    /// Decodes a persisted or CLI-supplied value, defaulting to `.auto`.
+    /// Decodes a persisted value, defaulting to `.auto`.
     /// Legacy builds also wrote "off" here; it maps to `.manual`, which is
     /// where an explicit off-state now lives (manual step 0).
     init(persisted raw: String?) {
@@ -20,8 +20,8 @@ enum AppMode: String {
 
 /// The autopilot's aggressiveness preset.
 ///
-/// Raw values are persisted and appear in the IPC status file. Builds before
-/// the profile rework wrote "aggressive"/"regular"; both migrate to `.standard`.
+/// Raw values are persisted. Builds before the profile rework wrote
+/// "aggressive"/"regular"; both migrate to `.standard`.
 enum AutoProfile: String {
     /// A fixed, balanced tier ladder tuned for a cooler plate sitting on a Mac.
     case standard
@@ -38,8 +38,7 @@ enum AutoProfile: String {
 /// macOS's own thermal pressure level, from `ProcessInfo.thermalState`.
 ///
 /// The autopilot uses this as a floor: regardless of the die temperature, a
-/// `serious`/`critical` system gets cooling. Raw values reach the IPC status
-/// file and the log.
+/// `serious`/`critical` system gets cooling.
 enum ThermalState: String {
     case nominal, fair, serious, critical
 

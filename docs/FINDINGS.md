@@ -117,7 +117,9 @@ The device has a cmd characteristic that can write settings to internal flash (s
 
 Persistent OFF could not be found without a bonded BLE connection. The Goper app uses an existing bond to authenticate flash writes. CoreBluetooth on macOS blocks app-layer bonding, so this path is not accessible from Mac.
 
-**Workaround:** use the Goper app once to set flash state to OFF, then use the daemon for all daily control. The daemon reconnects automatically on power cycle and re-enables cooling.
+**Workaround:** use the Goper app once to set flash state to OFF, then use the
+menu-bar app for daily control. The app reconnects automatically after a power
+cycle and resumes temperature-driven cooling when needed.
 
 ---
 
@@ -131,19 +133,20 @@ macOS CoreBluetooth returns `"Pairing is not available in Core Bluetooth"` when 
 
 ## Controller architecture
 
-The controller is a native Swift menu-bar agent (`RedMagic Cooler.app`) with a
-thin bash CLI (`./cooler`) in front of it. See the
-[README](../README.md) for usage and the source layout.
+The controller is a native Swift menu-bar app (`RedMagic Cooler.app`). All
+day-to-day control, device selection, and telemetry live in its status menu.
+See the [README](../README.md) for usage and the source layout.
 
 - **The app is the only process that talks to the cooler.** The device accepts a
   single BLE connection, so everything funnels through one owner.
-- **IPC — `~/.cooler_cmd.json`:** the CLI drops a JSON command here; the app
-  consumes and deletes it within 1 s.
-- **IPC — `~/.cooler_status.json`:** the app writes live telemetry here every
-  second; `status` and `monitor` read that cache rather than opening a competing
-  connection.
-- **IPC — `~/.cooler.pid`:** lets the CLI detect a running app, and lets a new
-  launch hand the BLE link over from an old one.
+- **Selection is explicit.** On first launch and after **Change Device**,
+  discovered devices appear inside the status menu and require a click before
+  connecting, even when only one supported cooler is found.
+- **The app keeps ownership orderly.** A new app launch asks an existing copy to
+  quit cleanly before taking the cooler's single connection slot.
+- **Protocol probes are isolated.** The scripts in `tools/probe/` use a narrow
+  developer-only JSON bridge for raw experiments; it is not an app control
+  surface.
 
 ### Key implementation notes
 
@@ -164,8 +167,8 @@ thin bash CLI (`./cooler`) in front of it. See the
 
 ### LED effect bytes
 
-Probed on-device with `tools/probe/probe_light.sh`; full sweep in
-[`led_mapping.md`](led_mapping.md). The app uses:
+Probed on-device with the developer-only `tools/probe/probe_light.sh` harness;
+full sweep in [`led_mapping.md`](led_mapping.md). The app uses:
 
 | Byte | Behaviour                                | Uses RGB |
 |------|------------------------------------------|----------|

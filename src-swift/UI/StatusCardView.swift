@@ -21,6 +21,7 @@ final class StatusCardView: NSView {
         var telemetry: CoolerTelemetry?
         var isConnected = false
         var phase: ConnectionPhase = .idle
+        var deviceModelName: String?
         var appMode: AppMode = .auto
         var autoProfile: AutoProfile = .standard
         /// Tint for the animated fan — mirrors the active LED colour.
@@ -161,7 +162,8 @@ final class StatusCardView: NSView {
     /// Cooler telemetry, or the connection phase when there's no link.
     private func drawDeviceSection(y: inout CGFloat) {
         let pad = Self.pad
-        UIStyle.text("COOLER 6 PRO", UIStyle.sectionFont, .tertiaryLabelColor)
+        let deviceTitle = model.deviceModelName?.uppercased() ?? "COOLER"
+        UIStyle.text(deviceTitle, UIStyle.sectionFont, .tertiaryLabelColor)
             .draw(at: NSPoint(x: pad, y: y))
         y += 14
 

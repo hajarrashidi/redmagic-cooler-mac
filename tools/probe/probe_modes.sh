@@ -5,12 +5,14 @@
 
 set -euo pipefail
 
-STATUS_FILE="$HOME/.cooler_status.json"
-CMD_FILE="$HOME/.cooler_cmd.json"
+STATUS_FILE="$HOME/.redmagic_probe_status.json"
+CMD_FILE="$HOME/.redmagic_probe_command.json"
 SETTLE=45
 
-if [[ ! -f "$HOME/.cooler.pid" ]]; then
-    echo "RedMagic Cooler app doesn't appear to be running. Start it first."
+if [[ ! -f "$STATUS_FILE" ]] || ! python3 -c \
+    "import json,time; d=json.load(open('$STATUS_FILE')); assert d.get('connected') and time.time()-d.get('ts',0)<5" \
+    2>/dev/null; then
+    echo "No connected probe build found. Run ./build.sh --with-probes --run first."
     exit 1
 fi
 

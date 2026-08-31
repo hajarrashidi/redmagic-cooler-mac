@@ -20,25 +20,14 @@ enum SingleInstance {
                 .filter { $0.processIdentifier != myPID }
         } ?? []
 
-        // Fallback for raw-binary dev runs, which NSRunningApplication can't
-        // match by bundle id: the PID recorded in ~/.cooler.pid.
-        let recordedPID = IPCBridge.liveRecordedPID().flatMap { pid in
-            running.contains { $0.processIdentifier == pid } ? nil : pid
-        }
-
-        guard !running.isEmpty || recordedPID != nil else { return }
+        guard !running.isEmpty else { return }
 
         for app in running {
             EventLogger.record("terminating prior instance (pid \(app.processIdentifier))")
             // Graceful: runs its applicationShouldTerminate, which disconnects.
             app.terminate()
         }
-        if let pid = recordedPID {
-            EventLogger.record("signalling prior instance to quit (pid \(pid))")
-            kill(pid, SIGTERM) // caught by its SIGTERM source → graceful terminate
-        }
-
-        waitForExit(running: running, recordedPID: recordedPID)
+        waitForExit(running: running)
     }
 
     /// Spins the run loop until the old instances are gone. Capped so a process
@@ -46,12 +35,10 @@ enum SingleInstance {
     ///
     /// The run loop must keep turning here: `NSRunningApplication.isTerminated`
     /// is updated by a notification that a plain `sleep` would never let arrive.
-    private static func waitForExit(running: [NSRunningApplication], recordedPID: Int32?) {
+    private static func waitForExit(running: [NSRunningApplication]) {
         let deadline = Date(timeIntervalSinceNow: Config.Timing.instanceHandoffTimeout)
         while Date() < deadline {
-            let stillAlive = running.contains { !$0.isTerminated }
-                || (recordedPID.map { kill($0, 0) == 0 } ?? false)
-            if !stillAlive { return }
+            if !running.contains(where: { !$0.isTerminated }) { return }
             RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         }
         EventLogger.record("prior instance did not exit within timeout — continuing anyway")

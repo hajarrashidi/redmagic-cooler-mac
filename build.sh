@@ -2,8 +2,9 @@
 #
 # Builds the native Swift menu-bar app and stages it into RedMagic Cooler.app.
 #
-# Usage:  ./build.sh [--run]
-#           --run   relaunch the app bundle once the build succeeds
+# Usage:  ./build.sh [--run] [--with-probes]
+#           --run           relaunch the app bundle once the build succeeds
+#           --with-probes   include the developer protocol-probe transport
 #
 # Sources are discovered by globbing src-swift, so adding a file needs no edit
 # here. The bundle is ad-hoc signed because CoreBluetooth refuses to hand out
@@ -15,8 +16,21 @@ cd "$(dirname "$0")"
 
 APP="RedMagic Cooler.app"
 BUNDLE_ID="com.redmagic.cooler"
-VERSION="2.1"
-BUILD="4"
+VERSION="2.2"
+BUILD="5"
+
+RUN_AFTER_BUILD=false
+WITH_PROBES=false
+for argument in "$@"; do
+    case "$argument" in
+        --run) RUN_AFTER_BUILD=true ;;
+        --with-probes) WITH_PROBES=true ;;
+        *)
+            echo "Unknown option: $argument" >&2
+            exit 2
+            ;;
+    esac
+done
 
 # ── 1. Compile ────────────────────────────────────────────────────────────────
 # main.swift must come last: swiftc treats the final file as the entry point
@@ -24,6 +38,11 @@ BUILD="4"
 SOURCES=()
 while IFS= read -r f; do SOURCES+=("$f"); done \
     < <(find src-swift -name '*.swift' ! -name 'main.swift' | sort)
+SWIFT_DEFINES=("-D" "REDMAGIC_APP")
+if [[ "$WITH_PROBES" == true ]]; then
+    SOURCES+=("tools/probe/ProbeBridge.swift")
+    SWIFT_DEFINES+=("-D" "REDMAGIC_PROBES")
+fi
 SOURCES+=("src-swift/App/main.swift")
 
 echo "==> Compiling ${#SOURCES[@]} Swift files"
@@ -34,6 +53,7 @@ swiftc -O -whole-module-optimization \
   -framework AppKit \
   -framework CoreBluetooth \
   -framework IOKit \
+  "${SWIFT_DEFINES[@]}" \
   -o applet_bin \
   "${SOURCES[@]}"
 
@@ -43,7 +63,6 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 mv applet_bin "$APP/Contents/MacOS/applet"
 chmod +x "$APP/Contents/MacOS/applet"
 
-# Regenerate with tools/make-icon.sh if the mark ever changes.
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -76,7 +95,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>NSRequiresAquaSystemAppearance</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>This app needs Bluetooth to connect to and control the REDMAGIC Cooler 6 Pro.</string>
+	<string>This app needs Bluetooth to connect to and control a supported REDMAGIC cooler.</string>
 </dict>
 </plist>
 PLIST
@@ -88,7 +107,7 @@ codesign --force --deep --sign - "$APP" 2>/dev/null
 
 echo "==> Built $APP ($VERSION build $BUILD)"
 
-if [[ "${1:-}" == "--run" ]]; then
+if [[ "$RUN_AFTER_BUILD" == true ]]; then
     echo "==> Relaunching"
     open "$APP"
 fi

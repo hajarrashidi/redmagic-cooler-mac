@@ -10,7 +10,7 @@ import AppKit
 /// | `AppDelegate+Menu.swift`   | building the menu                        |
 /// | `AppDelegate+Actions.swift`| responding to user input                 |
 /// | `AppDelegate+Refresh.swift`| pushing state into the UI                |
-/// | `AppDelegate+BLE.swift`    | device callbacks and CLI commands        |
+/// | `AppDelegate+BLE.swift`    | device callbacks                         |
 ///
 /// The app is `.accessory`: no Dock icon, no main window, driven entirely from
 /// the menu-bar item.
@@ -26,11 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     var statusItem: NSStatusItem!
     var menu: NSMenu!
-    var devicePicker: DevicePickerWindowController?
 
     /// Custom rows. Held so `refresh()` can update and show/hide them without
     /// rebuilding the menu, which would close it under the user's cursor.
     var statusCard: StatusCardView!
+    var devicePicker: DevicePickerView!
     var modeSwitch: ModeSwitchView!
     var autoOptions: AutoOptionsView!
     var coolingSlider: CoolingSliderView!
@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Whether the magnetic mount is seated.
     var mountAttached: Bool?
 
+    /// Discovery results are being shown inside the status menu until the user
+    /// explicitly chooses one. This stays true even for a single result.
+    var isSelectingDevice = false
+
     /// True briefly after a user-initiated change, while writes are in flight.
     /// Controls are disabled meanwhile so a second command can't race the first,
     /// and the slider is left alone so it doesn't snap away from where the user
@@ -76,16 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Guards against `applicationShouldTerminate` running its teardown twice.
     private var isTerminating = false
-    /// Retained for the lifetime of the app; a signal source stops firing when
-    /// it deallocates.
-    private var sigtermSource: DispatchSourceSignal?
-
     // ── Launch ───────────────────────────────────────────────────────────────
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        // The menu and picker are designed against the light palette — heat
+        // The menu is designed against the light palette — heat
         // colours read best on white — so the app opts out of dark mode.
         // Belt-and-braces with NSRequiresAquaSystemAppearance in Info.plist.
         NSApp.appearance = NSAppearance(named: .aqua)
@@ -95,8 +95,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // old process exits this one cannot connect at all.
         SingleInstance.terminateOthersAndWait()
 
-        IPCBridge.writePIDFile()
-        installSignalHandler()
         loadSettings()
 
         ble = CoolerBLEManager()
@@ -117,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // block launch on; refresh the menu once it lands.
         SystemInfo.resolveModelName { [weak self] _ in self?.refresh() }
 
-        writeStatusSnapshot()
+        writeProbeSnapshot()
         ble.startScanning()
     }
 
@@ -137,30 +135,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.imagePosition = .imageOnly
     }
 
-    /// Routes SIGTERM — sent by a newer instance asking us to quit — through
-    /// Cocoa's normal termination path, so `applicationShouldTerminate` runs and
-    /// the Bluetooth link is released. The default handler would kill the
-    /// process outright and leak the cooler's connection slot.
-    ///
-    /// A `DispatchSourceSignal` is used rather than a `signal()` handler because
-    /// its callback runs on a normal queue, where calling into Cocoa is legal;
-    /// almost nothing is safe to call from inside a real signal handler.
-    private func installSignalHandler() {
-        signal(SIGTERM, SIG_IGN)
-        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler { NSApp.terminate(nil) }
-        source.resume()
-        sigtermSource = source
-    }
-
     // ── Tick ─────────────────────────────────────────────────────────────────
 
     /// The master loop, once a second: sample temperature, run the autopilot,
-    /// re-assert device state, refresh the UI, publish status.
+    /// re-assert device state, refresh the UI, and refresh developer probe data.
     private func tick() {
         tickCount += 1
 
-        handlePendingCommand()
+        handlePendingProbeCommand()
         thermal = ThermalMonitor.read()
 
         if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
@@ -175,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         refresh()
-        writeStatusSnapshot()
+        writeProbeSnapshot()
     }
 
     /// Evaluates the autopilot and applies its decision, if anything changed.
@@ -263,6 +245,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        IPCBridge.cleanUpRuntimeFiles()
+        cleanUpProbeFiles()
     }
 }

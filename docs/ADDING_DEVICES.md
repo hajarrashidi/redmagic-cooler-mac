@@ -6,7 +6,8 @@ of that knowledge lives in a single place:
 A profile bundles everything model-specific: the name to match in a Bluetooth
 scan, the GATT service and characteristic UUIDs, and how to decode the
 telemetry frames. The rest of the app — connection handling, autopilot, UI,
-CLI — is model-agnostic and just follows whichever profile matched.
+and device controls — is model-agnostic and follows the profile selected from
+the discovery results.
 
 So supporting a new cooler is a reverse-engineering exercise that ends in one
 new `DeviceProfile`. This guide walks the whole path. Read
@@ -80,7 +81,10 @@ static let all: [DeviceProfile] = [.vcCooler6Pro, .yourNewModel]
 ```
 
 That's the only registration step. Discovery, the device picker, connection
-and reconnection, writes, and telemetry decoding all pick it up from there.
+and reconnection, writes, and telemetry decoding all pick it up from there. On
+first launch and after **Change Device**, matching devices appear inline in the
+status menu and the user must click one before connecting, even if only one
+result is available.
 
 If the new device genuinely lacks one of the profile's characteristics (say,
 no hall sensor), give it a placeholder UUID that won't be found — discovery
@@ -92,12 +96,18 @@ out of `CoolerBLEManager`.
 
 ## Step 5 — Verify with the probe scripts
 
-The scripts in [`tools/probe/`](../tools/probe/) automate the tedious part of
-confirming a mapping: `probe_modes.sh` sweeps the cooling-mode bytes and logs
-the hot-side temperature each produces, `probe_fan.sh` maps fan values to
-RPM, and `probe_light.sh` walks the LED effect bytes interactively. They talk
-to the running app over its IPC files, so build and launch the app with your
-new profile first.
+The scripts in [`tools/probe/`](../tools/probe/) are developer-only experiment
+harnesses retained to make the reverse-engineering process reproducible. They
+automate the tedious part of confirming a mapping: `probe_modes.sh` sweeps the
+cooling-mode bytes and logs the hot-side temperature each produces,
+`probe_fan.sh` maps fan values to RPM, and `probe_light.sh` walks the LED effect
+bytes interactively.
+
+They communicate with the running app through a narrow developer-only JSON
+bridge (`~/.redmagic_probe_command.json` and
+`~/.redmagic_probe_status.json`). Build and launch the app with your new
+profile, connect the cooler, and then run the experiments. This bridge carries
+only the raw values the probes need and is not an app control surface.
 
 Be gentle with unknown mode bytes on a new device: the 6 Pro accepts
 undocumented values harmlessly, but keep an eye on the hot-side temperature

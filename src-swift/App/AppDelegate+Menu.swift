@@ -7,6 +7,7 @@ import AppKit
 /// assignments against a named group rather than a wall of `itemFoo.isHidden`.
 struct MenuRows {
     let connect: NSMenuItem
+    let devicePicker: NSMenuItem
     let modeSwitch: NSMenuItem
     let autoOptions: NSMenuItem
     let coolingSlider: NSMenuItem
@@ -44,6 +45,13 @@ extension AppDelegate: NSMenuDelegate {
         let connect = actionItem("Connect", #selector(connectDevice),
                                  symbol: "antenna.radiowaves.left.and.right")
         menu.addItem(connect)
+
+        devicePicker = DevicePickerView(width: width)
+        devicePicker.onSelect = { [weak self] in self?.selectDiscoveredDevice($0) }
+        devicePicker.onScanAgain = { [weak self] in self?.scanAgainForDevices() }
+        let devicePickerItem = wrap(devicePicker)
+        devicePickerItem.isHidden = true
+        menu.addItem(devicePickerItem)
 
         modeSwitch = ModeSwitchView(width: width)
         modeSwitch.onSelect = { [weak self] in self?.selectMode($0) }
@@ -126,6 +134,7 @@ extension AppDelegate: NSMenuDelegate {
                                 symbol: "xmark.circle"))
 
         rows = MenuRows(connect: connect,
+                        devicePicker: devicePickerItem,
                         modeSwitch: modeSwitchItem,
                         autoOptions: autoOptionsItem,
                         coolingSlider: coolingSliderItem,
