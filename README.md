@@ -19,13 +19,14 @@ driven by your Mac's actual die temperature.**
 
 The REDMAGIC VC Cooler 6 Pro is a magnetic phone cooler with a Peltier plate
 in it. It is inexpensive, it gets genuinely cold, and it works well as a
-laptop cooling pad if you sit it under a MacBook — but it only ships with an
-Android app, so there is no way to control it from a Mac, let alone make it
-react to how hot the Mac is.
+laptop cooling pad if you sit it under a MacBook — but its companion app is
+only available for Android and iOS, so there is no way to control it from a
+Mac, let alone make it react to how hot the Mac is.
 
 This project fills that gap: a native menu-bar app that speaks the cooler's
-Bluetooth LE protocol, plus an autopilot that ramps cooling up and down based
-on the Mac's die temperature.
+Bluetooth LE protocol and runs it fully automatically — switching the cooler
+on when the Mac gets warm, ramping the cooling level up and down to match the
+die temperature, and switching it back off when the Mac has cooled down.
 
 The protocol is not documented anywhere. It was reverse-engineered from BLE
 packet captures and the vendor APK; the complete notes are in
@@ -36,8 +37,9 @@ another device.
 
 - **Menu-bar temperature readout** — your Mac's die temperature, colour-graded
   by how hot it is
-- **Autopilot** — drives the cooler from that temperature, with hysteresis and
-  a cooldown dwell so it never rapid-cycles the Peltier
+- **Autopilot** — switches the cooler on and off and adjusts its power
+  automatically from that temperature, with hysteresis and a cooldown dwell so
+  it never rapid-cycles the Peltier
 - **Manual mode** — a ten-step power slider
 - **Full LED control** — every ring effect, including a heat-gauge mode
   (green when cool, red when hot)
