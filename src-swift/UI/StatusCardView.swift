@@ -41,7 +41,7 @@ final class StatusCardView: NSView {
 
     private static let pad = UIStyle.hPad
     private static let headerFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
-    private static let tempFont = NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .semibold)
+    private static let tempFont = NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .light)
     private static let stateFont = NSFont.systemFont(ofSize: 11, weight: .regular)
     private static let badgeFont = NSFont.systemFont(ofSize: 9, weight: .medium)
     private static let cellLabelFont = NSFont.systemFont(ofSize: 9)
