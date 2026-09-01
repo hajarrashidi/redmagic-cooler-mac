@@ -67,9 +67,18 @@ enum UIStyle {
     /// each row covers its own slice of the window, and between them they cover
     /// the menu.
     ///
-    /// This is the number to turn for more or less see-through: 1.0 is fully
-    /// opaque, 0 hands the menu back to the system's vibrancy.
-    static var menuBackdrop: NSColor { NSColor.white.withAlphaComponent(0.75) }
+    /// The colour is the system's own chrome grey, not white. A menu's material
+    /// is a light *grey*, so a white fill over it doesn't make the menu less
+    /// see-through — it makes it a different, creamier colour, which reads as
+    /// wrong long before anyone works out why. `windowBackgroundColor` is the
+    /// nearest thing AppKit publishes to the tone a menu already has, and it
+    /// tracks the system appearance instead of being a number to re-tune.
+    ///
+    /// The alpha is the dial: 1.0 is fully opaque, 0 hands the menu back to the
+    /// system's vibrancy exactly as it was.
+    static var menuBackdrop: NSColor {
+        NSColor.windowBackgroundColor.withAlphaComponent(0.85)
+    }
 
     /// The radius of the menu window's own rounded corners, matched by the
     /// first and last rows so the backdrop can't square off a corner the system
