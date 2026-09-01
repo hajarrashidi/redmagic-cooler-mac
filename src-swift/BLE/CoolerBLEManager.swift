@@ -111,13 +111,23 @@ final class CoolerBLEManager: NSObject {
     /// tearing down at quit.
     var hasActiveLink: Bool { peripheral != nil }
 
+    /// A cooler has been chosen at some point, so "Connect" has something to
+    /// aim at. Deliberately reads the saved UUID rather than
+    /// `knownPeripheral()`: whether macOS still has the peripheral cached
+    /// decides how `startScanning` reconnects, not whether the menu should
+    /// offer to. With nothing saved the menu leads with the picker instead.
+    var hasKnownDevice: Bool {
+        UserDefaults.standard.string(forKey: Config.Key.preferredDevice) != nil
+    }
+
     /// One-shot, fired once the peripheral has fully disconnected. Quit uses it
     /// to wait for a clean teardown before letting the process exit.
     var onDisconnect: (() -> Void)?
 
     // ── Internals ────────────────────────────────────────────────────────────
 
-    private var central: CBCentralManager!
+    /// Nil until the user first asks for a connection — see `activateCentral`.
+    private var central: CBCentralManager?
     private var peripheral: CBPeripheral?
     private var candidates: [DiscoveredDevice] = []
 
@@ -137,6 +147,9 @@ final class CoolerBLEManager: NSObject {
     /// Set when the user chose "Turn Off & Disconnect". Suppresses the
     /// automatic reconnect so the link stays down until they ask for it back.
     private var userRequestedDisconnect = false
+    /// True only after the user has initiated a connection in this app session.
+    /// Before that, the menu stays idle and leads with its Connect action.
+    private var connectionRequested = false
 
     /// Set while "Change Device" is dropping the current link. Discovery must
     /// wait for that disconnect, and its callback must not schedule a reconnect
@@ -145,11 +158,53 @@ final class CoolerBLEManager: NSObject {
 
     private var characteristics: [CBUUID: CBCharacteristic] = [:]
 
-    override init() {
-        super.init()
+    // ── Permission ───────────────────────────────────────────────────────────
+
+    /// What the app is allowed to do with Bluetooth, readable without owning a
+    /// central manager — which matters, because creating one is what triggers
+    /// the prompt.
+    enum Permission {
+        case granted
+        /// Never asked. The app has something to *offer* here rather than
+        /// something to report, so the menu shows a button instead of an error.
+        case notAsked
+        /// Asked and refused, or blocked by policy. Only System Settings can
+        /// undo it.
+        case denied
+    }
+
+    var permission: Permission {
+        switch CBManager.authorization {
+        case .allowedAlways:  return .granted
+        case .notDetermined:  return .notAsked
+        default:              return .denied
+        }
+    }
+
+    /// Creates the central manager, and with it triggers macOS's Bluetooth
+    /// permission prompt.
+    ///
+    /// Deliberately not done at launch. Opening a menu-bar app is not consent
+    /// to a permission dialog, and one that fires before the app has shown what
+    /// it is for is the version that gets denied — after which only System
+    /// Settings can undo it. So the manager comes up on the first press of
+    /// Connect, Scan or Allow Bluetooth Access, and the menu explains itself
+    /// first.
+    private func activateCentral() -> CBCentralManager {
+        if let central { return central }
+        EventLogger.record("BLE — activating adapter (may prompt for permission)")
         // A nil queue delivers delegate callbacks on the main queue, which is
         // what every consumer here expects.
-        central = CBCentralManager(delegate: self, queue: nil)
+        let created = CBCentralManager(delegate: self, queue: nil)
+        central = created
+        return created
+    }
+
+    /// Brings the adapter up for the sole purpose of asking. The menu's "Allow
+    /// Bluetooth Access" button lands here; whichever way the user answers,
+    /// `centralManagerDidUpdateState` reports it and the menu re-draws.
+    func requestPermission() {
+        _ = activateCentral()
     }
 
     // ── Connection lifecycle ─────────────────────────────────────────────────
@@ -160,12 +215,17 @@ final class CoolerBLEManager: NSObject {
     /// Safe to call repeatedly; it cancels any standing user-requested
     /// disconnect but will not disturb an attempt already in flight.
     func startScanning() {
+        connectionRequested = true
         userRequestedDisconnect = false
         // This call supersedes any reconnect still queued; letting it fire too
         // would start a second attempt racing this one.
         pendingReconnect?.cancel()
         pendingReconnect = nil
 
+        // First call of the session brings the adapter up. Its state arrives
+        // asynchronously, so this returns here and `centralManagerDidUpdateState`
+        // calls back in — `connectionRequested` is what tells it to.
+        let central = activateCentral()
         guard central.state == .poweredOn else {
             EventLogger.record("BLE — cannot scan, adapter state \(central.state.rawValue)")
             return
@@ -233,7 +293,7 @@ final class CoolerBLEManager: NSObject {
             withTimeInterval: Config.BLE.scanSettleWindow, repeats: false
         ) { [weak self] _ in
             guard let self else { return }
-            self.central.stopScan()
+            self.central?.stopScan()
             self.setPhase(.idle)
             self.delegate?.bleManager(self, needsDeviceSelection: self.candidates)
         }
@@ -245,7 +305,7 @@ final class CoolerBLEManager: NSObject {
     private func knownPeripheral() -> CBPeripheral? {
         guard let saved = UserDefaults.standard.string(forKey: Config.Key.preferredDevice),
               let uuid = UUID(uuidString: saved) else { return nil }
-        return central.retrievePeripherals(withIdentifiers: [uuid]).first
+        return central?.retrievePeripherals(withIdentifiers: [uuid]).first
     }
 
     /// Connects to a device the user picked in the device chooser.
@@ -259,7 +319,7 @@ final class CoolerBLEManager: NSObject {
             EventLogger.record("BLE — refusing unsupported device \"\(device.name)\"")
             return
         }
-        central.stopScan()
+        central?.stopScan()
         scanSettleTimer?.invalidate()
         scanSettleTimer = nil
         candidates = []
@@ -278,7 +338,7 @@ final class CoolerBLEManager: NSObject {
         self.peripheral = peripheral
         peripheral.delegate = self
         setPhase(.connecting(name: peripheral.name))
-        central.connect(peripheral, options: nil)
+        central?.connect(peripheral, options: nil)
 
         connectTimeoutTimer?.invalidate()
         connectTimeoutTimer = Timer.scheduledTimer(
@@ -286,7 +346,7 @@ final class CoolerBLEManager: NSObject {
         ) { [weak self] _ in
             guard let self else { return }
             EventLogger.record("BLE — connect timed out, retrying")
-            self.central.cancelPeripheralConnection(peripheral)
+            self.central?.cancelPeripheralConnection(peripheral)
             self.setPhase(.reconnecting)
             self.scheduleReconnect()
         }
@@ -296,7 +356,7 @@ final class CoolerBLEManager: NSObject {
     func disconnect() {
         cancelTimers()
         if let peripheral {
-            central.cancelPeripheralConnection(peripheral)
+            central?.cancelPeripheralConnection(peripheral)
         }
     }
 
@@ -304,9 +364,10 @@ final class CoolerBLEManager: NSObject {
     /// connection slot (so, say, the phone app can pair) until the user
     /// explicitly reconnects.
     func disconnectAndStop() {
+        connectionRequested = false
         userRequestedDisconnect = true
         cancelTimers()
-        central.stopScan()
+        central?.stopScan()
 
         guard let peripheral else {
             // Nothing connected — settle straight into idle.
@@ -316,13 +377,13 @@ final class CoolerBLEManager: NSObject {
             return
         }
         EventLogger.record("BLE — user requested disconnect")
-        central.cancelPeripheralConnection(peripheral)
+        central?.cancelPeripheralConnection(peripheral)
     }
 
     /// Forgets the current device and clears discovery state, for "Change Device".
     func resetForRescan() {
         cancelTimers()
-        central.stopScan()
+        central?.stopScan()
         candidates = []
         profile = nil
         characteristics.removeAll()
@@ -330,7 +391,7 @@ final class CoolerBLEManager: NSObject {
         if let peripheral, peripheral.state != .disconnected {
             rescanAfterDisconnect = true
             setPhase(.scanning)
-            central.cancelPeripheralConnection(peripheral)
+            central?.cancelPeripheralConnection(peripheral)
         } else {
             self.peripheral = nil
             setPhase(.idle)
@@ -457,7 +518,11 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         switch central.state {
         case .poweredOn:
             EventLogger.record("BLE — adapter powered on")
-            startScanning()
+            if connectionRequested {
+                startScanning()
+            } else {
+                setPhase(.idle)
+            }
         case .poweredOff:
             EventLogger.record("BLE — adapter powered off")
             setPhase(.bluetoothOff)
@@ -471,6 +536,13 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         default:
             setPhase(.idle)
         }
+
+        // Announced even when the phase label didn't move. Answering the
+        // permission prompt takes the adapter from unknown to powered-on —
+        // `.idle` both sides — and that is exactly the moment the menu has to
+        // stop offering "Allow Bluetooth Access". Nothing else would tell it:
+        // the master tick doesn't run while a menu is tracking the mouse.
+        delegate?.bleManager(self, didChangePhase: phase)
     }
 
     func centralManager(_ central: CBCentralManager,

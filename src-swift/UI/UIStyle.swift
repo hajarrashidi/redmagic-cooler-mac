@@ -24,6 +24,10 @@ enum UIStyle {
 
     /// Margin between a panel's edge and the menu's.
     static let panelInset: CGFloat = 8
+    /// Vertical gap between two panels stacked in the menu. Shared, because the
+    /// panels either side of it are separate menu rows and each supplies half
+    /// the run-up to it.
+    static let panelGap: CGFloat = 10
     /// Vertical breathing room inside a panel: the gap above the first piece
     /// of content and below the last. Every panel row applies it at both of
     /// its own edges, so a row junction inside a section reads as two of
@@ -132,10 +136,18 @@ enum UIStyle {
     }
 
     /// Heat colour for *text*. Identical to `heatColor` except the cool range
-    /// reads in plain black — a big green number looked like a status light,
-    /// not a reading. The warning colours stay so heat still stands out.
+    /// reads as plain label ink — a big green number looked like a status
+    /// light, not a reading. The warning colours stay so heat still stands out.
+    ///
+    /// That ink is softened, because at 26pt full-strength `labelColor` is the
+    /// heaviest mark in the menu and pulls the eye to a number that, while the
+    /// Mac is cool, is the least interesting thing on the card. The warning
+    /// colours keep their full strength — when they appear, they *are* the
+    /// point.
     static func textHeatColor(_ celsius: Double?) -> NSColor {
-        guard let celsius, celsius >= 60 else { return .labelColor }
+        guard let celsius, celsius >= 60 else {
+            return NSColor.labelColor.withAlphaComponent(0.55)
+        }
         return heatColor(celsius)
     }
 }

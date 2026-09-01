@@ -14,6 +14,10 @@ new `DeviceProfile`. This guide walks the whole path. Read
 [`FINDINGS.md`](FINDINGS.md) alongside it — that's the finished worked example
 for the 6 Pro, and other REDMAGIC coolers will likely look very similar.
 
+The current candidate list is in [`COMPATIBILITY.md`](COMPATIBILITY.md). It
+intentionally focuses on Bluetooth/app-controlled coolers; button-only models
+cannot be supported by a macOS controller without a remote interface.
+
 **Pull requests are very welcome.** The 6 Pro is the only cooler the author
 owns, so every other model depends entirely on someone who has the hardware
 being willing to poke at it. If you own one, the work below is the whole job —
@@ -42,12 +46,12 @@ REDMAGIC coolers don't advertise their service UUID, so this app discovers
 them by **name substring**. Scan while the cooler is powered and note the exact
 advertised name (the 6 Pro shows up as `RM Magcooler 6pro`).
 
-The app can do this part for you. Open **Change Device…** — coolers it
-recognises by vendor name but has no profile for are listed under *NOT
-SUPPORTED YET*, greyed out, with their advertised name shown. If yours isn't
-there, tick **Show all devices** to list every named BLE device in range and
-find it that way. Either route gives you the string you need without installing
-anything else.
+The app can do this part for you. Open **Change Device…** and press **Scan** —
+coolers it recognises by vendor name but has no profile for are listed under
+*NOT SUPPORTED YET*, greyed out, with their advertised name shown. Anything
+else named in range appears below that under *OTHER NEARBY DEVICES*, so a
+cooler advertising an unexpected name is still findable. Either way you get the
+string you need without installing anything else.
 
 A BLE explorer still helps for the steps below, and is the fallback if the app
 shows nothing at all.
@@ -137,6 +141,6 @@ the first time through.
 ## Step 6 — Document what you found
 
 Add your GATT map and byte tables to a findings doc (mirror
-[`FINDINGS.md`](FINDINGS.md)), note the advertised name, and mention the model
-in the README's supported-devices table. The next person with that cooler will
-thank you.
+[`FINDINGS.md`](FINDINGS.md)), note the advertised name, and update the model's
+status in [`COMPATIBILITY.md`](COMPATIBILITY.md). The next person with that
+cooler will thank you.

@@ -12,13 +12,25 @@ extension AppDelegate {
         let connected = ble.isConnected
         let coolerOn = connected && ble.mode.isOn
         let isManual = (appMode == .manual)
+        // The picker and the cooler panel are alternatives, each taking the
+        // other's place. The picker wins whenever the user asked for it *and*
+        // whenever no cooler has ever been chosen — with nothing saved, a panel
+        // offering "Connect" would be offering a button with no destination.
+        //
+        // An attempt already in flight overrides both: between picking a device
+        // and the link coming up nothing is saved yet, and dropping back to the
+        // picker there would hide the "Connecting…" the user just asked for.
+        let pickingDevice = !connected && !ble.phase.isBusy
+                         && (isSelectingDevice || !ble.hasKnownDevice)
 
         refreshUpdateNotice()
         refreshControls(isManual: isManual)
-        refreshVisibility(connected: connected, coolerOn: coolerOn, isManual: isManual)
-        refreshSettingsItems(connected: connected, coolerOn: coolerOn)
+        refreshVisibility(connected: connected, coolerOn: coolerOn, isManual: isManual,
+                          pickingDevice: pickingDevice)
+        refreshSettingsItems(connected: connected, coolerOn: coolerOn,
+                             pickingDevice: pickingDevice)
         refreshStatusItemButton(coolerOn: coolerOn)
-        refreshStatusCard(connected: connected)
+        refreshCards(connected: connected)
     }
 
     // ── Update notice ────────────────────────────────────────────────────────
@@ -33,7 +45,6 @@ extension AppDelegate {
         let update = updates.available
         let installing = installer.state == .downloading || installer.state == .installing
         rows.updateBanner.isHidden = (update == nil)
-        rows.updateSeparator.isHidden = (update == nil)
         // Skipping mid-install could not stop the swap already running; the
         // row bows out once the download starts.
         rows.skipUpdate.isHidden = (update == nil) || installing
@@ -71,7 +82,7 @@ extension AppDelegate {
         modeSwitch.setMode(appMode)
         modeSwitch.setEnabled(enabled)
 
-        autoOptions.configure(profile: autopilot.profile, engageC: autopilot.customEngageC)
+        autoOptions.configure(engageC: autopilot.engageC)
         autoOptions.setEnabled(enabled)
 
         // While a switch is in flight the fan write hasn't landed yet, so
@@ -85,6 +96,11 @@ extension AppDelegate {
         }
         coolingSlider.setEnabled(enabled)
 
+        // The picker narrates discovery entirely from these two, so it stays
+        // truthful about scans that end without a result — including ones that
+        // never start, because the adapter is off or was never allowed.
+        devicePicker.setState(phase: ble.phase, permission: ble.permission)
+
         effectPicker.setSelected(led.effect)
         effectPicker.setEnabled(enabled)
         breathToggle.setStyle(led.breathStyle)
@@ -94,13 +110,12 @@ extension AppDelegate {
 
     // ── Row visibility ───────────────────────────────────────────────────────
 
-    private func refreshVisibility(connected: Bool, coolerOn: Bool, isManual: Bool) {
-        // Discovery choices replace the Connect item in-place. Keeping both in
-        // the same menu avoids opening a separate chooser window, while every
-        // result still requires an explicit click.
-        rows.connect.isHidden = connected || isSelectingDevice
-        rows.devicePicker.isHidden = connected || !isSelectingDevice
-        if !connected && !isSelectingDevice { refreshConnectItem() }
+    private func refreshVisibility(connected: Bool, coolerOn: Bool, isManual: Bool,
+                                   pickingDevice: Bool) {
+        // Keeping the picker inside the status menu avoids a separate chooser
+        // window, while every result still requires an explicit click.
+        rows.devicePicker.isHidden = !pickingDevice
+        rows.coolerPanel.isHidden = pickingDevice
 
         rows.modeSwitch.isHidden = !connected
         rows.autoOptions.isHidden = !connected || isManual
@@ -115,17 +130,33 @@ extension AppDelegate {
             !connected || !(isManual && coolerOn) || isSwitching || deviceOff
         rows.switchingBanner.isHidden = !connected || !isSwitching
 
-        // LED controls only mean something while the cooler is running; when
-        // it's off, swap them for an explanatory banner.
-        rows.ledSeparator.isHidden = !connected
+        // LED controls only mean something while the cooler is running — its
+        // LED cannot show a colour when it isn't.
         rows.effect.isHidden = !coolerOn
         rows.breathToggle.isHidden = !coolerOn || led.effect != .breath
         rows.color.isHidden = !coolerOn || !led.usesPickedColor
-        rows.ledOffBanner.isHidden = !connected || coolerOn
 
-        // The LED panel's membership follows the effect, so which row rounds
-        // it off has to be recomputed alongside the visibility above.
+        // An idle cooler under Auto is the autopilot working correctly, but it
+        // is indistinguishable from a broken one until someone says so. Only
+        // while nothing more urgent is on screen: a cooler whose own switch is
+        // off is idle for a very different reason.
+        let autoWaiting = connected && appMode == .auto && !coolerOn
+                       && !isSwitching && !deviceOff
+        rows.autoWaitingBanner.isHidden = !autoWaiting
+        if autoWaiting {
+            autoWaitingBanner.configure(
+                style: .neutral,
+                text: "Waiting for the Mac to reach \(Int(autopilot.engageC))°C",
+                symbol: "thermometer.medium",
+                showSpinner: false)
+        }
+
+        // Cooling and LED effect form one cooler-control panel. Membership
+        // follows the active mode and effect, so recompute all panel corners.
         applyPanelSegments(to: [
+            (modeSwitch, !rows.modeSwitch.isHidden),
+            (autoOptions, !rows.autoOptions.isHidden),
+            (coolingSlider, !rows.coolingSlider.isHidden),
             (effectPicker, !rows.effect.isHidden),
             (breathToggle, !rows.breathToggle.isHidden),
             (colorPicker, !rows.color.isHidden),
@@ -138,7 +169,7 @@ extension AppDelegate {
 
         // "Change Device" duplicates what the open picker already offers, so
         // it steps aside while the picker is on screen.
-        rows.changeDevice.isHidden = isSelectingDevice
+        rows.changeDevice.isHidden = pickingDevice
     }
 
     /// Hands each visible row its slice of the section panel — first rounds the
@@ -154,19 +185,8 @@ extension AppDelegate {
         }
     }
 
-    /// Reflects the live connection phase, so the user never clicks "Connect"
-    /// on top of an attempt already running — which used to cancel it.
-    private func refreshConnectItem() {
-        if let title = ble.phase.connectItemTitle {
-            rows.connect.title = title
-            rows.connect.action = nil
-        } else {
-            rows.connect.title = "Connect"
-            rows.connect.action = #selector(connectDevice)
-        }
-    }
-
-    private func refreshSettingsItems(connected: Bool, coolerOn: Bool) {
+    private func refreshSettingsItems(connected: Bool, coolerOn: Bool,
+                                      pickingDevice: Bool) {
         startAtLoginRow.isChecked = LoginItem.isEnabled
 
         // Mirrors the isHidden decisions made for these rows elsewhere in this
@@ -175,7 +195,7 @@ extension AppDelegate {
             (turnOffRow, coolerOn),
             (turnOffDisconnectRow, connected),
             (startAtLoginRow, true),
-            (changeDeviceRow, !isSelectingDevice),
+            (changeDeviceRow, !pickingDevice),
         ])
     }
 
@@ -213,19 +233,22 @@ extension AppDelegate {
         button.contentTintColor = nil
     }
 
-    // ── Status card ──────────────────────────────────────────────────────────
+    // ── Status card and cooler panel ─────────────────────────────────────────
 
-    private func refreshStatusCard(connected: Bool) {
+    private func refreshCards(connected: Bool) {
         statusCard.update(StatusCardView.ViewModel(
             dieTempC: thermal.dieTemperatureC,
             thermalState: thermal.thermalState,
             mode: ble.mode,
-            telemetry: telemetry,
+            isConnected: connected,
+            appMode: appMode))
+
+        coolerPanel.update(CoolerPanelView.ViewModel(
             isConnected: connected,
             phase: ble.phase,
             deviceModelName: ble.profile?.modelName,
-            appMode: appMode,
-            autoProfile: autopilot.profile,
+            telemetry: telemetry,
+            mode: ble.mode,
             fanTint: led.fanTint(dieC: thermal.dieTemperatureC),
             deviceLooksPoweredOff: switchMonitor.looksPoweredOff))
     }

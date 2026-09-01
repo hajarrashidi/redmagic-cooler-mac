@@ -34,21 +34,12 @@ extension AppDelegate {
         refresh()
     }
 
-    func selectAutoProfile(_ profile: AutoProfile) {
-        guard beginSwitching() else { return }
-        autopilot.setProfile(profile)
-        UserDefaults.standard.set(profile.rawValue, forKey: Config.Key.autoProfile)
-        EventLogger.record("auto profile → \(profile.rawValue)")
-        runAutopilot()
-        refresh()
-    }
-
     /// Fires continuously while the engage slider moves, so it deliberately
     /// skips the switching lockout — the autopilot simply re-evaluates against
     /// the new threshold on each change.
-    func setCustomEngage(_ celsius: Double) {
-        autopilot.setCustomEngage(celsius)
-        UserDefaults.standard.set(autopilot.customEngageC, forKey: Config.Key.customEngageC)
+    func setEngage(_ celsius: Double) {
+        autopilot.setEngage(celsius)
+        UserDefaults.standard.set(autopilot.engageC, forKey: Config.Key.engageC)
         if appMode == .auto { runAutopilot() }
         refresh()
     }
@@ -145,7 +136,7 @@ extension AppDelegate {
         // Reconnect to the saved cooler and, once linked, command it off as a
         // known starting state — see `turnOffOnConnect`. Deliberately *not*
         // resetForRescan(), which forgets the device; that's "Change Device".
-        turnOffOnConnect = true
+        prepareForExplicitConnection()
         ble.startScanning()
         EventLogger.record("connect requested")
         refresh()
@@ -160,7 +151,6 @@ extension AppDelegate {
     /// an ordinary row in the status menu, so no separate app window appears.
     func scanAgainForDevices() {
         isSelectingDevice = true
-        devicePicker.setScanning(true)
         ble.resetForRescan()
         ble.startScanning()
         EventLogger.record("device scan requested")
@@ -175,10 +165,34 @@ extension AppDelegate {
     func selectDiscoveredDevice(_ device: CoolerBLEManager.DiscoveredDevice) {
         guard let profile = device.profile else { return }
         isSelectingDevice = false
-        turnOffOnConnect = true
+        prepareForExplicitConnection()
         ble.connect(to: device)
         EventLogger.record("device selected: \(profile.modelName)")
         refresh()
+    }
+
+    /// A fresh user-requested connection always starts in Auto. The switch is
+    /// hidden until the link is ready, so Auto is the first state they see.
+    private func prepareForExplicitConnection() {
+        turnOffOnConnect = true
+        setAppMode(.auto)
+    }
+
+    /// Brings the Bluetooth adapter up for the first time, which is what makes
+    /// macOS ask. Nothing else in the app touches Bluetooth before this, so the
+    /// prompt only ever appears in answer to a press of "Allow Bluetooth
+    /// Access" — never on top of a menu the user has only just opened.
+    func requestBluetoothAccess() {
+        ble.requestPermission()
+        EventLogger.record("bluetooth permission requested")
+        refresh()
+    }
+
+    /// The recovery path once access has been refused: nothing the app does can
+    /// re-ask, so hand the user straight to the pane that can.
+    func openBluetoothSettings() {
+        NSWorkspace.shared.open(Config.Links.bluetoothPrivacySettings)
+        EventLogger.record("bluetooth settings opened")
     }
 
     /// Opens the porting guide, for someone whose cooler the app can see but

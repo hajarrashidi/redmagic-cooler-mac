@@ -50,17 +50,29 @@ enum ConnectionPhase: Equatable {
         }
     }
 
-    /// Label for the Connect menu item. `nil` means the item should read
-    /// "Connect" and be clickable.
-    var connectItemTitle: String? {
+    /// Label for the Connect button in the cooler panel.
+    ///
+    /// Deliberately down to two or three words. The button sits beside the
+    /// panel's status line, which already spells out the states that need a
+    /// sentence — "Bluetooth is off", "Bluetooth permission required" — so
+    /// repeating them on the button would only force it to swallow the panel.
+    var connectButtonTitle: String {
         switch self {
         case .connecting, .discoveringServices, .discoveringCharacteristics:
             return "Connecting…"
-        case .reconnecting:          return "Reconnecting…"
-        case .scanning:              return "Searching…"
-        case .bluetoothOff:          return "Turn on Bluetooth to connect"
-        case .bluetoothUnauthorized: return "Allow Bluetooth in System Settings"
-        default:                     return nil
+        case .reconnecting: return "Reconnecting…"
+        case .scanning:     return "Searching…"
+        default:            return "Connect"
+        }
+    }
+
+    /// Whether pressing Connect right now would do anything useful. False while
+    /// an attempt is already in flight — starting a second one cancels the
+    /// first — and while Bluetooth itself is off or unauthorised.
+    var allowsConnectAction: Bool {
+        switch self {
+        case .idle: return true
+        default:    return false
         }
     }
 

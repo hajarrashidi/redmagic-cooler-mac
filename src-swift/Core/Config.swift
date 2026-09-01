@@ -42,8 +42,10 @@ enum Config {
     enum Key {
         static let preferredDevice = "PreferredDeviceUUID"
         static let appMode         = "AppMode"             // AppMode.rawValue
-        static let autoProfile     = "AutoProfile"         // AutoProfile.rawValue
-        static let customEngageC   = "CustomEngageTempC"   // Double, °C
+        static let engageC         = "AutopilotEngageTempC" // Double, °C
+        // Read only when migrating settings from builds with Standard/Custom.
+        static let legacyAutoProfile = "AutoProfile"
+        static let legacyCustomEngageC = "CustomEngageTempC"
         static let manualStep      = "ManualSliderStep"    // Int, 0…9
         static let ledEffect       = "LedEffect"           // LedEffect.rawValue
         static let ledHue          = "LedHue"              // Double, 0…1
@@ -82,6 +84,13 @@ enum Config {
         /// cooler the app can see but has no profile for.
         static let addingDevices = URL(
             string: "https://github.com/\(Updates.repository)/blob/main/docs/ADDING_DEVICES.md")!
+
+        /// System Settings → Privacy & Security → Bluetooth. The only way back
+        /// once Bluetooth access has been refused — the system prompt is
+        /// one-shot, so the app cannot ask again itself.
+        static let bluetoothPrivacySettings = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security"
+                  + "?Privacy_Bluetooth")!
     }
 
     // ── Control loop timing ──────────────────────────────────────────────────
@@ -116,13 +125,12 @@ enum Config {
         /// How long the temperature must stay low before stepping down a tier.
         static let cooldownDwell: TimeInterval = 15.0
 
-        /// Where the Standard profile's first cooling step engages (°C). Fixed,
-        /// but read by the UI so the menu can show the threshold it will use.
-        static let standardEngageC: Double = 40.0
-
-        static let customEngageDefaultC: Double = 65.0
-        static let customEngageMinC: Double = 45.0
-        static let customEngageMaxC: Double = 85.0
+        /// Slider minimum doubles as the default: the retired Standard profile
+        /// engaged at 40 °C, and 45 °C is the closest the ladder now gets —
+        /// out of the box the cooler still helps while the Mac is merely warm.
+        static let engageDefaultC: Double = 45.0
+        static let engageMinC: Double = 45.0
+        static let engageMaxC: Double = 85.0
     }
 
     // ── Diagnostics ──────────────────────────────────────────────────────────

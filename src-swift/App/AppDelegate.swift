@@ -32,7 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Custom rows. Held so `refresh()` can update and show/hide them without
     /// rebuilding the menu, which would close it under the user's cursor.
     var statusCard: StatusCardView!
+    var coolerPanel: CoolerPanelView!
     var updateBanner: BannerView!
+    var autoWaitingBanner: BannerView!
     var devicePicker: DevicePickerView!
     var modeSwitch: ModeSwitchView!
     var autoOptions: AutoOptionsView!
@@ -133,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.tick()
         }
 
-        EventLogger.record("app start — mode=\(appMode.rawValue) profile=\(autopilot.profile.rawValue)")
+        EventLogger.record("app start — mode=\(appMode.rawValue) engage=\(autopilot.engageC)°C")
 
         // The friendly Mac name needs system_profiler, which is far too slow to
         // block launch on; refresh the menu once it lands.
@@ -146,17 +148,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updates.check()
 
         writeProbeSnapshot()
-        ble.startScanning()
     }
 
     private func loadSettings() {
         let defaults = UserDefaults.standard
         appMode = AppMode(persisted: defaults.string(forKey: Config.Key.appMode))
 
-        let profile = AutoProfile(persisted: defaults.string(forKey: Config.Key.autoProfile))
-        let engageC = defaults.object(forKey: Config.Key.customEngageC) as? Double
-            ?? Config.Autopilot.customEngageDefaultC
-        autopilot = AutopilotPolicy(profile: profile, customEngageC: engageC)
+        let engageC: Double
+        if let saved = defaults.object(forKey: Config.Key.engageC) as? Double {
+            engageC = saved
+        } else if defaults.string(forKey: Config.Key.legacyAutoProfile) == "custom",
+                  let legacy = defaults.object(forKey: Config.Key.legacyCustomEngageC) as? Double {
+            // Preserve an actively selected Custom threshold. A legacy
+            // Standard user gets the new threshold slider's default instead
+            // of inheriting a previously hidden Custom value.
+            engageC = legacy
+        } else {
+            engageC = Config.Autopilot.engageDefaultC
+        }
+        autopilot = AutopilotPolicy(engageC: engageC)
+        defaults.set(autopilot.engageC, forKey: Config.Key.engageC)
     }
 
     private func buildStatusItem() {

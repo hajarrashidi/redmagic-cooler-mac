@@ -8,8 +8,7 @@ import AppKit
 struct MenuRows {
     let updateBanner: NSMenuItem
     let skipUpdate: NSMenuItem
-    let updateSeparator: NSMenuItem
-    let connect: NSMenuItem
+    let coolerPanel: NSMenuItem
     let devicePicker: NSMenuItem
     let modeSwitch: NSMenuItem
     let autoOptions: NSMenuItem
@@ -17,11 +16,10 @@ struct MenuRows {
     let manualWarning: NSMenuItem
     let switchingBanner: NSMenuItem
     let deviceOffBanner: NSMenuItem
-    let ledSeparator: NSMenuItem
     let effect: NSMenuItem
     let breathToggle: NSMenuItem
     let color: NSMenuItem
-    let ledOffBanner: NSMenuItem
+    let autoWaitingBanner: NSMenuItem
     let turnOff: NSMenuItem
     let turnOffAndDisconnect: NSMenuItem
     let startAtLogin: NSMenuItem
@@ -52,42 +50,44 @@ extension AppDelegate: NSMenuDelegate {
         skipUpdate.isHidden = true
         menu.addItem(skipUpdate)
 
-        let updateSeparator = NSMenuItem.separator()
-        updateSeparator.isHidden = true
-        menu.addItem(updateSeparator)
-
         // ── Status card ──────────────────────────────────────────────────────
         statusCard = StatusCardView(width: width)
         menu.addItem(wrap(statusCard))
-        menu.addItem(.separator())
 
-        // ── Connection / cooling ─────────────────────────────────────────────
-        // Shown only until the cooler connects; every control below it is
-        // meaningless — and misleading — without a live link.
-        let connect = actionItem("Connect", #selector(connectDevice),
-                                 symbol: "antenna.radiowaves.left.and.right")
-        menu.addItem(connect)
+        // The cooler's panel is a row of its own so it can step aside for the
+        // picker: the two are alternatives, one always taking the other's
+        // place, and Connect lives on the panel rather than as a menu item
+        // below it.
+        coolerPanel = CoolerPanelView(width: width)
+        coolerPanel.onConnect = { [weak self] in self?.connectDevice() }
+        let coolerPanelItem = wrap(coolerPanel)
+        menu.addItem(coolerPanelItem)
 
         devicePicker = DevicePickerView(width: width)
         devicePicker.onSelect = { [weak self] in self?.selectDiscoveredDevice($0) }
-        devicePicker.onScanAgain = { [weak self] in self?.scanAgainForDevices() }
+        devicePicker.onScan = { [weak self] in self?.scanAgainForDevices() }
         devicePicker.onOpenGuide = { [weak self] in self?.openAddingDevicesGuide() }
+        devicePicker.onRequestPermission = { [weak self] in self?.requestBluetoothAccess() }
+        devicePicker.onOpenBluetoothSettings = {
+            [weak self] in self?.openBluetoothSettings()
+        }
         let devicePickerItem = wrap(devicePicker)
         devicePickerItem.isHidden = true
         menu.addItem(devicePickerItem)
 
+        // ── Cooling ──────────────────────────────────────────────────────────
+        // Shown only once the cooler connects; every control here is
+        // meaningless — and misleading — without a live link.
         modeSwitch = ModeSwitchView(width: width)
         modeSwitch.onSelect = { [weak self] in self?.selectMode($0) }
-        // The cooling section is one panel: the mode switch on top, and exactly
-        // one of the auto options or the slider closing it (refresh shows one
-        // or the other, never both).
+        // The cooler section is one panel: mode on top, its active cooling
+        // control next, followed by the visible LED controls.
         modeSwitch.panelSegment = .top
         let modeSwitchItem = wrap(modeSwitch)
         menu.addItem(modeSwitchItem)
 
         autoOptions = AutoOptionsView(width: width)
-        autoOptions.onProfile = { [weak self] in self?.selectAutoProfile($0) }
-        autoOptions.onEngageChange = { [weak self] in self?.setCustomEngage($0) }
+        autoOptions.onEngageChange = { [weak self] in self?.setEngage($0) }
         autoOptions.panelSegment = .bottom
         let autoOptionsItem = wrap(autoOptions)
         menu.addItem(autoOptionsItem)
@@ -97,6 +97,22 @@ extension AppDelegate: NSMenuDelegate {
         coolingSlider.panelSegment = .bottom
         let coolingSliderItem = wrap(coolingSlider)
         menu.addItem(coolingSliderItem)
+
+        // LED controls are part of the same cooler-control panel as its mode.
+        effectPicker = LedEffectPickerView(width: width)
+        effectPicker.onSelect = { [weak self] in self?.applyLedEffect($0) }
+        let effectItem = wrap(effectPicker)
+        menu.addItem(effectItem)
+
+        breathToggle = BreathStyleToggleView(width: width)
+        breathToggle.onSelect = { [weak self] in self?.applyBreathStyle($0) }
+        let breathToggleItem = wrap(breathToggle)
+        menu.addItem(breathToggleItem)
+
+        colorPicker = HueSpectrumPickerView(width: width)
+        colorPicker.onSelect = { [weak self] in self?.applyLedHue($0) }
+        let colorItem = wrap(colorPicker)
+        menu.addItem(colorItem)
 
         let manualWarning = wrap(banner(width, .warning,
                                         "Manual stays on until you turn it off",
@@ -117,37 +133,20 @@ extension AppDelegate: NSMenuDelegate {
                                           symbol: "power.circle.fill"))
         menu.addItem(deviceOffBanner)
 
-        // ── LED ──────────────────────────────────────────────────────────────
-        let ledSeparator = NSMenuItem.separator()
-        menu.addItem(ledSeparator)
-
-        effectPicker = LedEffectPickerView(width: width)
-        effectPicker.onSelect = { [weak self] in self?.applyLedEffect($0) }
-        let effectItem = wrap(effectPicker)
-        menu.addItem(effectItem)
-
-        breathToggle = BreathStyleToggleView(width: width)
-        breathToggle.onSelect = { [weak self] in self?.applyBreathStyle($0) }
-        let breathToggleItem = wrap(breathToggle)
-        menu.addItem(breathToggleItem)
-
-        colorPicker = HueSpectrumPickerView(width: width)
-        colorPicker.onSelect = { [weak self] in self?.applyLedHue($0) }
-        let colorItem = wrap(colorPicker)
-        menu.addItem(colorItem)
-
-        // Replaces the LED controls while the cooler is off — its LED cannot
-        // show a colour when it isn't running.
-        let ledOffBanner = wrap(banner(width, .neutral,
-                                       "Cooler is off · turn on to set LED",
-                                       symbol: "powersleep"))
-        menu.addItem(ledOffBanner)
+        // Auto's whole job is to do nothing until the Mac gets hot, which
+        // looks exactly like a cooler that isn't working. The banner names the
+        // temperature being waited for, so the silence reads as intent.
+        autoWaitingBanner = BannerView(width: width)
+        let autoWaiting = wrap(autoWaitingBanner)
+        // Configured by refresh(), which names the current threshold; until
+        // then it would render as an empty banner.
+        autoWaiting.isHidden = true
+        menu.addItem(autoWaiting)
 
         // ── Settings ─────────────────────────────────────────────────────────
         // Custom rows rather than plain items, so the section can sit on a
         // panel like every other group. Which row opens and closes the panel
         // depends on what is visible, so refresh() assigns the segments.
-        menu.addItem(.separator())
         menu.addItem(sectionHeader("Settings"))
 
         turnOffRow = settingsRow("Turn Off", symbol: "power") {
@@ -179,14 +178,12 @@ extension AppDelegate: NSMenuDelegate {
         let changeDevice = wrap(changeDeviceRow)
         menu.addItem(changeDevice)
 
-        menu.addItem(.separator())
         menu.addItem(actionItem("Quit RedMagic Cooler", #selector(quitApp),
                                 symbol: "xmark.circle"))
 
         rows = MenuRows(updateBanner: updateBannerItem,
                         skipUpdate: skipUpdate,
-                        updateSeparator: updateSeparator,
-                        connect: connect,
+                        coolerPanel: coolerPanelItem,
                         devicePicker: devicePickerItem,
                         modeSwitch: modeSwitchItem,
                         autoOptions: autoOptionsItem,
@@ -194,11 +191,10 @@ extension AppDelegate: NSMenuDelegate {
                         manualWarning: manualWarning,
                         switchingBanner: switchingBanner,
                         deviceOffBanner: deviceOffBanner,
-                        ledSeparator: ledSeparator,
                         effect: effectItem,
                         breathToggle: breathToggleItem,
                         color: colorItem,
-                        ledOffBanner: ledOffBanner,
+                        autoWaitingBanner: autoWaiting,
                         turnOff: turnOff,
                         turnOffAndDisconnect: turnOffAndDisconnect,
                         startAtLogin: startAtLogin,
@@ -211,12 +207,12 @@ extension AppDelegate: NSMenuDelegate {
 
     /// Animate the fan only while the menu is actually visible.
     func menuWillOpen(_ menu: NSMenu) {
-        statusCard.startAnimating()
+        coolerPanel.startAnimating()
         refresh()
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        statusCard.stopAnimating()
+        coolerPanel.stopAnimating()
     }
 
     // ── Item factories ───────────────────────────────────────────────────────
