@@ -60,7 +60,7 @@ final class DevicePickerView: PanelRowView {
         static let pad = UIStyle.panelPad
         static let headerHeight: CGFloat = 13
         static let statusHeight: CGFloat = 16
-        static let listHeight: CGFloat = 100
+        static let listHeight: CGFloat = 138
         static let groupHeaderHeight: CGFloat = 18
         static let rowHeight: CGFloat = 26
         static let rowGap: CGFloat = 2
@@ -119,12 +119,13 @@ final class DevicePickerView: PanelRowView {
         // out of a 260pt row and paints a track behind it, which in a list this
         // short reads as a second border down the panel.
         scrollView.scrollerStyle = .overlay
+        scrollView.verticalScroller = ThinScroller()
         scrollView.verticalScroller?.controlSize = .mini
         scrollView.documentView = rowsView
         addSubview(scrollView)
 
         // Both empty states are drawn inside the list window, which cannot
-        // collapse — an unexplained 100pt hole is worse than either message.
+        // collapse — an unexplained hole is worse than either message.
         emptyLabel.font = UIStyle.captionFont
         emptyLabel.textColor = .tertiaryLabelColor
         emptyLabel.alignment = .center
@@ -329,6 +330,69 @@ final class DevicePickerView: PanelRowView {
         }
     }
 
+    // ── Mouse ────────────────────────────────────────────────────────────────
+    //
+    // `NSMenu` tracks the mouse itself and delivers events to the *item's*
+    // view — this one. Nothing nested inside it ever gets `mouseEntered`, so
+    // the buttons, the link and the result rows had tracking areas that could
+    // never fire. This view owns the pointer for the whole row and hands both
+    // hover and clicks down to whatever is under it.
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            // .activeAlways, not .activeInActiveApp: this is a menu-bar app
+            // that never becomes the active application just because its menu
+            // is open.
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways],
+            owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateHover(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        updateHover(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        updateHover(at: nil)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if scanButton.frame.contains(point) {
+            scanButton.performClick()
+        } else if guideLink.frame.contains(point) {
+            guideLink.performClick()
+        } else if let row = deviceRow(at: point) {
+            row.performClick()
+        }
+    }
+
+    private func updateHover(at point: NSPoint?) {
+        scanButton.isHovered = point.map(scanButton.frame.contains) ?? false
+        guideLink.isHovered = point.map(guideLink.frame.contains) ?? false
+        let hovered = point.flatMap(deviceRow(at:))
+        for case let row as DeviceRowView in rowsView.subviews {
+            row.isHovered = (row === hovered)
+        }
+    }
+
+    /// The result row under a point in this view's coordinates, if the point is
+    /// inside the list window at all — a row scrolled out of sight still has a
+    /// frame, and without the clip test the hover would follow it off-screen.
+    private func deviceRow(at point: NSPoint) -> DeviceRowView? {
+        guard !scrollView.isHidden, scrollView.frame.contains(point) else { return nil }
+        let inRows = rowsView.convert(point, from: self)
+        return rowsView.subviews.first {
+            $0 is DeviceRowView && $0.frame.contains(inRows)
+        } as? DeviceRowView
+    }
+
     // ── Actions ──────────────────────────────────────────────────────────────
 
     private func deviceTapped(_ device: CoolerBLEManager.DiscoveredDevice) {
@@ -369,14 +433,18 @@ final class DevicePickerView: PanelRowView {
 private final class DeviceRowView: NSView {
 
     /// Left unset for a device the app has no profile for, which both greys the
-    /// row out and stops it tracking the cursor.
+    /// row out and makes it ignore the cursor.
     var onClick: (() -> Void)? {
-        didSet { applyTint(); updateTrackingAreas() }
+        didSet { applyTint() }
+    }
+
+    /// Set by the picker, which owns the mouse for the whole row.
+    var isHovered = false {
+        didSet { if isHovered != oldValue { needsDisplay = true } }
     }
 
     private let nameLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(labelWithString: "")
-    private var isHighlighted = false
 
     private static let detailWidth: CGFloat = 84
 
@@ -412,9 +480,6 @@ private final class DeviceRowView: NSView {
         detailLabel.frame = NSRect(x: newSize.width - inset - 6 - detail,
                                    y: (newSize.height - 14) / 2,
                                    width: detail, height: 14)
-        // Rows are built at zero size and placed afterwards, so the tracking
-        // area has to follow the frame or the row never sees the cursor.
-        updateTrackingAreas()
     }
 
     private func applyTint() {
@@ -423,29 +488,20 @@ private final class DeviceRowView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard isHighlighted, onClick != nil else { return }
-        NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
+        guard isHovered, onClick != nil else { return }
+        NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 6, dy: 0),
                      xRadius: 5, yRadius: 5).fill()
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        setHoverTracking(enabled: onClick != nil)
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHighlighted = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHighlighted = false
-        needsDisplay = true
-    }
-
-    override func mouseUp(with event: NSEvent) {
+    /// Called by the picker once it has decided the click landed here.
+    func performClick() {
         onClick?()
+    }
+
+    /// See `PillButton.mouseUp` — whichever of the two runs, only one does.
+    override func mouseUp(with event: NSEvent) {
+        performClick()
     }
 
     private static func signalDescription(_ rssi: Int) -> String {
@@ -460,4 +516,31 @@ private final class DeviceRowView: NSView {
 
 private final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+/// A hairline overlay scroller.
+///
+/// `NSScroller` at `.mini` is still 11pt of track and knob, which in a 138pt
+/// list reads as a second border down the panel. This is the same scroller with
+/// its width and its knob cut down to the width of a caret.
+private final class ThinScroller: NSScroller {
+
+    private static let width: CGFloat = 5
+    private static let knobInset: CGFloat = 1
+
+    override class func scrollerWidth(for controlSize: NSControl.ControlSize,
+                                      scrollerStyle: NSScroller.Style) -> CGFloat {
+        width
+    }
+
+    /// Nothing behind the knob. An overlay scroller's slot is already faint;
+    /// at this width it only muddies the edge of the list.
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        let rect = rect(for: .knob).insetBy(dx: Self.knobInset, dy: Self.knobInset)
+        let radius = rect.width / 2
+        NSColor.secondaryLabelColor.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+    }
 }

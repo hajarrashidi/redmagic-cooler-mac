@@ -67,18 +67,19 @@ enum UIStyle {
     /// each row covers its own slice of the window, and between them they cover
     /// the menu.
     ///
-    /// The colour is the system's own chrome grey, not white. A menu's material
-    /// is a light *grey*, so a white fill over it doesn't make the menu less
-    /// see-through — it makes it a different, creamier colour, which reads as
-    /// wrong long before anyone works out why. `windowBackgroundColor` is the
-    /// nearest thing AppKit publishes to the tone a menu already has, and it
-    /// tracks the system appearance instead of being a number to re-tune.
+    /// `nil`, and the menu is the system's own vibrant material again.
     ///
-    /// The alpha is the dial: 1.0 is fully opaque, 0 hands the menu back to the
-    /// system's vibrancy exactly as it was.
-    static var menuBackdrop: NSColor {
-        NSColor.windowBackgroundColor.withAlphaComponent(0.85)
-    }
+    /// Two attempts at covering it landed wrong — white read as creamy
+    /// off-white, and the chrome grey was still not the tone the menu actually
+    /// has. That is the lesson rather than the accident: the menu's backdrop is
+    /// a live material that samples the desktop behind it, and no flat fill is
+    /// going to be mistaken for one. It is also, in a dark-mode desktop, dark —
+    /// while this app pins its own content to Aqua — so any fill chosen to look
+    /// right in one of those reads as wrong in the other.
+    ///
+    /// The machinery stays, because it costs one constant: set a colour here
+    /// and every row covers its own slice again.
+    static var menuBackdrop: NSColor? { nil }
 
     /// The radius of the menu window's own rounded corners, matched by the
     /// first and last rows so the backdrop can't square off a corner the system
@@ -96,6 +97,7 @@ enum UIStyle {
     }
 
     static func drawMenuBackdrop(in view: NSView, edges: MenuEdges) {
+        guard let menuBackdrop else { return }
         menuBackdrop.setFill()
         guard !edges.isEmpty else {
             view.bounds.fill()
@@ -158,6 +160,26 @@ enum UIStyle {
                        radius: rMax, startAngle: 90, endAngle: 180)
         path.close()
         return path
+    }
+
+    /// True when macOS itself is in dark mode.
+    ///
+    /// Read from the system defaults rather than from `effectiveAppearance`,
+    /// because the app pins itself to Aqua so its heat colours stay readable —
+    /// which means every view here reports "light" no matter what the rest of
+    /// the desktop is doing. The menu's own chrome is not the app's to pin, and
+    /// follows the system, so anything drawn against it has to ask the system.
+    static var systemPrefersDark: Bool {
+        UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+    }
+
+    /// Ink for a text link. `linkColor` on a light desktop; on a dark one the
+    /// menu behind it is dark, and the system blue sits too close to it — this
+    /// is the one to re-tune if the darker blue reads wrong.
+    static var linkInk: NSColor {
+        systemPrefersDark
+            ? NSColor(srgbRed: 0.21, green: 0.42, blue: 0.92, alpha: 1)
+            : .linkColor
     }
 
     // ── Fonts ────────────────────────────────────────────────────────────────

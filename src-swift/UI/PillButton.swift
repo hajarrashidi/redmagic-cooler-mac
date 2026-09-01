@@ -27,9 +27,8 @@ final class PillButton: NSView {
             guard isEnabled != oldValue else { return }
             // Otherwise a button disabled under the cursor keeps its hover fill
             // until the pointer happens to leave it.
-            if !isEnabled { isHighlighted = false }
+            if !isEnabled { isHovered = false }
             applyTint()
-            updateTrackingAreas()
         }
     }
 
@@ -47,8 +46,18 @@ final class PillButton: NSView {
         ceil(UIStyle.text(title, Self.font).size().width) + Self.hPad * 2
     }
 
+    /// Set by whichever view owns the mouse for this row.
+    ///
+    /// A tracking area of its own would be the obvious way, and it is what this
+    /// used to do — but a button nested inside a menu item's view never sees
+    /// the cursor. `NSMenu` tracks the mouse itself and hands events to the
+    /// item's view; nothing below that gets `mouseEntered`. So the item view
+    /// routes hover down, and this just paints what it is told.
+    var isHovered = false {
+        didSet { if isHovered != oldValue { needsDisplay = true } }
+    }
+
     private let label = NSTextField(labelWithString: "")
-    private var isHighlighted = false
 
     init(title: String) {
         self.title = title
@@ -67,9 +76,6 @@ final class PillButton: NSView {
         super.setFrameSize(newSize)
         label.frame = NSRect(x: 0, y: (newSize.height - Self.labelHeight) / 2,
                              width: newSize.width, height: Self.labelHeight)
-        // The button is re-sized whenever its title changes — a stale tracking
-        // area would leave part of it dead to the cursor.
-        updateTrackingAreas()
     }
 
     // ── Appearance ───────────────────────────────────────────────────────────
@@ -81,32 +87,24 @@ final class PillButton: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let fill: NSColor = isEnabled
-            ? NSColor.controlAccentColor.withAlphaComponent(isHighlighted ? 0.30 : 0.15)
+            ? NSColor.controlAccentColor.withAlphaComponent(isHovered ? 0.38 : 0.15)
             : NSColor.labelColor.withAlphaComponent(0.05)
         fill.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
     }
 
-    // ── Tracking ─────────────────────────────────────────────────────────────
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        setHoverTracking(enabled: isEnabled)
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHighlighted = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHighlighted = false
-        needsDisplay = true
-    }
-
-    override func mouseUp(with event: NSEvent) {
+    /// Called by the row that owns the mouse, once it has decided the click
+    /// landed here.
+    func performClick() {
         guard isEnabled else { return }
         onClick?()
+    }
+
+    /// Consumes the click when AppKit does dispatch it this deep. Whether it
+    /// does is up to the menu; not calling `super` means the owning row's own
+    /// `mouseUp` runs instead of as well, never both.
+    override func mouseUp(with event: NSEvent) {
+        performClick()
     }
 }
 
@@ -127,6 +125,11 @@ final class LinkButton: NSView {
         }
     }
 
+    /// Set by the row that owns the mouse — see `PillButton.isHovered`.
+    var isHovered = false {
+        didSet { if isHovered != oldValue { applyTitle() } }
+    }
+
     static let height: CGFloat = 16
 
     /// Width of the text itself. Callers size the link to it so the hover
@@ -139,7 +142,6 @@ final class LinkButton: NSView {
     }
 
     private let label = NSTextField(labelWithString: "")
-    private var isHighlighted = false
 
     init(title: String) {
         self.title = title
@@ -152,36 +154,27 @@ final class LinkButton: NSView {
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         label.frame = NSRect(origin: .zero, size: newSize)
-        updateTrackingAreas()
     }
 
     private func applyTitle() {
         var attributes: [NSAttributedString.Key: Any] = [
             .font: UIStyle.captionFont,
-            .foregroundColor: NSColor.linkColor,
+            .foregroundColor: UIStyle.linkInk,
         ]
-        if isHighlighted {
+        if isHovered {
             attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
         label.attributedStringValue = NSAttributedString(string: title, attributes: attributes)
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        setHoverTracking(enabled: true)
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHighlighted = true
-        applyTitle()
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHighlighted = false
-        applyTitle()
-    }
-
-    override func mouseUp(with event: NSEvent) {
+    /// Called by the row that owns the mouse, once it has decided the click
+    /// landed here.
+    func performClick() {
         onClick?()
+    }
+
+    /// See `PillButton.mouseUp`.
+    override func mouseUp(with event: NSEvent) {
+        performClick()
     }
 }

@@ -160,6 +160,39 @@ final class CoolerPanelView: PanelRowView {
 
     override var isFlipped: Bool { true }
 
+    // ── Mouse ────────────────────────────────────────────────────────────────
+    //
+    // Routed from here rather than left to the button's own tracking area:
+    // `NSMenu` hands events to the item's view, and nothing nested inside it
+    // ever sees the cursor. See `PillButton.isHovered`.
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways],
+            owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        connectButton.isHovered = !connectButton.isHidden
+            && connectButton.frame.contains(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
+
+    override func mouseExited(with event: NSEvent) {
+        connectButton.isHovered = false
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard !connectButton.isHidden,
+              connectButton.frame.contains(convert(event.locationInWindow, from: nil))
+        else { return }
+        connectButton.performClick()
+    }
+
     func update(_ model: ViewModel) {
         // Re-tinting a template symbol allocates an image; this runs on every
         // telemetry frame, so the note's icon is rebuilt only when the note
