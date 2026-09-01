@@ -204,6 +204,7 @@ constants live in `Config.Autopilot` and `Config.Timing`
 enum Autopilot {
     static let hysteresisC: Double = 5.0        // °C below engage before a tier releases
     static let cooldownDwell: TimeInterval = 15 // s a calmer reading must hold
+    static let standardEngageC: Double = 40     // where Standard's first step engages
     static let customEngageDefaultC: Double = 65
     static let customEngageMinC: Double = 45
     static let customEngageMaxC: Double = 85
@@ -214,9 +215,11 @@ enum Timing {
 ```
 
 ```swift
-// AutopilotPolicy.configure(profile:customEngageC:) — the Standard ladder
-engagePoints = [(40, 1), (50, 2), (62, 3), (74, 4)]
-ledGreenC = 40
+// AutopilotPolicy.configure(profile:customEngageC:) — the Standard ladder.
+// The first engage point is Config.Autopilot.standardEngageC (40 °C), shared
+// with the menu so the row can label the threshold it will actually use.
+engagePoints = [(Config.Autopilot.standardEngageC, 1), (50, 2), (62, 3), (74, 4)]
+ledGreenC = Config.Autopilot.standardEngageC
 ledRedC = 78
 ```
 

@@ -120,18 +120,15 @@ out of `CoolerBLEManager`.
 
 ## Step 5 — Verify with the probe scripts
 
-The scripts in [`tools/probe/`](../tools/probe/) are developer-only experiment
-harnesses retained to make the reverse-engineering process reproducible. They
-automate the tedious part of confirming a mapping: `probe_modes.sh` sweeps the
-cooling-mode bytes and logs the hot-side temperature each produces,
-`probe_fan.sh` maps fan values to RPM, and `probe_light.sh` walks the LED effect
-bytes interactively.
+The scripts in [`tools/probe/`](../tools/probe/) automate the tedious part of
+confirming a mapping — sweeping mode bytes against hot-side temperature, fan
+values against RPM, LED effect bytes against what you actually see. What each
+script does, how the developer-only JSON bridge works, and how to launch a
+probe-enabled build are in
+[`tools/probe/README.md`](../tools/probe/README.md).
 
-They communicate with the running app through a narrow developer-only JSON
-bridge (`~/.redmagic_probe_command.json` and
-`~/.redmagic_probe_status.json`). Build and launch the app with your new
-profile, connect the cooler, and then run the experiments. This bridge carries
-only the raw values the probes need and is not an app control surface.
+Build and launch the app with your new profile, connect the cooler, and then
+run the experiments.
 
 Be gentle with unknown mode bytes on a new device: the 6 Pro accepts
 undocumented values harmlessly, but keep an eye on the hot-side temperature

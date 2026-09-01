@@ -3,8 +3,13 @@
 #
 # Steps through the cooler's light-effect bytes one at a time, at YOUR pace.
 # For each byte it lights the cooler in one test colour (red by default), waits
-# for you to look, then asks what you saw. When you're done it writes the
-# results to led_mapping.md in this folder.
+# for you to look, then asks what you saw. When you're done it overwrites
+# docs/led_mapping.md, which is the copy README.md and FINDINGS.md link to.
+#
+# Set the LED effect to anything other than Auto in the menu before running
+# this. On Auto the app repaints the LED with the static-colour byte whenever
+# the die temperature moves, which lands on top of the byte being probed and
+# reads back as "solid single colour".
 #
 # Usage:
 #   ./probe_light.sh                 # walk bytes 0..15
@@ -27,7 +32,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 STATUS_FILE="$HOME/.redmagic_probe_status.json"
 CMD_FILE="$HOME/.redmagic_probe_command.json"
-OUT="$DIR/led_mapping.md"
+OUT="$DIR/../../docs/led_mapping.md"
 
 FROM="${1:-0}"
 TO="${2:-15}"

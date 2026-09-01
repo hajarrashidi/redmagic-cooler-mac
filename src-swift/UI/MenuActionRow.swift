@@ -57,10 +57,6 @@ final class MenuActionRow: NSView {
 
     override var isFlipped: Bool { true }
 
-    func setTitle(_ title: String) {
-        label.stringValue = title
-    }
-
     // ── Appearance ───────────────────────────────────────────────────────────
 
     private func applyTint() {
@@ -88,11 +84,7 @@ final class MenuActionRow: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        guard isEnabled else { return }
-        addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeInActiveApp],
-                                       owner: self))
+        setHoverTracking(enabled: isEnabled)
     }
 
     override func mouseEntered(with event: NSEvent) {

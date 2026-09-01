@@ -56,9 +56,7 @@ final class DevicePickerView: NSView {
         let pad = UIStyle.hPad
         let content = width - pad * 2
 
-        let header = NSTextField(labelWithString: "AVAILABLE DEVICES")
-        header.font = UIStyle.sectionFont
-        header.textColor = .tertiaryLabelColor
+        let header = UIStyle.sectionLabel("AVAILABLE DEVICES")
         header.frame = NSRect(x: pad, y: 8, width: content, height: 13)
         addSubview(header)
 
@@ -185,9 +183,7 @@ final class DevicePickerView: NSView {
         var laidOut: [(NSView, CGFloat)] = []
 
         for group in groups {
-            let header = NSTextField(labelWithString: group.title)
-            header.font = UIStyle.sectionFont
-            header.textColor = .tertiaryLabelColor
+            let header = UIStyle.sectionLabel(group.title)
             laidOut.append((header, Layout.headerHeight))
             y += Layout.headerHeight
 

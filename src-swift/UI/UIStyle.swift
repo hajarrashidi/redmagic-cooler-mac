@@ -24,6 +24,18 @@ enum UIStyle {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    /// The small uppercase caption that titles a control row.
+    ///
+    /// Six rows built this same field by hand. Only the font and colour are
+    /// shared — each row still places its own header, because they sit at
+    /// different heights within their layouts.
+    static func sectionLabel(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.font = sectionFont
+        label.textColor = .tertiaryLabelColor
+        return label
+    }
+
     static func text(_ string: String,
                      _ font: NSFont,
                      _ color: NSColor = .labelColor) -> NSAttributedString {

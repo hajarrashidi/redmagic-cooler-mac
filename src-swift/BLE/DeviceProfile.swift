@@ -36,14 +36,10 @@ struct DeviceProfile {
     let fanSpeedUUID: CBUUID
     /// Write `[effect, R, G, B]` — see `LedEffect`.
     let lightModeUUID: CBUUID
-    /// Write `[celsius]`. The device's own auto-engage threshold.
-    let tempThreshUUID: CBUUID
     /// Notify. Reports whether the magnetic mount is seated.
     let hallUUID: CBUUID
     /// Notify. Periodic telemetry frames, decoded by `decodeTelemetry`.
     let telemetryUUID: CBUUID
-    /// Write `[0|1]`. Enables the device's built-in temperature automation.
-    let autoTempUUID: CBUUID
 
     // ── Frame decoding ───────────────────────────────────────────────────────
 
@@ -59,10 +55,11 @@ struct DeviceProfile {
     /// Characteristics to subscribe to.
     var notifyingUUIDs: Set<CBUUID> { [hallUUID, telemetryUUID] }
 
-    /// Characteristics whose value is read once at connect to seed the caches.
-    var readableUUIDs: Set<CBUUID> {
-        [coolingModeUUID, fanSpeedUUID, lightModeUUID, tempThreshUUID, autoTempUUID]
-    }
+    /// Characteristics the app writes to. Resolved at connect and held so
+    /// `write` can find them; the device exposes more (a threshold and an
+    /// auto-temp flag for its own automation, mapped in `docs/FINDINGS.md`),
+    /// but this app runs its own autopilot and drives none of them.
+    var writableUUIDs: Set<CBUUID> { [coolingModeUUID, fanSpeedUUID, lightModeUUID] }
 
     // ── Registry ─────────────────────────────────────────────────────────────
 
@@ -114,10 +111,8 @@ extension DeviceProfile {
         coolingModeUUID: CBUUID(string: "00001011-0000-1000-8000-00805f9b34fb"),
         fanSpeedUUID:    CBUUID(string: "00001012-0000-1000-8000-00805f9b34fb"),
         lightModeUUID:   CBUUID(string: "00001013-0000-1000-8000-00805f9b34fb"),
-        tempThreshUUID:  CBUUID(string: "00001014-0000-1000-8000-00805f9b34fb"),
         hallUUID:        CBUUID(string: "00001015-0000-1000-8000-00805f9b34fb"),
         telemetryUUID:   CBUUID(string: "00001016-0000-1000-8000-00805f9b34fb"),
-        autoTempUUID:    CBUUID(string: "00001018-0000-1000-8000-00805f9b34fb"),
         decodeTelemetry: { data in
             // `[0]=0xAA marker, [2]=cold °C, [3]=hot °C, [7]=ambient °C,
             //  [13..14]=fan RPM little-endian`. Older firmware sends a shorter

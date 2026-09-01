@@ -1,28 +1,23 @@
 import AppKit
 
 /// The RedMagic "R" mark, drawn as a vector path rather than shipped as an
-/// asset so it stays crisp at any size and can be recoloured — including as a
-/// menu-bar template image, which the system tints to match the user's theme.
+/// asset so it stays crisp at any size and can be recoloured.
 ///
 /// Path coordinates are expressed on a 20×20 grid and scaled to the target
 /// rect, in a y-down (flipped) space.
 enum RedMagicLogo {
     static let brandRed = NSColor(red: 0.89, green: 0.11, blue: 0.13, alpha: 1)
 
-    /// An `NSImage` of the mark.
+    /// An `NSImage` of the mark, drawn in its final colour.
     ///
-    /// - Parameter template: marks the image as a template, so AppKit tints it
-    ///   rather than using the drawn colour. The menu-bar item relies on this:
-    ///   its `contentTintColor` is what actually decides the final colour, so
-    ///   the colour drawn here is irrelevant beyond producing the right alpha.
-    static func image(size: CGFloat, color: NSColor = brandRed,
-                      template: Bool = false) -> NSImage {
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
-            drawR(in: rect, color: template ? .black : color)
+    /// Deliberately *not* a template image: macOS tints template images in the
+    /// menu bar itself and ignores `contentTintColor` there, so a template mark
+    /// could never be forced to the heat colour the status item wants.
+    static func image(size: CGFloat, color: NSColor = brandRed) -> NSImage {
+        NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
+            drawR(in: rect, color: color)
             return true
         }
-        image.isTemplate = template
-        return image
     }
 
     /// Draw the R mark into the current graphics context.
@@ -61,17 +56,5 @@ enum RedMagicLogo {
 
         color.setFill()
         path.fill()
-    }
-}
-
-/// View wrapper for the mark. Exists mainly to flip the coordinate space, which
-/// `drawR` assumes.
-final class RedMagicLogoView: NSView {
-    var color: NSColor = RedMagicLogo.brandRed
-
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        RedMagicLogo.drawR(in: bounds, color: color)
     }
 }

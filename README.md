@@ -76,9 +76,15 @@ the only way this list grows. Neither of the untested models above is one the
 author owns, so the protocol work simply can't happen without people who have
 the hardware.
 
-Adding a model is deliberately small: one new `DeviceProfile`, no changes
-anywhere else in the app.
-[docs/ADDING_DEVICES.md](docs/ADDING_DEVICES.md) walks the whole path, and
+Adding a model is deliberately small. Everything model-specific — the scan
+name to match, the GATT service and characteristic UUIDs, how to decode a
+telemetry frame — lives in one file,
+[`src-swift/BLE/DeviceProfile.swift`](src-swift/BLE/DeviceProfile.swift); the
+rest of the app is model-agnostic and follows whichever profile matched, so a
+new cooler means one new profile and no changes anywhere else.
+[docs/ADDING_DEVICES.md](docs/ADDING_DEVICES.md) walks the whole path — finding
+the advertised name, mapping the GATT table, capturing what the vendor app
+sends, verifying with the probe scripts — and
 [docs/FINDINGS.md](docs/FINDINGS.md) is the finished worked example for the
 6 Pro to copy from.
 
@@ -181,11 +187,9 @@ Two facts about this device shaped a lot of the code:
   (`RM Magcooler 6pro`).
 - **It accepts one connection and does not let go.** If a process dies holding
   the link, the cooler believes it is still connected until its supervision
-  timeout, and nothing else can connect in the meantime. So launching the app
-  terminates any previous instance and waits for it to exit; a stale
-  system-level link is explicitly cancelled before reconnecting; `connect()`
-  gets an 8-second watchdog because CoreBluetooth's has none of its own; and
-  quitting holds termination open until the disconnect is confirmed.
+  timeout, and nothing else can connect in the meantime. Four separate
+  mechanisms in the app exist only to work around this; they are listed under
+  [Key implementation notes](docs/FINDINGS.md#key-implementation-notes).
 
 If you are writing software for this device, those two are where you will
 lose an evening.
@@ -215,21 +219,6 @@ tools/probe/            developer-only protocol experiments; not app controls
 `Core/` contains no AppKit, so the interesting logic — the autopilot
 especially — can be read without wading through view code. Everything under
 `tools/` is for people hacking on the project, not for running it.
-
-### Adding support for another cooler
-
-Everything model-specific — the scan name to match, the GATT service and
-characteristic UUIDs, how to decode a telemetry frame — lives in a single
-file, [`src-swift/BLE/DeviceProfile.swift`](src-swift/BLE/DeviceProfile.swift).
-The rest of the app is model-agnostic and follows the profile for whichever
-discovered cooler the user selects, so supporting a new cooler means
-reverse-engineering its protocol and writing one new profile.
-
-[docs/ADDING_DEVICES.md](docs/ADDING_DEVICES.md) is the full walkthrough: how
-to find the device's advertised name, map its GATT table, capture what the
-vendor app sends, and verify the result with the probe scripts in
-[`tools/probe/`](tools/probe/). [docs/FINDINGS.md](docs/FINDINGS.md) is the
-finished worked example for the 6 Pro.
 
 ## Known limitations
 

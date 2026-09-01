@@ -93,11 +93,7 @@ final class BannerView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        guard onClick != nil else { return }
-        addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeInActiveApp],
-                                       owner: self))
+        setHoverTracking(enabled: onClick != nil)
     }
 
     override func mouseEntered(with event: NSEvent) {

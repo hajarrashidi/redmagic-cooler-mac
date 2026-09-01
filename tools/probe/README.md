@@ -22,7 +22,7 @@ local probe-enabled app, connect the cooler, and then start a probe:
 |------------------|--------------------------------------------------------------------|
 | `probe_modes.sh` | The cooling-mode bytes: steps through all 8 values and records the hot-side temperature each one produces, isolating TEC power from fan speed. |
 | `probe_fan.sh`   | The fan-speed curve: which 0–100 values produce distinct RPMs (the firmware's response is U-shaped, not linear). |
-| `probe_light.sh` | The LED effect bytes: interactive — shows you each effect and asks what you saw, then writes the results to `led_mapping.md` in this folder. |
+| `probe_light.sh` | The LED effect bytes: interactive — shows you each effect and asks what you saw, then overwrites [`docs/led_mapping.md`](../../docs/led_mapping.md). Switch the LED effect off **Auto** first, or the app's own heat-colour repaint lands on top of the byte you are probing. |
 
 A word of caution: `probe_modes.sh` deliberately writes mode bytes the vendor
 app never uses. They're accepted by the VC Cooler 6 Pro firmware without

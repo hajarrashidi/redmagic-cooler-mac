@@ -59,23 +59,37 @@ Values 0x04–0x08 are not shown in the app UI but the firmware accepts and exec
 
 ## LED Light / Colour (char `0x1013`)
 
-Takes a **4-byte** value `[mode, R, G, B]`. Byte 0 selects the effect; for the
-static effect the following three bytes are the RGB colour (R,G,B order, 0–255).
+Takes a **4-byte** value `[mode, R, G, B]`. Byte 0 selects the effect; the
+following three bytes are the RGB colour (R,G,B order, 0–255), honoured only by
+the two single-colour effects.
 **The LED only illuminates while the cooler (TEC) is actually running.**
 
-| Byte 0 | Effect    | Colour bytes | Observed on-device                     |
-|--------|-----------|--------------|----------------------------------------|
-| `0`    | Off       | ignored      | LED off                                |
-| `1`    | Rainbow   | ignored      | all colours at once                    |
-| `2`    | Fade      | ignored      | fades between colours (breathing)      |
-| `3`    | Spin      | ignored      | rainbow that rotates                   |
-| `4`    | **Static**| **used**     | steady single colour from `[R,G,B]`    |
+Probed on-device with `tools/probe/probe_light.sh`; full sweep in
+[`led_mapping.md`](led_mapping.md). This table is what
+`LedEffect.DeviceEffect` implements.
+
+| Byte 0 | Effect              | Colour bytes | Observed on-device                  |
+|--------|---------------------|--------------|-------------------------------------|
+| `0`    | Off                 | ignored      | LED off                             |
+| `1`    | Rainbow             | ignored      | all colours at once                 |
+| `2`    | Colourful breath    | ignored      | breathes through the whole wheel    |
+| `3`    | Monochrome breath   | **used**     | breathes the given colour           |
+| `4`    | **Static**          | **used**     | steady single colour from `[R,G,B]` |
 
 Example: `04 ff 00 00` = static red, `04 00 ff 00` = static green,
 `04 00 00 ff` = static blue. Verified on-device.
 
-> The earlier guess (`1=Solid 2=Breath 3=Colorful 4=Flash`) was wrong: effect `1`
-> is a multi-colour rainbow, and static single-colour is effect **`4`**.
+Bytes above 4 alias back onto these five rather than adding anything new. Read
+the sweep with one caveat: rows recorded while the app's LED effect was on
+**Auto** can read as "solid single colour" whatever byte was written, because
+Auto repaints the LED with the static byte whenever the die temperature moves.
+That is why the sweep's byte `0` row disagrees with this table.
+
+Two earlier readings of this table were wrong and are worth naming, because both
+are easy to arrive at again: the first guess (`1=Solid 2=Breath 3=Colorful
+4=Flash`) had static on the wrong byte, and a later pass read byte `3` as a
+rotating rainbow that ignored the colour bytes. It does not — it breathes the
+colour you give it.
 
 ---
 
@@ -167,16 +181,10 @@ See the [README](../README.md) for usage and the source layout.
 
 ### LED effect bytes
 
-Probed on-device with the developer-only `tools/probe/probe_light.sh` harness;
-full sweep in [`led_mapping.md`](led_mapping.md). The app uses:
-
-| Byte | Behaviour                                | Uses RGB |
-|------|------------------------------------------|----------|
-| 0    | off                                      | no       |
-| 1    | rainbow — all colours at once            | no       |
-| 2    | colourful breath — cycles the wheel      | no       |
-| 3    | monochrome breath — breathes the colour  | yes      |
-| 4    | steady single colour                     | yes      |
+All five are exposed in the menu, mapped in `LedEffect.DeviceEffect` — see
+[LED Light / Colour](#led-light--colour-char-0x1013) above for the byte table.
+The app's own `Auto` effect is not a device effect: it writes the static
+colour (byte `4`) on a timer, graded by die temperature.
 
 ---
 

@@ -40,8 +40,6 @@ final class CoolingSliderView: NSView {
     /// Fires once, on mouse-up, with the chosen step index.
     var onStep: ((Int) -> Void)?
 
-    private(set) var currentStep = 0
-
     private let slider = NSSlider()
     private let nameLabel = NSTextField(labelWithString: "Off")
 
@@ -53,9 +51,7 @@ final class CoolingSliderView: NSView {
         let height: CGFloat = 66
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
-        let title = NSTextField(labelWithString: "POWER")
-        title.font = UIStyle.sectionFont
-        title.textColor = .tertiaryLabelColor
+        let title = UIStyle.sectionLabel("POWER")
         title.frame = NSRect(x: UIStyle.hPad, y: height - 14, width: width * 0.6, height: 13)
         addSubview(title)
 
@@ -117,7 +113,6 @@ final class CoolingSliderView: NSView {
     }
 
     private func apply(_ step: Int, notify: Bool) {
-        currentStep = step
         slider.integerValue = step
         nameLabel.stringValue = Self.steps[step].name
         if notify { onStep?(step) }

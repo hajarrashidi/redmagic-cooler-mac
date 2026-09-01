@@ -21,9 +21,7 @@ class SegmentedRowView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.rowHeight))
 
         let hPad = UIStyle.hPad
-        let header = NSTextField(labelWithString: title)
-        header.font = UIStyle.sectionFont
-        header.textColor = .tertiaryLabelColor
+        let header = UIStyle.sectionLabel(title)
         header.frame = NSRect(x: hPad, y: 34, width: width - hPad * 2, height: 13)
         addSubview(header)
 

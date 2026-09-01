@@ -14,7 +14,7 @@ extension AppDelegate {
         let isManual = (appMode == .manual)
 
         refreshUpdateNotice()
-        refreshControls(connected: connected, isManual: isManual)
+        refreshControls(isManual: isManual)
         refreshVisibility(connected: connected, coolerOn: coolerOn, isManual: isManual)
         refreshSettingsItems()
         refreshStatusItemButton(coolerOn: coolerOn)
@@ -41,7 +41,7 @@ extension AppDelegate {
 
     // ── Control values ───────────────────────────────────────────────────────
 
-    private func refreshControls(connected: Bool, isManual: Bool) {
+    private func refreshControls(isManual: Bool) {
         let enabled = !isSwitching
 
         modeSwitch.setMode(appMode)
@@ -117,9 +117,15 @@ extension AppDelegate {
         }
     }
 
-    private func refreshSettingsItems() {
-        let style = MenuBarIndicator(
+    /// The persisted menu-bar style, read fresh on every refresh so the
+    /// submenu's checkmark and the button itself can never disagree.
+    private var menuBarStyle: MenuBarIndicator {
+        MenuBarIndicator(
             persisted: UserDefaults.standard.string(forKey: Config.Key.indicatorStyle))
+    }
+
+    private func refreshSettingsItems() {
+        let style = menuBarStyle
         for item in rows.indicatorStyle.submenu?.items ?? [] {
             let itemStyle = (item.representedObject as? String).map(MenuBarIndicator.init(rawValue:))
             item.state = (itemStyle == style) ? .on : .off
@@ -131,8 +137,7 @@ extension AppDelegate {
 
     private func refreshStatusItemButton(coolerOn: Bool) {
         guard let button = statusItem.button else { return }
-        let style = MenuBarIndicator(
-            persisted: UserDefaults.standard.string(forKey: Config.Key.indicatorStyle))
+        let style = menuBarStyle
         let temperature = ble.isConnected
             ? SystemInfo.formatTemp(thermal.dieTemperatureC, degreeOnly: true)
             : ""

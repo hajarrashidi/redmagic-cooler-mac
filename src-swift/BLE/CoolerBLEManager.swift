@@ -10,8 +10,8 @@ protocol CoolerBLEManagerDelegate: AnyObject {
     func bleManager(_ manager: CoolerBLEManager, didChangeConnected isConnected: Bool)
     func bleManager(_ manager: CoolerBLEManager, didReceive telemetry: CoolerTelemetry)
     func bleManager(_ manager: CoolerBLEManager, didChangeMountAttached attached: Bool)
-    /// The cached mode/fan/light values changed, whether from our own write or
-    /// a read-back from the device.
+    /// The cached mode/fan values changed, whether from our own write or a
+    /// read-back from the device.
     func bleManagerDidChangeSettings(_ manager: CoolerBLEManager)
     /// Supported coolers were found and the user needs to pick one. Selection
     /// is always explicit, even when discovery finds only one device.
@@ -106,9 +106,6 @@ final class CoolerBLEManager: NSObject {
     /// they're updated both by our writes (optimistically) and by read-backs.
     private(set) var mode: CoolingMode = .off
     private(set) var fanPercent: UInt8 = 0
-    private(set) var lightMode: UInt8?
-    private(set) var tempThreshold: UInt8?
-    private(set) var deviceAutoTemp: Bool?
 
     /// True while we hold a peripheral with a live — or half-open — link worth
     /// tearing down at quit.
@@ -328,6 +325,23 @@ final class CoolerBLEManager: NSObject {
         scanSettleTimer = nil
     }
 
+    /// Resumes a "Change Device" scan, if this teardown was the one it asked
+    /// for.
+    ///
+    /// Both disconnect callbacks have to ask: cancelling an *in-flight*
+    /// connection surfaces as `didFailToConnect`, cancelling a live one as
+    /// `didDisconnectPeripheral`, and the user's rescan must survive either.
+    ///
+    /// - Returns: `true` when it consumed the event, so the caller stops rather
+    ///   than reconnecting to the cooler being replaced.
+    private func resumeRescanIfPending() -> Bool {
+        guard rescanAfterDisconnect else { return false }
+        rescanAfterDisconnect = false
+        peripheral = nil
+        startScanning()
+        return true
+    }
+
     private func scheduleReconnect() {
         DispatchQueue.main.asyncAfter(deadline: .now() + Config.BLE.reconnectDelay) {
             [weak self] in
@@ -496,15 +510,8 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         connectTimeoutTimer = nil
         EventLogger.record("BLE — connect failed: \(error?.localizedDescription ?? "unknown")")
 
-        // Cancelling an in-flight connection for "Change Device" can arrive as
-        // a failed connection rather than a disconnect. In either case, move
-        // on to discovery instead of retrying the device being replaced.
-        if rescanAfterDisconnect {
-            rescanAfterDisconnect = false
-            self.peripheral = nil
-            startScanning()
-            return
-        }
+        // Move on to discovery rather than retrying the device being replaced.
+        if resumeRescanIfPending() { return }
 
         setPhase(.reconnecting)
         scheduleReconnect()
@@ -536,14 +543,9 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
             return
         }
 
-        // "Change Device" deliberately dropped this link. Start a fresh scan
-        // now that the old cooler's single connection slot is actually free.
-        if rescanAfterDisconnect {
-            rescanAfterDisconnect = false
-            self.peripheral = nil
-            startScanning()
-            return
-        }
+        // "Change Device" deliberately dropped this link. The old cooler's
+        // single connection slot is free now, so the fresh scan can start.
+        if resumeRescanIfPending() { return }
 
         setPhase(.reconnecting)
 
@@ -580,16 +582,20 @@ extension CoolerBLEManager: CBPeripheralDelegate {
         // UUIDs in the Bluetooth base range to their 16-bit form ("1011"), so
         // comparing against full-length UUID strings never matches.
         let notifying = profile.notifyingUUIDs
-        let readable = profile.readableUUIDs
+        let writable = profile.writableUUIDs
 
         for characteristic in discovered {
             let uuid = characteristic.uuid
-            guard notifying.contains(uuid) || readable.contains(uuid) else { continue }
+            guard notifying.contains(uuid) || writable.contains(uuid) else { continue }
             characteristics[uuid] = characteristic
 
             if notifying.contains(uuid) {
                 peripheral.setNotifyValue(true, for: characteristic)
-            } else {
+            } else if uuid == profile.coolingModeUUID || uuid == profile.fanSpeedUUID {
+                // Seed the two caches the app actually consults. The light
+                // state is pushed by LedController on every connect, so
+                // reading back what the cooler happens to be showing would
+                // only cache a value nothing consults.
                 peripheral.readValue(for: characteristic)
             }
         }
@@ -609,18 +615,6 @@ extension CoolerBLEManager: CBPeripheralDelegate {
 
         case profile.fanSpeedUUID:
             fanPercent = data[0]
-            delegate?.bleManagerDidChangeSettings(self)
-
-        case profile.lightModeUUID:
-            lightMode = data[0]
-            delegate?.bleManagerDidChangeSettings(self)
-
-        case profile.tempThreshUUID:
-            tempThreshold = data[0]
-            delegate?.bleManagerDidChangeSettings(self)
-
-        case profile.autoTempUUID:
-            deviceAutoTemp = data[0] != 0
             delegate?.bleManagerDidChangeSettings(self)
 
         case profile.hallUUID:

@@ -22,7 +22,7 @@ final class AutoOptionsView: NSView {
                                                trackingMode: .selectOne,
                                                target: nil, action: nil)
     private let profileName = NSTextField(labelWithString: AutoProfile.standard.displayName)
-    private let thresholdTitle = NSTextField(labelWithString: "ENGAGE THRESHOLD")
+    private let thresholdTitle = UIStyle.sectionLabel("ENGAGE THRESHOLD")
     private let descriptionLabel = NSTextField(
         labelWithString: "Cools automatically as your Mac heats up.")
     private let slider = NSSlider()
@@ -41,9 +41,7 @@ final class AutoOptionsView: NSView {
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Layout.height))
 
-        let header = NSTextField(labelWithString: "AUTO MODE")
-        header.font = UIStyle.sectionFont
-        header.textColor = .tertiaryLabelColor
+        let header = UIStyle.sectionLabel("AUTO MODE")
         header.frame = NSRect(x: hPad, y: Layout.headerY, width: 150, height: 13)
         addSubview(header)
 
@@ -65,8 +63,6 @@ final class AutoOptionsView: NSView {
 
         // The threshold row is always present, so the number that drives the
         // autopilot is never hidden behind a profile name.
-        thresholdTitle.font = UIStyle.sectionFont
-        thresholdTitle.textColor = .tertiaryLabelColor
         thresholdTitle.frame = NSRect(x: hPad, y: Layout.thresholdY, width: 160, height: 13)
         addSubview(thresholdTitle)
 
