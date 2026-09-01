@@ -27,8 +27,11 @@ enum Config {
         /// value that arrives in the same connection interval as a mode change.
         /// Fan writes are deferred by this much to stay clear of that.
         static let fanWriteDelay: TimeInterval = 0.2
-        /// Time allowed for pending writes to flush before dropping the link.
-        static let disconnectFlushDelay: TimeInterval = 0.3
+        /// Time allowed for an off-write pair to flush before dropping the
+        /// link. It has to outlast `fanWriteDelay`, because `apply` defers the
+        /// fan write by that much: drop the link in between and the cooler is
+        /// left with its TEC off and its fan still spinning at the old speed.
+        static let disconnectFlushDelay: TimeInterval = fanWriteDelay + 0.3
     }
 
     // ── Persisted settings keys ──────────────────────────────────────────────

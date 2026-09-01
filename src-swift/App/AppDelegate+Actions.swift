@@ -93,9 +93,9 @@ extension AppDelegate {
             return
         }
 
-        // Command off first, then drop the link once the writes have flushed.
-        ble.setMode(.off)
-        ble.setFanPercent(0)
+        // Command off first, then drop the link once both writes have
+        // flushed — apply spaces the fan write clear of the mode change.
+        ble.apply(mode: .off, fanPercent: 0)
         EventLogger.record("manual → off + disconnect (user)")
         DispatchQueue.main.asyncAfter(deadline: .now() + Config.BLE.disconnectFlushDelay) {
             [weak self] in

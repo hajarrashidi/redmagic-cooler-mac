@@ -241,10 +241,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         EventLogger.record("app stopping — turning cooler off and disconnecting")
 
         // Leave the hardware in a safe state: manual mode must not keep the
-        // cooler running after the app that controls it is gone.
+        // cooler running after the app that controls it is gone. Via apply, so
+        // the fan write is spaced clear of the mode write and actually lands.
         if ble.isConnected {
-            ble.setMode(.off)
-            ble.setFanPercent(0)
+            ble.apply(mode: .off, fanPercent: 0)
         }
 
         var replied = false
