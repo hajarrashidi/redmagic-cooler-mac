@@ -7,18 +7,23 @@ import AppKit
 /// This is that layout, once. Subclasses supply their own typed API on top.
 class SegmentedRowView: PanelRowView {
 
-    /// 8 + header 13 + gap 5 + control 26 + 8 — panelPad at both edges. A row
-    /// with a caption is taller by however many lines that caption wraps to.
+    /// 8 + control 26 + 8 — panelPad at both edges. A row with an inline title
+    /// or a caption is taller by exactly what those need.
     static let rowHeight: CGFloat = 60
 
     let control: NSSegmentedControl
+    private let captionLabel = NSTextField(wrappingLabelWithString: "")
 
     /// - Parameters:
-    ///   - title: uppercase section header drawn above the control.
+    ///   - title: uppercase label drawn above the control. `nil` for a row
+    ///     whose section header is a menu row of its own, outside the panel.
     ///   - labels: segment titles, in order.
-    ///   - caption: optional sentence between the header and the control,
-    ///     for a choice whose labels can't carry their own meaning.
-    init(width: CGFloat, title: String, labels: [String], caption: String? = nil) {
+    ///   - captions: every sentence this row might show, for a choice whose
+    ///     segment labels can't carry their own meaning. The row is sized for
+    ///     the tallest of them and shows one at a time — a caption that
+    ///     resized the row would need `NSMenu` to re-lay out an open menu,
+    ///     which it does not do.
+    init(width: CGFloat, title: String?, labels: [String], captions: [String] = []) {
         control = NSSegmentedControl(labels: labels,
                                      trackingMode: .selectOne,
                                      target: nil, action: nil)
@@ -27,7 +32,7 @@ class SegmentedRowView: PanelRowView {
         let hPad = UIStyle.panelContentX
         let content = width - hPad * 2
 
-        // Built bottom-up: this view is unflipped, and the caption's height is
+        // Built bottom-up: this view is unflipped, and a caption's height is
         // only known once it has wrapped, so everything above it follows from
         // where it lands rather than from a constant.
         control.segmentStyle = .rounded
@@ -41,27 +46,42 @@ class SegmentedRowView: PanelRowView {
 
         var top = UIStyle.panelPad + 26
 
-        if let caption {
-            let label = NSTextField(wrappingLabelWithString: caption)
-            label.font = UIStyle.captionFont
-            label.textColor = .tertiaryLabelColor
-            label.preferredMaxLayoutWidth = content
-            let height = ceil(label.fittingSize.height)
+        if !captions.isEmpty {
+            captionLabel.font = UIStyle.captionFont
+            captionLabel.textColor = .secondaryLabelColor
+            captionLabel.preferredMaxLayoutWidth = content
             // `wrappingLabelWithString` hands back an Auto Layout field; every
             // row here is placed by frame, and a constraint-driven label with
             // no constraints collapses to nothing.
-            label.translatesAutoresizingMaskIntoConstraints = true
+            captionLabel.translatesAutoresizingMaskIntoConstraints = true
+            let height = captions.map { text -> CGFloat in
+                captionLabel.stringValue = text
+                return ceil(captionLabel.fittingSize.height)
+            }.max() ?? 0
+            captionLabel.stringValue = captions[0]
             top += 6
-            label.frame = NSRect(x: hPad, y: top, width: content, height: height)
-            addSubview(label)
-            top += height + 3
-            frame.size.height = top + 13 + UIStyle.panelPad
+            captionLabel.frame = NSRect(x: hPad, y: top, width: content, height: height)
+            addSubview(captionLabel)
+            top += height
         }
 
-        let header = UIStyle.sectionLabel(title)
-        header.frame = NSRect(x: hPad, y: frame.height - UIStyle.panelPad - 13,
-                              width: content, height: 13)
-        addSubview(header)
+        if let title {
+            top += 5
+            frame.size.height = top + 13 + UIStyle.panelPad
+            let header = UIStyle.sectionLabel(title)
+            header.frame = NSRect(x: hPad, y: frame.height - UIStyle.panelPad - 13,
+                                  width: content, height: 13)
+            addSubview(header)
+        } else {
+            frame.size.height = top + UIStyle.panelPad
+        }
+    }
+
+    /// Swaps the visible caption. Only ever one of the strings the row was
+    /// sized for, so the frame never has to move.
+    func setCaption(_ text: String) {
+        guard captionLabel.stringValue != text else { return }
+        captionLabel.stringValue = text
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -78,21 +98,27 @@ final class ModeSwitchView: SegmentedRowView {
 
     var onSelect: ((AppMode) -> Void)?
 
+    /// One sentence per mode, and only the selected one is shown. Describing
+    /// both at once meant half the caption was always about a mode the user had
+    /// not chosen — and the Auto half named a threshold slider that Manual
+    /// hides, so it pointed at something that wasn't on screen.
+    private static let autoCaption =
+        "Cooling follows the Mac's temperature: it starts at your engage "
+        + "threshold and backs off as the Mac cools."
+    private static let manualCaption =
+        "Cooling holds the level you set until you change it, or until the "
+        + "auto-off timer ends the session."
+
     init(width: CGFloat) {
-        // Two words that both sound like "it cools". Which one is in charge of
-        // the fan, and when, is the thing the menu was never saying.
-        super.init(width: width, title: "COOLING", labels: ["Auto", "Manual"],
-                   // No "the slider below": that slider is hidden in Manual,
-                   // and a caption that points at something absent is worse
-                   // than one that names it.
-                   caption: "Auto turns cooling on by itself once the Mac "
-                          + "passes your engage threshold, and backs off as it "
-                          + "cools. Manual holds one level until you change it.")
+        // The section title is a menu row of its own now, outside the panel.
+        super.init(width: width, title: nil, labels: ["Auto", "Manual"],
+                   captions: [Self.autoCaption, Self.manualCaption])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func setMode(_ mode: AppMode) {
         control.selectedSegment = (mode == .auto) ? 0 : 1
+        setCaption(mode == .auto ? Self.autoCaption : Self.manualCaption)
     }
 
     override func segmentChanged() {
@@ -107,7 +133,8 @@ final class LedEffectPickerView: SegmentedRowView {
     var onSelect: ((LedEffect) -> Void)?
 
     init(width: CGFloat) {
-        super.init(width: width, title: "LED EFFECT",
+        // Titled from outside the panel, like the cooling section.
+        super.init(width: width, title: nil,
                    labels: LedEffect.allCases.map(\.title))
         control.selectedSegment = LedEffect.auto.rawValue
     }

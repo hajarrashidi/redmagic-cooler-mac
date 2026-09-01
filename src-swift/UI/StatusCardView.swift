@@ -120,7 +120,7 @@ final class StatusCardView: PanelRowView {
     /// Mac model, thermal pressure, and die temperature.
     private func drawMacSection(y: inout CGFloat) {
         let pad = Self.panelContentX
-        UIStyle.text(SystemInfo.macModel, UIStyle.sectionFont, .tertiaryLabelColor)
+        UIStyle.text(SystemInfo.macModel, UIStyle.sectionFont, UIStyle.sectionInk)
             .draw(at: NSPoint(x: pad, y: y))
 
         let state = UIStyle.text(model.thermalState.rawValue, Self.stateFont, .secondaryLabelColor)

@@ -84,6 +84,9 @@ final class CoolerPanelView: PanelRowView {
         /// do, because the spin is the main "it's working" cue.
         var deviceLooksPoweredOff = false
         var note: Note?
+        /// False while an update is installing: the app is about to be replaced
+        /// and a connection started into that has nowhere to land.
+        var actionsEnabled = true
     }
 
     var onConnect: (() -> Void)?
@@ -108,9 +111,6 @@ final class CoolerPanelView: PanelRowView {
     private static let titleHeight: CGFloat = 16
     private static let statusFont = UIStyle.captionFont
     private static let statusHeight = UIStyle.text("A", statusFont).size().height
-    /// The link line's ink. Blue still means "connected", but held well back —
-    /// it confirms something the moving numbers beside it already imply.
-    private static let linkColor = NSColor.systemBlue.withAlphaComponent(0.75)
 
     // Measured from the fonts themselves, so the panel height stays correct if
     // any of them are restyled — a hand-tuned height silently clips its last
@@ -242,7 +242,7 @@ final class CoolerPanelView: PanelRowView {
         // The title changes width with the phase, so the trailing edge has to
         // be re-anchored rather than merely relabelled.
         connectButton.title = model.phase.connectButtonTitle
-        connectButton.isEnabled = model.phase.allowsConnectAction
+        connectButton.isEnabled = model.phase.allowsConnectAction && model.actionsEnabled
         layOutConnectButton()
     }
 
@@ -309,7 +309,7 @@ final class CoolerPanelView: PanelRowView {
         // the title — an icon there had to carry "connected, over Bluetooth,
         // right now" on its own, which is more than a 6pt glyph can say.
         let status = model.isConnected
-            ? UIStyle.text("Connected over Bluetooth", Self.statusFont, Self.linkColor)
+            ? UIStyle.text("Connected over Bluetooth", Self.statusFont, .secondaryLabelColor)
             : UIStyle.text(model.phase.statusText, Self.statusFont, phaseColor())
         // Kept clear of the Connect button, which shares this line's height.
         let statusWidth = model.isConnected

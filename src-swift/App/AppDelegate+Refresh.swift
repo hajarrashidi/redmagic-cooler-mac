@@ -57,6 +57,11 @@ extension AppDelegate {
 
         guard let update else { return }
         switch installer.state {
+        case .idle:
+            updateBanner.configure(style: .info,
+                                   text: "Version \(update.displayVersion) — install now",
+                                   symbol: "arrow.down.circle.fill",
+                                   showSpinner: false)
         case .downloading:
             updateBanner.configure(style: .info,
                                    text: "Downloading version \(update.displayVersion)…",
@@ -72,18 +77,16 @@ extension AppDelegate {
                                    text: "Update failed — open the release page",
                                    symbol: "exclamationmark.triangle.fill",
                                    showSpinner: false)
-        case .idle:
-            updateBanner.configure(style: .info,
-                                   text: "Version \(update.displayVersion) available",
-                                   symbol: "arrow.down.circle.fill",
-                                   showSpinner: false)
         }
     }
 
     // ── Control values ───────────────────────────────────────────────────────
 
     private func refreshControls(isManual: Bool) {
-        let enabled = !isSwitching
+        // An install swaps the running app out from under itself and relaunches
+        // it. Nothing else should be commanding the cooler while that happens,
+        // so every control goes flat until it lands or fails.
+        let enabled = !isSwitching && !isInstallingUpdate
 
         modeSwitch.setMode(appMode)
         modeSwitch.setEnabled(enabled)
@@ -109,7 +112,8 @@ extension AppDelegate {
         // The picker narrates discovery entirely from these two, so it stays
         // truthful about scans that end without a result — including ones that
         // never start, because the adapter is off or was never allowed.
-        devicePicker.setState(phase: ble.phase, permission: ble.permission)
+        devicePicker.setState(phase: ble.phase, permission: ble.permission,
+                              actionsEnabled: !isInstallingUpdate)
 
         effectPicker.setSelected(led.effect)
         effectPicker.setEnabled(enabled)
@@ -125,8 +129,10 @@ extension AppDelegate {
         // Keeping the picker inside the status menu avoids a separate chooser
         // window, while every result still requires an explicit click.
         rows.devicePicker.isHidden = !pickingDevice
+        rows.devicesHeader.isHidden = !pickingDevice
         rows.coolerPanel.isHidden = pickingDevice
 
+        rows.coolingHeader.isHidden = !connected
         rows.modeSwitch.isHidden = !connected
         rows.autoOptions.isHidden = !connected || isManual
         rows.coolingSlider.isHidden = !connected || !isManual
@@ -135,17 +141,21 @@ extension AppDelegate {
         rows.manualTimer.isHidden = !connected || !isManual
         // LED controls only mean something while the cooler is running — its
         // LED cannot show a colour when it isn't.
+        rows.ledHeader.isHidden = !coolerOn
         rows.effect.isHidden = !coolerOn
         rows.breathToggle.isHidden = !coolerOn || led.effect != .breath
         rows.color.isHidden = !coolerOn || !led.usesPickedColor
 
-        // Cooling and LED effect form one cooler-control panel. Membership
-        // follows the active mode and effect, so recompute all panel corners.
+        // Cooling and Light are separate panels now that each has a title of
+        // its own above it. Membership within each follows the active mode and
+        // effect, so recompute both sets of corners.
         applyPanelSegments(to: [
             (modeSwitch, !rows.modeSwitch.isHidden),
             (autoOptions, !rows.autoOptions.isHidden),
             (coolingSlider, !rows.coolingSlider.isHidden),
             (manualTimerRow, !rows.manualTimer.isHidden),
+        ])
+        applyPanelSegments(to: [
             (effectPicker, !rows.effect.isHidden),
             (breathToggle, !rows.breathToggle.isHidden),
             (colorPicker, !rows.color.isHidden),
@@ -174,6 +184,10 @@ extension AppDelegate {
     }
 
     private func refreshSettingsItems(coolerOn: Bool, pickingDevice: Bool) {
+        for row in [turnOffRow, changeDeviceRow, turnOffQuitRow] {
+            row?.isEnabled = !isInstallingUpdate
+        }
+
         // Mirrors the isHidden decisions made for these rows elsewhere in this
         // file, so the panel's corners always land on the rows actually shown.
         applyPanelSegments(to: [
@@ -225,7 +239,8 @@ extension AppDelegate {
             telemetry: telemetry,
             mode: ble.mode,
             deviceLooksPoweredOff: switchMonitor.looksPoweredOff,
-            note: coolerNote(connected: connected)))
+            note: coolerNote(connected: connected),
+            actionsEnabled: !isInstallingUpdate))
     }
 
     /// The single thing the cooler panel says beyond its numbers, chosen in

@@ -162,22 +162,11 @@ enum UIStyle {
         return path
     }
 
-    /// True when macOS itself is in dark mode.
-    ///
-    /// Read from the system defaults rather than from `effectiveAppearance`,
-    /// because the app pins itself to Aqua so its heat colours stay readable —
-    /// which means every view here reports "light" no matter what the rest of
-    /// the desktop is doing. The menu's own chrome is not the app's to pin, and
-    /// follows the system, so anything drawn against it has to ask the system.
-    static var systemPrefersDark: Bool {
-        UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
-    }
-
-    /// Ink for a text link. `linkColor` on a light desktop; on a dark one the
-    /// menu behind it is dark, and the system blue sits too close to it — this
-    /// is the one to re-tune if the darker blue reads wrong.
-    static var linkInk: NSColor {
-        systemPrefersDark
+    /// Ink for a text link: the system's on a light menu, a deeper blue on a
+    /// dark one. Resolved per appearance rather than read once, now that the
+    /// app follows the system instead of pinning itself to Aqua.
+    static let linkInk = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             ? NSColor(srgbRed: 0.21, green: 0.42, blue: 0.92, alpha: 1)
             : .linkColor
     }
@@ -200,9 +189,16 @@ enum UIStyle {
     static func sectionLabel(_ title: String) -> NSTextField {
         let label = NSTextField(labelWithString: title)
         label.font = sectionFont
-        label.textColor = .tertiaryLabelColor
+        label.textColor = sectionInk
         return label
     }
+
+    /// Ink for a section title. `secondaryLabelColor` rather than tertiary:
+    /// these name the thing beneath them, and at 9pt uppercase the faintest
+    /// grey in the palette had them reading as disabled. Being a system colour
+    /// it resolves to near-black on a light menu and near-white on a dark one,
+    /// which is the whole reason the app no longer pins its appearance.
+    static var sectionInk: NSColor { .secondaryLabelColor }
 
     static func text(_ string: String,
                      _ font: NSFont,
@@ -215,7 +211,7 @@ enum UIStyle {
     static func drawSectionHeader(_ title: String, at point: NSPoint) {
         NSAttributedString(string: title.uppercased(), attributes: [
             .font: sectionFont,
-            .foregroundColor: NSColor.tertiaryLabelColor,
+            .foregroundColor: sectionInk,
             .kern: 0.6,
         ]).draw(at: point)
     }

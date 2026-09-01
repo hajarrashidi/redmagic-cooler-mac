@@ -90,6 +90,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var isSwitching = false
     private var switchingTimer: Timer?
 
+    /// An update is downloading or being swapped in. The menu locks down for
+    /// the duration: the app is about to be replaced and relaunched, and a
+    /// command issued into that has nowhere to land.
+    var isInstallingUpdate: Bool {
+        installer.state == .downloading || installer.state == .installing
+    }
+
     /// Set when the user explicitly asks to connect, so the cooler can be
     /// commanded off once the link is up — a known-safe starting state.
     var turnOffOnConnect = false
@@ -108,10 +115,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        // The menu is designed against the light palette — heat
-        // colours read best on white — so the app opts out of dark mode.
-        // Belt-and-braces with NSRequiresAquaSystemAppearance in Info.plist.
-        NSApp.appearance = NSAppearance(named: .aqua)
+        // Deliberately no appearance override. The app used to pin itself to
+        // Aqua on the grounds that its heat colours read best on white — but
+        // the menu's own chrome is not the app's to pin, and follows the
+        // system. On a dark desktop that left light-mode content on a dark
+        // menu: black labels on near-black. Every colour the menu draws is
+        // either a system colour or drawn from one, so following the system is
+        // both correct and the only self-consistent option.
 
         // Hand the Bluetooth link over from any previous instance before doing
         // anything else — the cooler allows only one connection, so until the
@@ -130,10 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updates = UpdateChecker()
         installer = UpdateInstaller()
         installer.onChange = { [weak self] in self?.refresh() }
-        updates.onChange = { [weak self] in
-            self?.installAvailableUpdate()
-            self?.refresh()
-        }
+        // Noticing a release only surfaces the banner. Installing it swaps the
+        // running app and relaunches it, which is not something to do to
+        // someone mid-session without asking — see `installUpdateNow`.
+        updates.onChange = { [weak self] in self?.refresh() }
 
         buildStatusItem()
         buildMenu()

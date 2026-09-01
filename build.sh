@@ -16,8 +16,8 @@ cd "$(dirname "$0")"
 
 APP="RedMagic Cooler.app"
 BUNDLE_ID="com.redmagic.cooler"
-VERSION="2.11"
-BUILD="14"
+VERSION="2.12"
+BUILD="15"
 
 RUN_AFTER_BUILD=false
 WITH_PROBES=false
@@ -91,8 +91,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
-	<true/>
-	<key>NSRequiresAquaSystemAppearance</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>This app needs Bluetooth to connect to and control a supported REDMAGIC cooler.</string>

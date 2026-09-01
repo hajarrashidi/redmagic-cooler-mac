@@ -9,11 +9,14 @@ struct MenuRows {
     let updateBanner: NSMenuItem
     let skipUpdate: NSMenuItem
     let coolerPanel: NSMenuItem
+    let devicesHeader: NSMenuItem
     let devicePicker: NSMenuItem
+    let coolingHeader: NSMenuItem
     let modeSwitch: NSMenuItem
     let autoOptions: NSMenuItem
     let coolingSlider: NSMenuItem
     let manualTimer: NSMenuItem
+    let ledHeader: NSMenuItem
     let effect: NSMenuItem
     let breathToggle: NSMenuItem
     let color: NSMenuItem
@@ -36,7 +39,7 @@ extension AppDelegate: NSMenuDelegate {
         // than the cooler, and it only ever appears when there is news. All
         // three items hide together, so normally the menu opens on the card.
         updateBanner = BannerView(width: width)
-        updateBanner.onClick = { [weak self] in self?.openReleasePage() }
+        updateBanner.onClick = { [weak self] in self?.installUpdateNow() }
         let updateBannerItem = wrap(updateBanner)
         updateBannerItem.isHidden = true
         menu.addItem(updateBannerItem)
@@ -63,6 +66,13 @@ extension AppDelegate: NSMenuDelegate {
         let coolerPanelItem = wrap(coolerPanel)
         menu.addItem(coolerPanelItem)
 
+        // Section titles are rows of their own, sitting above the panel they
+        // name rather than inside it — the arrangement Settings already used,
+        // now applied to every section.
+        let devicesHeader = wrap(SectionHeaderRow(width: width, title: "Available devices"))
+        devicesHeader.isHidden = true
+        menu.addItem(devicesHeader)
+
         devicePicker = DevicePickerView(width: width)
         devicePicker.onSelect = { [weak self] in self?.selectDiscoveredDevice($0) }
         devicePicker.onScan = { [weak self] in self?.scanAgainForDevices() }
@@ -78,6 +88,9 @@ extension AppDelegate: NSMenuDelegate {
         // ── Cooling ──────────────────────────────────────────────────────────
         // Shown only once the cooler connects; every control here is
         // meaningless — and misleading — without a live link.
+        let coolingHeader = wrap(SectionHeaderRow(width: width, title: "Cooling"))
+        menu.addItem(coolingHeader)
+
         modeSwitch = ModeSwitchView(width: width)
         modeSwitch.onSelect = { [weak self] in self?.selectMode($0) }
         // The cooler section is one panel: mode on top, its active cooling
@@ -106,7 +119,9 @@ extension AppDelegate: NSMenuDelegate {
         let manualTimerItem = wrap(manualTimerRow)
         menu.addItem(manualTimerItem)
 
-        // LED controls are part of the same cooler-control panel as its mode.
+        let ledHeader = wrap(SectionHeaderRow(width: width, title: "Light"))
+        menu.addItem(ledHeader)
+
         effectPicker = LedEffectPickerView(width: width)
         effectPicker.onSelect = { [weak self] in self?.applyLedEffect($0) }
         let effectItem = wrap(effectPicker)
@@ -161,11 +176,14 @@ extension AppDelegate: NSMenuDelegate {
         rows = MenuRows(updateBanner: updateBannerItem,
                         skipUpdate: skipUpdate,
                         coolerPanel: coolerPanelItem,
+                        devicesHeader: devicesHeader,
                         devicePicker: devicePickerItem,
+                        coolingHeader: coolingHeader,
                         modeSwitch: modeSwitchItem,
                         autoOptions: autoOptionsItem,
                         coolingSlider: coolingSliderItem,
                         manualTimer: manualTimerItem,
+                        ledHeader: ledHeader,
                         effect: effectItem,
                         breathToggle: breathToggleItem,
                         color: colorItem,

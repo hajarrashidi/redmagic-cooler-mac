@@ -276,16 +276,32 @@ extension AppDelegate {
 
     // ── Updates ──────────────────────────────────────────────────────────────
 
-    /// Kicks off installing whatever release the checker has on offer.
+    /// Installs the offered release — on a click, and only on a click.
     ///
-    /// Wired to `updates.onChange`, so a new release starts installing the
-    /// moment it is noticed — at launch, or from the daily check of an app
-    /// left running. `install` itself refuses re-entry mid-flight and skips
-    /// releases without a DMG, so calling on every change is safe; a release
-    /// the user skipped never reaches `available` in the first place.
-    func installAvailableUpdate() {
+    /// This used to run the moment a release was noticed, which meant the app
+    /// replaced itself and relaunched while someone was using it. Noticing a
+    /// release now only raises the banner; pressing it lands here.
+    ///
+    /// The cooler is commanded off first. The install swaps the running app and
+    /// restarts it, and for the seconds in between there is nothing driving the
+    /// hardware — the same reason quitting turns it off.
+    func installUpdateNow() {
         guard let update = updates.available else { return }
+        // Nothing left to install; the banner's remaining job is the notes.
+        if installer.state == .failed {
+            openReleasePage()
+            return
+        }
+        guard installer.state == .idle else { return }
+
+        if ble.isConnected {
+            setAppMode(.manual)
+            UserDefaults.standard.set(0, forKey: Config.Key.manualStep)
+            ble.apply(mode: .off, fanPercent: 0)
+        }
+        EventLogger.record("update install requested: \(update.tag)")
         installer.install(update)
+        refresh()
     }
 
     /// Opens the release page in the browser — the update banner's click, and

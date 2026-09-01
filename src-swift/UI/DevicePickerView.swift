@@ -34,6 +34,8 @@ final class DevicePickerView: PanelRowView {
     /// bug as the device's.
     private var phase: ConnectionPhase = .idle
     private var permission: CoolerBLEManager.Permission = .granted
+    /// False while an update is installing — see `AppDelegate.isInstallingUpdate`.
+    private var actionsEnabled = true
     /// A scan has finished at least once, which is what separates "nothing
     /// found" from "nothing looked for yet".
     private var hasScanned = false
@@ -58,7 +60,6 @@ final class DevicePickerView: PanelRowView {
     /// empty states are drawn inside that window rather than collapsing it.
     private enum Layout {
         static let pad = UIStyle.panelPad
-        static let headerHeight: CGFloat = 13
         static let statusHeight: CGFloat = 16
         static let listHeight: CGFloat = 138
         static let groupHeaderHeight: CGFloat = 18
@@ -97,11 +98,7 @@ final class DevicePickerView: PanelRowView {
         let pad = UIStyle.panelContentX
         var y = Layout.pad
 
-        let header = UIStyle.sectionLabel("AVAILABLE DEVICES")
-        header.frame = NSRect(x: pad, y: y, width: content, height: Layout.headerHeight)
-        addSubview(header)
-        y += Layout.headerHeight + 5
-
+        // No section title here: it is a menu row of its own, above the panel.
         statusLabel.font = UIStyle.captionFont
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.frame = NSRect(x: pad, y: y, width: content, height: Layout.statusHeight)
@@ -173,8 +170,13 @@ final class DevicePickerView: PanelRowView {
     /// drives every other row. Everything the picker says about progress is
     /// derived from it, so a scan that never starts — or one ended by something
     /// other than the settle timer — can't leave the view stranded.
-    func setState(phase: ConnectionPhase, permission: CoolerBLEManager.Permission) {
-        guard phase != self.phase || permission != self.permission else { return }
+    func setState(phase: ConnectionPhase,
+                  permission: CoolerBLEManager.Permission,
+                  actionsEnabled: Bool) {
+        guard phase != self.phase
+            || permission != self.permission
+            || actionsEnabled != self.actionsEnabled else { return }
+        self.actionsEnabled = actionsEnabled
         if phase == .scanning {
             // Results from the previous scan describe a moment that has passed;
             // a device now out of range must not stay clickable.
@@ -209,7 +211,8 @@ final class DevicePickerView: PanelRowView {
         }
         // Only a running scan disables it; the permission titles are the two
         // cases where pressing it is the entire point.
-        scanButton.isEnabled = !isScanning && (permission != .granted || phase != .bluetoothOff)
+        scanButton.isEnabled = actionsEnabled && !isScanning
+            && (permission != .granted || phase != .bluetoothOff)
 
         let hasRows = !visibleGroups.isEmpty
         scrollView.isHidden = !hasRows

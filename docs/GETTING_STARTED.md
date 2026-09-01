@@ -23,9 +23,10 @@ open it, and drag **RedMagic Cooler** to Applications.
 
 Releases are signed with a Developer ID certificate and notarized by Apple.
 The app checks GitHub for updates at launch and once per day while running. If
-an update is available, a menu banner shows the download and install progress.
-You can skip a version, and if automatic installation cannot finish, the
-banner opens the release page instead.
+one is available a banner offers it — **nothing installs until you press it**.
+Doing so turns the cooler off and disables the rest of the menu while the swap
+runs, because the app replaces itself and relaunches. You can skip a version,
+and if the install cannot finish the banner opens the release page instead.
 
 ## Build from source
 
