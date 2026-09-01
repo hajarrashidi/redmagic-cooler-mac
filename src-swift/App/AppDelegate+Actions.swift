@@ -15,8 +15,9 @@ extension AppDelegate {
 
         switch mode {
         case .auto:
-            // Force the next auto LED write; the colour is otherwise suppressed
-            // when it matches what manual mode happened to leave behind.
+            // Evaluate immediately rather than waiting for the next autopilot
+            // tick, so the cooler follows the temperature the moment Auto is
+            // chosen instead of holding the manual level for a few seconds.
             EventLogger.record("switch → auto")
             runAutopilot()
 
@@ -60,7 +61,10 @@ extension AppDelegate {
         if !alreadySwitching {
             guard beginSwitching() else { return }
         }
-        let step = CoolingSliderView.steps[index.clamped(to: CoolingSliderView.indexRange)]
+        // Persist the clamped index too, so a bad value can't round-trip
+        // through UserDefaults and come back out of range.
+        let index = index.clamped(to: CoolingSliderView.indexRange)
+        let step = CoolingSliderView.steps[index]
 
         setAppMode(.manual)
         UserDefaults.standard.set(index, forKey: Config.Key.manualStep)

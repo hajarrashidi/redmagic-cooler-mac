@@ -123,6 +123,11 @@ final class CoolerBLEManager: NSObject {
 
     private var scanSettleTimer: Timer?
     private var connectTimeoutTimer: Timer?
+    /// The one scheduled reconnect, kept so it can be cancelled — by a user
+    /// disconnect, a rescan, or a newer schedule. A plain `asyncAfter` here
+    /// used to fire anyway after "Turn Off & Disconnect", reconnecting a link
+    /// the user had just asked to stay down.
+    private var pendingReconnect: DispatchWorkItem?
 
     /// Set while deliberately dropping a stale system-level link at launch, so
     /// `didDisconnectPeripheral` reconnects at once instead of waiting out the
@@ -156,6 +161,10 @@ final class CoolerBLEManager: NSObject {
     /// disconnect but will not disturb an attempt already in flight.
     func startScanning() {
         userRequestedDisconnect = false
+        // This call supersedes any reconnect still queued; letting it fire too
+        // would start a second attempt racing this one.
+        pendingReconnect?.cancel()
+        pendingReconnect = nil
 
         guard central.state == .poweredOn else {
             EventLogger.record("BLE — cannot scan, adapter state \(central.state.rawValue)")
@@ -204,6 +213,11 @@ final class CoolerBLEManager: NSObject {
         // The cooler omits its service UUID from the scan record, so filtering
         // by service here would never match it. Scan broadly and filter by name
         // in didDiscover instead.
+        //
+        // Results from any earlier scan are dropped first: a device that has
+        // since left range must not linger in the picker, and a stale RSSI
+        // would misreport the signal of one that stayed.
+        candidates = []
         EventLogger.record("BLE — scanning for device selection")
         setPhase(.scanning)
         central.scanForPeripherals(withServices: nil, options: nil)
@@ -255,6 +269,11 @@ final class CoolerBLEManager: NSObject {
 
     /// The single entry point for initiating a connection. Arms a watchdog
     /// because CoreBluetooth's `connect()` never times out on its own.
+    ///
+    /// The watchdog runs until the link is `.ready`, not merely until
+    /// `didConnect`: service and characteristic discovery can stall just as
+    /// silently as the connect itself, and a link stuck in "Discovering
+    /// services…" is every bit as unusable as one stuck in `.connecting`.
     private func beginConnect(to peripheral: CBPeripheral) {
         self.peripheral = peripheral
         peripheral.delegate = self
@@ -323,6 +342,8 @@ final class CoolerBLEManager: NSObject {
         connectTimeoutTimer = nil
         scanSettleTimer?.invalidate()
         scanSettleTimer = nil
+        pendingReconnect?.cancel()
+        pendingReconnect = nil
     }
 
     /// Resumes a "Change Device" scan, if this teardown was the one it asked
@@ -342,11 +363,19 @@ final class CoolerBLEManager: NSObject {
         return true
     }
 
+    /// Queues one reconnect attempt. Coalescing: a newer schedule replaces a
+    /// pending one, so the watchdog and a late disconnect callback reporting
+    /// the same failure can't stack two attempts that then race each other.
     private func scheduleReconnect() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + Config.BLE.reconnectDelay) {
-            [weak self] in
-            self?.startScanning()
+        pendingReconnect?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingReconnect = nil
+            self.startScanning()
         }
+        pendingReconnect = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Config.BLE.reconnectDelay,
+                                      execute: work)
     }
 
     private func setPhase(_ newPhase: ConnectionPhase) {
@@ -489,8 +518,8 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        connectTimeoutTimer?.invalidate()
-        connectTimeoutTimer = nil
+        // The watchdog stays armed: the link isn't usable until characteristic
+        // discovery finishes, and discovery can stall as silently as connect.
         guard let profile else {
             EventLogger.record("BLE — connected without a selected device profile; disconnecting")
             central.cancelPeripheralConnection(peripheral)
@@ -599,6 +628,9 @@ extension CoolerBLEManager: CBPeripheralDelegate {
                 peripheral.readValue(for: characteristic)
             }
         }
+        // Fully linked — the watchdog armed in beginConnect can stand down.
+        connectTimeoutTimer?.invalidate()
+        connectTimeoutTimer = nil
         setPhase(.ready)
     }
 

@@ -24,9 +24,14 @@ struct RGB: Equatable {
         let color = NSColor(hue: CGFloat(hue.clamped(to: 0...1)),
                             saturation: 1, brightness: 1, alpha: 1)
             .usingColorSpace(.deviceRGB) ?? .red
-        self.init(r: UInt8((color.redComponent   * 255).rounded()),
-                  g: UInt8((color.greenComponent * 255).rounded()),
-                  b: UInt8((color.blueComponent  * 255).rounded()))
+        // Clamped before conversion: colorspace mapping can leave a component
+        // a hair outside 0…1, and `UInt8.init` traps on the excursion.
+        func byte(_ component: CGFloat) -> UInt8 {
+            UInt8((Double(component) * 255).rounded().clamped(to: 0...255))
+        }
+        self.init(r: byte(color.redComponent),
+                  g: byte(color.greenComponent),
+                  b: byte(color.blueComponent))
     }
 
     var nsColor: NSColor {

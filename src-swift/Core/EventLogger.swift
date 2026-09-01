@@ -55,7 +55,12 @@ enum EventLogger {
         guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
         var lines = content.components(separatedBy: "\n")
         if lines.last?.isEmpty == true { lines.removeLast() }
-        guard lines.count > trimThreshold else { return }
+        // Compared against maxLines, not trimThreshold: the size pre-filter in
+        // append() assumes ~64 bytes per line, so a file of longer lines can
+        // cross it with fewer than trimThreshold lines. Requiring the higher
+        // count here would then reject the trim — and append() would re-read
+        // the whole file on every subsequent event, forever.
+        guard lines.count > maxLines else { return }
 
         let kept = lines.suffix(maxLines).joined(separator: "\n") + "\n"
         try? kept.data(using: .utf8)?.write(to: url, options: .atomic)

@@ -21,13 +21,21 @@ enum LoginItem {
         return result?.booleanValue ?? false
     }
 
+    /// Escapes a value for interpolation inside a quoted AppleScript string.
+    /// The bundle path is wherever the user put the app; one `"` in a folder
+    /// name would otherwise end the string mid-path and break the script.
+    private static func escaped(_ value: String) -> String {
+        value.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     static func setEnabled(_ enabled: Bool) {
         let script = enabled
             ? """
               tell application "System Events"
                   if not (exists login item "\(name)") then
                       make new login item at end with properties ¬
-                          {path:"\(Bundle.main.bundlePath)", name:"\(name)", hidden:false}
+                          {path:"\(escaped(Bundle.main.bundlePath))", name:"\(name)", hidden:false}
                   end if
               end tell
               """

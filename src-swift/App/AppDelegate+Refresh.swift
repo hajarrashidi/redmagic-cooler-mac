@@ -145,6 +145,10 @@ extension AppDelegate {
         switch style {
         case .text:
             button.image = nil
+            // Forget the cached mark colour along with the image it described.
+            // Left in place, switching back to the icon style with an unchanged
+            // colour would skip the redraw below and leave no mark at all.
+            menuBarIconColor = nil
             button.title = ble.isConnected
                 ? (temperature.isEmpty ? "Magic" : "Magic \(temperature)")
                 : ble.phase.menuBarText

@@ -16,10 +16,11 @@ enum Config {
         static let scanSettleWindow: TimeInterval = 4.0
         /// Delay before retrying after a dropped or failed link.
         static let reconnectDelay: TimeInterval = 5.0
-        /// CoreBluetooth's `connect()` never times out on its own. If `didConnect`
-        /// doesn't arrive within this window — typically because a stale link
-        /// from a previous instance still owns the device's single connection
-        /// slot — cancel and retry rather than hanging in `.connecting` forever.
+        /// CoreBluetooth's `connect()` never times out on its own, and neither
+        /// does GATT discovery. If the link isn't fully `.ready` within this
+        /// window — typically because a stale link from a previous instance
+        /// still owns the device's single connection slot, or discovery has
+        /// stalled — cancel and retry rather than hanging forever.
         static let connectTimeout: TimeInterval = 8.0
         /// Grace period for a stale system-level link to drop before reconnecting.
         static let staleLinkClearTimeout: TimeInterval = 3.0

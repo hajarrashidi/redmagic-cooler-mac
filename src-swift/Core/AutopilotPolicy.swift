@@ -99,11 +99,17 @@ final class AutopilotPolicy {
 
         switch profile {
         case .custom:
-            // Steps sit 10 °C apart above the user's engage point, with the top
-            // tier capped so a high engage point can't push it past 95 °C.
+            // Steps sit 10 °C apart above the user's engage point, with every
+            // tier capped so a high engage point can't push it past 95 °C. The
+            // intermediate steps need the cap too, not just the top one: a
+            // 80 °C engage point would otherwise put tier 3 at 100 °C — *above*
+            // tier 4's capped 95 — and the ladder would engage out of order.
             let engage = self.customEngageC
             let ceiling = min(engage + 30, 95)
-            engagePoints = [(engage, 1), (engage + 10, 2), (engage + 20, 3), (ceiling, 4)]
+            engagePoints = [(engage, 1),
+                            (min(engage + 10, ceiling), 2),
+                            (min(engage + 20, ceiling), 3),
+                            (ceiling, 4)]
             ledGreenC = max(30, engage - 10)
             ledRedC = ceiling
 
