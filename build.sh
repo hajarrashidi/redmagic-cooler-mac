@@ -16,8 +16,8 @@ cd "$(dirname "$0")"
 
 APP="RedMagic Cooler.app"
 BUNDLE_ID="com.redmagic.cooler"
-VERSION="2.12"
-BUILD="15"
+VERSION="3.0"
+BUILD="16"
 
 RUN_AFTER_BUILD=false
 WITH_PROBES=false
