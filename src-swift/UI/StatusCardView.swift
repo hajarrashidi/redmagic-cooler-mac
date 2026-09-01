@@ -8,7 +8,7 @@ import AppKit
 /// walking down the card than as a tree of views. The cooler's panel used to
 /// live here too; it is `CoolerPanelView` now, a row of its own, because it has
 /// states in which it should disappear entirely.
-final class StatusCardView: NSView {
+final class StatusCardView: PanelRowView {
 
     /// Derived from the panel rather than hand-tuned, so restyling a font or
     /// changing the padding can't leave the last row clipped. The trailing gap
@@ -62,6 +62,8 @@ final class StatusCardView: NSView {
     // ── Drawing ──────────────────────────────────────────────────────────────
 
     override func draw(_ dirtyRect: NSRect) {
+        // Lays down the menu backdrop; this row paints over it.
+        super.draw(dirtyRect)
         var y = Self.pad
         drawBrandHeader(y: &y)
         y += Self.headerGap

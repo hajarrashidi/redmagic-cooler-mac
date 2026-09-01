@@ -48,6 +48,13 @@ extension AppDelegate {
         // row bows out once the download starts.
         rows.skipUpdate.isHidden = (update == nil) || installing
 
+        // Whichever row is first owns the window's top corners — see
+        // `UIStyle.menuBackdrop`. The banner takes that job on the rare
+        // occasions it appears, and hands it back to the card afterwards.
+        let bannerLeads = (update != nil)
+        updateBanner.menuEdges = bannerLeads ? .top : []
+        statusCard.menuEdges = bannerLeads ? [] : .top
+
         guard let update else { return }
         switch installer.state {
         case .downloading:

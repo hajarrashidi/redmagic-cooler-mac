@@ -41,7 +41,12 @@ extension AppDelegate: NSMenuDelegate {
         updateBannerItem.isHidden = true
         menu.addItem(updateBannerItem)
 
-        let skipUpdate = actionItem("Skip This Version", #selector(skipThisVersion))
+        // A custom row rather than a plain item, so it paints the backdrop its
+        // neighbours do — see `UIStyle.menuBackdrop`.
+        skipUpdateRow = settingsRow("Skip This Version", symbol: "xmark") {
+            [weak self] in self?.skipThisVersion()
+        }
+        let skipUpdate = wrap(skipUpdateRow)
         skipUpdate.isHidden = true
         menu.addItem(skipUpdate)
 
@@ -121,7 +126,7 @@ extension AppDelegate: NSMenuDelegate {
         // Custom rows rather than plain items, so the section can sit on a
         // panel like every other group. Which row opens and closes the panel
         // depends on what is visible, so refresh() assigns the segments.
-        menu.addItem(sectionHeader("Settings"))
+        menu.addItem(wrap(SectionHeaderRow(width: width, title: "Settings")))
 
         turnOffRow = settingsRow("Turn Off", symbol: "power") {
             [weak self] in self?.turnOff()
@@ -148,6 +153,10 @@ extension AppDelegate: NSMenuDelegate {
         }
         let turnOffAndQuit = wrap(turnOffQuitRow)
         menu.addItem(turnOffAndQuit)
+
+        // Breathing room under the last row, and the owner of the window's
+        // bottom corners.
+        menu.addItem(wrap(MenuFooterRow(width: width)))
 
         rows = MenuRows(updateBanner: updateBannerItem,
                         skipUpdate: skipUpdate,
@@ -194,34 +203,6 @@ extension AppDelegate: NSMenuDelegate {
         let view = BannerView(width: width)
         view.configure(style: style, text: text, symbol: symbol, showSpinner: spinner)
         return view
-    }
-
-    private func actionItem(_ title: String,
-                            _ selector: Selector,
-                            symbol name: String? = nil) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
-        item.target = self
-        item.image = name.flatMap(symbolImage)
-        return item
-    }
-
-    private func symbolImage(_ name: String) -> NSImage? {
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
-        image?.isTemplate = true
-        return image
-    }
-
-    /// A disabled, small-caps label used to title a group of items.
-    private func sectionHeader(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        item.attributedTitle = NSAttributedString(string: title.uppercased(), attributes: [
-            .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-            .foregroundColor: NSColor.tertiaryLabelColor,
-            .kern: 0.6,
-        ])
-        return item
     }
 
     /// A settings-panel action row that closes the menu when clicked, the way

@@ -52,18 +52,53 @@ enum UIStyle {
     /// Left edge of anything drawn inside a panel.
     static let panelContentX = panelInset + panelContentPad
     static let panelRadius = scaled(9)
-    /// Fill for every panel in the menu.
+    /// Fill for a panel: a barely-there wash that reads as a raised card
+    /// against the menu behind it. Deliberately faint — the panels are grouping
+    /// devices, not surfaces in their own right.
+    static var panelColor: NSColor { NSColor.labelColor.withAlphaComponent(0.045) }
+
+    // ── The menu's own backdrop ──────────────────────────────────────────────
+
+    /// Laid down edge to edge by every row, behind everything else it draws.
     ///
-    /// White rather than the old barely-there grey wash, because it is doing a
-    /// different job now: `NSMenu` draws its own vibrant, translucent backdrop
-    /// and AppKit gives no way to make that opaque, so the panels are the only
-    /// surface the app controls — and between them they cover nearly the whole
-    /// menu. Filling them lifts the content off whatever happens to be behind
-    /// the menu, which a 4.5%-opacity grey could never do.
+    /// `NSMenu` renders itself as a vibrant, translucent window and AppKit
+    /// exposes no way to make that opaque. What it does expose is the rows —
+    /// and in this menu nearly every item is a custom view, which can paint. So
+    /// each row covers its own slice of the window, and between them they cover
+    /// the menu.
     ///
-    /// This is the number to turn if the menu still reads as too transparent
-    /// (or, past about 0.8, as a flat white box).
-    static var panelColor: NSColor { NSColor.white.withAlphaComponent(0.62) }
+    /// This is the number to turn for more or less see-through: 1.0 is fully
+    /// opaque, 0 hands the menu back to the system's vibrancy.
+    static var menuBackdrop: NSColor { NSColor.white.withAlphaComponent(0.75) }
+
+    /// The radius of the menu window's own rounded corners, matched by the
+    /// first and last rows so the backdrop can't square off a corner the system
+    /// rounded. Erring large costs a hairline of the menu's own background at
+    /// the corner; erring small leaves a visible square shoulder — so this is
+    /// deliberately on the generous side.
+    static let menuCornerRadius: CGFloat = 10
+
+    /// Which end of the menu a row sits at, and therefore which of its corners
+    /// have to follow the window's.
+    struct MenuEdges: OptionSet {
+        let rawValue: Int
+        static let top = MenuEdges(rawValue: 1 << 0)
+        static let bottom = MenuEdges(rawValue: 1 << 1)
+    }
+
+    static func drawMenuBackdrop(in view: NSView, edges: MenuEdges) {
+        menuBackdrop.setFill()
+        guard !edges.isEmpty else {
+            view.bounds.fill()
+            return
+        }
+        let roundsTop = edges.contains(.top)
+        let roundsBottom = edges.contains(.bottom)
+        roundedPath(view.bounds,
+                    radius: menuCornerRadius,
+                    roundMinY: view.isFlipped ? roundsTop : roundsBottom,
+                    roundMaxY: view.isFlipped ? roundsBottom : roundsTop).fill()
+    }
 
     /// Where a row sits within a multi-row panel, which decides which of its
     /// corners are rounded. Rows stack with no gap in the menu, so a section
@@ -90,8 +125,15 @@ enum UIStyle {
 
     /// A rect rounded only along the chosen y-edges, for panel segments.
     static func panelPath(_ rect: NSRect, roundMinY: Bool, roundMaxY: Bool) -> NSBezierPath {
-        let rMin: CGFloat = roundMinY ? panelRadius : 0
-        let rMax: CGFloat = roundMaxY ? panelRadius : 0
+        roundedPath(rect, radius: panelRadius, roundMinY: roundMinY, roundMaxY: roundMaxY)
+    }
+
+    /// A rect rounded only along the chosen y-edges. Shared by the panels and
+    /// by the menu backdrop, which round to different radii.
+    static func roundedPath(_ rect: NSRect, radius: CGFloat,
+                            roundMinY: Bool, roundMaxY: Bool) -> NSBezierPath {
+        let rMin: CGFloat = roundMinY ? radius : 0
+        let rMax: CGFloat = roundMaxY ? radius : 0
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.minX, y: rect.minY + rMin))
         path.appendArc(withCenter: NSPoint(x: rect.minX + rMin, y: rect.minY + rMin),
@@ -191,7 +233,14 @@ class PanelRowView: NSView {
         didSet { if panelSegment != oldValue { needsDisplay = true } }
     }
 
+    /// Set on whichever rows are currently first and last in the menu, so the
+    /// backdrop follows the window's rounded corners instead of squaring them.
+    var menuEdges: UIStyle.MenuEdges = [] {
+        didSet { if menuEdges != oldValue { needsDisplay = true } }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
+        UIStyle.drawMenuBackdrop(in: self, edges: menuEdges)
         if let panelSegment {
             UIStyle.drawPanel(panelSegment, in: self)
         }

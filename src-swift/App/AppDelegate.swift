@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var turnOffRow: MenuActionRow!
     var changeDeviceRow: MenuActionRow!
     var turnOffQuitRow: MenuActionRow!
+    var skipUpdateRow: MenuActionRow!
 
     /// The menu items wrapping those rows, plus the plain items whose
     /// visibility depends on state.

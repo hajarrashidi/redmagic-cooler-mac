@@ -10,7 +10,7 @@ import AppKit
 /// range a panel reading "Not connected" above it is noise. Hiding a *row* is
 /// something `NSMenu` re-lays out live; resizing a row's view — which is what
 /// collapsing a panel inside the status card would have needed — is not.
-final class CoolerPanelView: NSView {
+final class CoolerPanelView: PanelRowView {
 
     /// The one thing the panel has to say beyond its numbers.
     ///
@@ -185,7 +185,10 @@ final class CoolerPanelView: NSView {
             guard !self.model.deviceLooksPoweredOff else { return }
             let zone = self.model.mode.zone.rawValue
             guard zone > 0 else { return }
-            self.fanAngle -= CGFloat(zone) * Self.spinRatePerZone
+            // Positive, and this view is flipped — which mirrors the y-axis,
+            // so `rotate(byRadians:)`'s usual anticlockwise sweep lands on
+            // screen as clockwise. Which is the way a fan turns.
+            self.fanAngle += CGFloat(zone) * Self.spinRatePerZone
             self.needsDisplay = true
         }
         // .common keeps it running while the menu tracks mouse events.
@@ -229,6 +232,8 @@ final class CoolerPanelView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        // Lays down the menu backdrop; this row paints over it.
+        super.draw(dirtyRect)
         let inset = UIStyle.panelInset
         let rect = NSRect(x: inset, y: 0,
                           width: bounds.width - inset * 2, height: Self.panelHeight)

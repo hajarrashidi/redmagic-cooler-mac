@@ -9,7 +9,7 @@ import AppKit
 ///
 /// Setting `onClick` turns the banner into a button; left nil it is purely
 /// informational, which is what the first three uses want.
-final class BannerView: NSView {
+final class BannerView: PanelRowView {
 
     enum Style {
         case warning   // amber — manual stays on until turned off
@@ -139,6 +139,8 @@ final class BannerView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        // Lays down the menu backdrop; this row paints over it.
+        super.draw(dirtyRect)
         let bg = NSRect(x: hPad, y: 4, width: bounds.width - hPad * 2, height: bounds.height - 8)
         let path = NSBezierPath(roundedRect: bg, xRadius: 7, yRadius: 7)
         style.tint.withAlphaComponent(isHighlighted ? 0.26 : 0.14).setFill()

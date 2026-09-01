@@ -116,3 +116,44 @@ final class MenuActionRow: PanelRowView {
         menu?.cancelTracking()
     }
 }
+
+/// The small-caps label that titles a group of menu rows.
+///
+/// A plain disabled `NSMenuItem` did this until the rows started painting the
+/// menu's backdrop themselves: a system-drawn item in the middle of them was a
+/// translucent band across an otherwise covered menu. It draws nothing but its
+/// own text — the backdrop comes from `PanelRowView`.
+final class SectionHeaderRow: PanelRowView {
+
+    private let title: String
+
+    init(width: CGFloat, title: String) {
+        self.title = title
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 24))
+        autoresizingMask = .width
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        UIStyle.drawSectionHeader(title, at: NSPoint(x: UIStyle.hPad, y: 8))
+    }
+}
+
+/// Blank space at the foot of the menu.
+///
+/// The last row used to sit flush against the window's bottom edge, which read
+/// as the menu being clipped rather than finished. This is the margin — and,
+/// being a row like any other, it paints the backdrop and rounds the window's
+/// bottom corners on the real last row's behalf.
+final class MenuFooterRow: PanelRowView {
+
+    init(width: CGFloat) {
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: UIStyle.panelPad))
+        autoresizingMask = .width
+        menuEdges = .bottom
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+}
