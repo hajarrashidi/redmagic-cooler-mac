@@ -1,232 +1,138 @@
 # Autopilot — how automatic cooling works
 
-Auto mode runs the cooler **based on how hot your Mac actually is**. It turns
-the cooler on when the Mac heats up, ramps its power as the temperature rises,
-and turns it fully off once the Mac has cooled and no longer needs it — with no
-input from you.
+Auto mode follows the Mac's temperature. It turns the cooler on as the Mac
+heats up, raises cooling power with temperature, and turns it off after the Mac
+has cooled. Auto is the default mode after connection.
 
-This doc covers the signal it watches, the levels it picks, the exact
-temperatures it engages at, and how to tune it.
+This guide explains the temperature signal, engage threshold, cooling ladder,
+anti-flap behaviour, safety floor, and LED heat gauge.
 
-Implementation: [`src-swift/Core/AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift).
-It is pure decision logic — no I/O, no hardware access — so it can be reasoned
-about (and exercised) on its own.
-
----
+Implementation:
+[`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift).
 
 ## The temperature it watches
 
-The autopilot is driven by your Mac's **SoC die temperature** (the CPU/GPU
-silicon temperature, in °C), read natively from the Apple Silicon thermal
-sensors via IOKit's HID system — **no `sudo`, no extra install**. This is the
-*sensitive* signal: it moves within seconds of the Mac working hard.
+On Apple Silicon, the app reads the Mac's **SoC die temperature** from its
+thermal sensors through IOKit's HID interface. It needs no `sudo` or additional
+installation, and responds within seconds when the Mac starts working hard.
 
-> **Why not macOS's "thermal state"?**
-> Apple's `ProcessInfo.thermalState` (`nominal` → `fair` → `serious` →
-> `critical`) is the "official" signal, but it is heavily damped — it can stay
-> `nominal` through *minutes* of full CPU load. Far too slow on its own, so the
-> autopilot uses it only as a **safety floor** (see below).
+macOS also exposes `ProcessInfo.thermalState`, but that signal is heavily
+damped. Autopilot uses it as a safety floor rather than its primary input.
 
-Three temperatures are in play; don't confuse them:
+| Temperature | Source | Use |
+|-------------|--------|-----|
+| **Mac die °C** | Mac SoC sensors | Drives Auto mode |
+| Cooler cold/hot °C | Cooler telemetry | Display only |
+| Ambient °C | Cooler telemetry | Display only |
 
-| Temperature        | Where it comes from         | Used for                          |
-|--------------------|-----------------------------|-----------------------------------|
-| **Mac die °C**     | Mac's own SoC sensors (HID) | **Drives the autopilot decision** |
-| Cooler cold/hot °C | The cooler's telemetry      | Display only                      |
-| Ambient °C         | The cooler's telemetry      | Display only                      |
+The cooler reports plate temperatures only while actively cooling. Cold or hot
+readings of `0 °C` while it is off are device behaviour.
 
-> **About "cold 0 °C / hot 0 °C":** the cooler only reports plate temperatures
-> while it is actively cooling. When it's **off** those sensors read `0` — the
-> device's behaviour, not a bug. Real numbers appear the instant cooling starts.
+## Engage threshold and cooling levels
 
----
+The **engage threshold** `E` is the die temperature at which cooling starts.
+Use the threshold slider in Auto mode to set it from 45–85 °C. The default is
+45 °C. There is one threshold control; the former Standard/Custom profile
+choice is no longer needed.
 
-## The cooling levels
+The remaining tiers are derived from `E` in 10 °C steps. All tiers are capped
+at 95 °C so a high engage point cannot create an out-of-order ladder.
 
-The cooler has two **independent** controls, and the autopilot sets both:
+| Die temperature | Tier | TEC mode | Fan |
+|-----------------|------|----------|-----|
+| Below `E` | off | off | 0% |
+| `E` and above | low | low | 60% |
+| `E`+10 and above | med-low | med-low | 80% |
+| `E`+20 and above | medium | medium | 95% |
+| `E`+30 and above | max | max | 100% |
 
-- **TEC mode** — the Peltier element that does the actual chilling.
-- **Fan speed** — clears heat from the cooler's hot side, so the TEC can keep
-  pumping without the cooler's own body overheating.
+For the default `E = 45 °C`, the tier boundaries are 45, 55, 65, and 75 °C.
 
-Five tiers:
+The TEC and fan are independent cooler controls. Fan percentages are not
+linear in RPM; these values were selected from hardware probes of the
+firmware's response curve. See [`FINDINGS.md`](FINDINGS.md).
 
-| Tier        | TEC mode | Fan   | Meaning                         |
-|-------------|----------|-------|---------------------------------|
-| **off**     | off      | 0 %   | Mac is cool — nothing to do     |
-| **low**     | low      | 60 %  | Mac is warming up               |
-| **med-low** | med-low  | 80 %  | Mac is warm                     |
-| **medium**  | medium   | 95 %  | Mac is hot                      |
-| **max**     | max      | 100 % | Mac is very hot — cool flat out |
+## Fast to turn on, slow to turn off
 
-> Fan percentages are **not** linear in RPM. The firmware's response curve is
-> U-shaped, so these values are calibrated against an RPM probe rather than
-> chosen for roundness — see [`FINDINGS.md`](FINDINGS.md).
+Autopilot reacts immediately to rising heat but backs off deliberately so the
+Peltier does not rapid-cycle.
 
----
+**Heating up:** it steps up as soon as the die crosses a tier boundary.
 
-## At what temperature it engages — two profiles
+**Cooling down:** both conditions must hold before it drops one tier:
 
-| Mac die temp | Standard    | Custom (engage `E`) |
-|--------------|-------------|---------------------|
-| cool         | off         | off                 |
-| **40 °C +**  | **low**     | off                 |
-| **50 °C +**  | **med-low** | off                 |
-| **62 °C +**  | **medium**  | off                 |
-| **74 °C +**  | **max**     | off                 |
-| **`E` +**    | —           | **low**             |
-| **`E`+10 +** | —           | **med-low**         |
-| **`E`+20 +** | —           | **medium**          |
-| **`E`+30 +** | —           | **max** (capped at 95 °C) |
+1. The die is at least **5 °C below** that tier's engage point.
+2. It remains there for **15 seconds**.
 
-**Standard** is tuned for a cooler plate sat against a laptop chassis: it earns
-its keep while the Mac is merely warm, not only under sustained load, so it
-engages early and ramps quickly.
+The app then steps down one tier at a time. A drop from max to off therefore
+follows `max → medium → med-low → low → off`, with each change gated by those
+rules. Autopilot evaluates every three seconds.
 
-**Custom** lets you pick the engage point `E` (45–85 °C) with a slider in the
-menu-bar app; the remaining tiers sit 10 °C apart above it, with the top tier
-capped so a high engage point can't push it past 95 °C.
+## LED heat gauge
 
-For reference, Apple Silicon typically idles around **40–45 °C** and climbs
-toward **95–100 °C** (where it throttles) under sustained heavy load.
+Set the cooler effect to **Auto** to make its colour follow the Mac die
+temperature: green while cool, through yellow and orange, to red while hot.
 
-Choose **Standard** or **Custom** from the Auto Mode row in the menu-bar app.
+For an engage threshold `E`, the colour sweep starts at `E−10 °C` (with a
+30 °C minimum) and reaches red at `E+30 °C` (with a 95 °C maximum). At the
+default 45 °C threshold, that is green at 35 °C and red at 75 °C.
 
----
+The sweep uses HSV hue from 120° to 0° and writes the cooler's static-colour
+effect only when the colour changes. The LED is lit only while the cooler is
+running; select another effect to opt out of the heat gauge.
 
-## Fast to turn on, slow to turn off (anti-flap)
+## Safety floor
 
-The autopilot reacts **immediately** to heat but is **deliberate** about backing
-off — so it springs on the moment you need it, yet never flickers the Peltier on
-and off while the Mac is still hot. Rapid cycling is bad for a TEC and achieves
-nothing.
+macOS's own thermal state can force a minimum cooling tier regardless of the
+die reading:
 
-**Heating up:** the instant the die crosses a threshold, it steps up. No delay.
+| macOS thermal state | Minimum tier |
+|---------------------|--------------|
+| `nominal`, `fair` | none |
+| `serious` | medium |
+| `critical` | max |
 
-**Cooling down:** before dropping a tier, *both* must hold:
+The final decision is the higher of the die-temperature tier and this safety
+floor. The OS signal can raise cooling power but cannot lower it.
 
-1. **Hysteresis band** — the die must fall a full **5 °C below** the tier's
-   engage point, not merely dip under it. Standard's `medium` engages at 62 °C
-   and doesn't release until **57 °C**, so a reading hovering on a threshold
-   holds steady instead of bouncing.
-2. **Cool-down dwell** — that calmer reading must **hold for 15 s** before it
-   eases down one tier. A brief dip won't switch cooling off.
+## Worked example
 
-It steps down **one tier at a time**, so `max` back to `off` is a gentle
-`max → medium → med-low → low → off`, each step gated by the rules above.
+With the default 45 °C engage threshold:
 
-The autopilot re-evaluates every **3 seconds**.
-
----
-
-## The LED as a heat gauge
-
-With the LED effect set to **Auto**, the cooler's colour tracks the die
-temperature — green when cooling starts, through yellow and orange, to **red**
-when hot. The sweep spans the active profile's working band:
-
-| Profile              | 🟢 green at | 🔴 red at        |
-|----------------------|------------|------------------|
-| Standard             | 40 °C      | 78 °C            |
-| Custom (engage `E`)  | `E`−10 °C  | `E`+30 (max 95)  |
-
-The sweep is a natural HSV spectrum (hue 120° → 0°), not a muddy blend. It uses
-the device's **static-colour** effect (light char `0x1013`, byte 0 = `4`,
-followed by `R,G,B`), and writes only when the colour actually changes.
-
-> **The LED only lights while the cooler is running.** When the Mac is cool and
-> the cooler is off, the LED is off too — so the light doubles as an "actively
-> cooling" indicator. Pick any other LED effect to opt out of the heat gauge.
-
----
-
-## The safety floor (belt and suspenders)
-
-If macOS's own `thermalState` reports trouble, the autopilot cools hard
-regardless of what the die sensor says:
-
-| macOS thermalState | Minimum tier forced |
-|--------------------|---------------------|
-| `nominal`, `fair`  | — (no floor)        |
-| `serious`          | medium              |
-| `critical`         | max                 |
-
-The decision is always **the higher** of (die-temperature tier, safety floor).
-The OS signal can only *raise* the cooling level, never lower it.
-
----
-
-## A worked example
-
-Standard profile. Starting from a cool, idle Mac, you launch a heavy build:
-
-```
-die 38 °C  → off              (cool, nothing to do)
-die 43 °C  → low,     fan 60% (crossed 40 °C — engages instantly)
-die 55 °C  → med-low, fan 80% (crossed 50 °C)
-die 66 °C  → medium,  fan 95% (crossed 62 °C)
-die 79 °C  → max,     fan 100% (crossed 74 °C — flat out)
-...build finishes, Mac starts cooling...
-die 71 °C  → max,     fan 100% (below 74−5=69? no — holds)
-die 66 °C  → medium,  fan 95% (below 69, held 15 s → eases down one tier)
-die 54 °C  → med-low, fan 80% (below 57, held 15 s → eases down again)
-die 43 °C  → low,     fan 60% (below 45, held 15 s)
-die 33 °C  → off              (below 35, held 15 s → fully off)
+```text
+die 40 °C  → off
+die 48 °C  → low,     fan 60%
+die 58 °C  → med-low, fan 80%
+die 68 °C  → medium,  fan 95%
+die 78 °C  → max,     fan 100%
+...the workload finishes...
+die 69 °C  → max      (not yet below the 70 °C release point long enough)
+die 67 °C  → medium   (below 70 °C for 15 seconds)
+die 57 °C  → med-low  (below 60 °C for 15 seconds)
+die 47 °C  → low      (below 50 °C for 15 seconds)
+die 37 °C  → off      (below 40 °C for 15 seconds)
 ```
 
-Every transition is written to `~/.cooler.log`:
+Transitions are written to `~/.cooler.log`.
 
-```
-Mac 66°C (nominal)  → cooler medium, fan 95%
-Mac 63°C (nominal) — easing down soon  → cooler medium, fan 95%
-Mac 33°C (nominal)  → cooler off, fan 0%
-```
+## Tuning the implementation
 
----
-
-## Using it
-
-Choose **Auto** in the menu for temperature-driven cooling, then select the
-**Standard** profile or set a **Custom** engage temperature. Choose **Manual**
-for a fixed level regardless of temperature, or use **Turn Off** to stop.
-
----
-
-## Tuning it
-
-The tier ladder and LED band live in `configure(profile:customEngageC:)` in
-[`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift); the timing
-constants live in `Config.Autopilot` and `Config.Timing`
-([`Config.swift`](../src-swift/Core/Config.swift)). Edit, then `./build.sh`.
+The threshold range, default, hysteresis, and dwell are in
+[`Config.swift`](../src-swift/Core/Config.swift). The tier ladder and LED band
+are built by `configure(engageC:)` in
+[`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift).
 
 ```swift
-// Config.swift
 enum Autopilot {
-    static let hysteresisC: Double = 5.0        // °C below engage before a tier releases
-    static let cooldownDwell: TimeInterval = 15 // s a calmer reading must hold
-    static let standardEngageC: Double = 40     // where Standard's first step engages
-    static let customEngageDefaultC: Double = 65
-    static let customEngageMinC: Double = 45
-    static let customEngageMaxC: Double = 85
-}
-enum Timing {
-    static let autopilotEveryTicks = 3          // evaluate every 3 s (poll is 1 s)
+    static let hysteresisC: Double = 5.0
+    static let cooldownDwell: TimeInterval = 15
+    static let engageDefaultC: Double = 45
+    static let engageMinC: Double = 45
+    static let engageMaxC: Double = 85
 }
 ```
 
-```swift
-// AutopilotPolicy.configure(profile:customEngageC:) — the Standard ladder.
-// The first engage point is Config.Autopilot.standardEngageC (40 °C), shared
-// with the menu so the row can label the threshold it will actually use.
-engagePoints = [(Config.Autopilot.standardEngageC, 1), (50, 2), (62, 3), (74, 4)]
-ledGreenC = Config.Autopilot.standardEngageC
-ledRedC = 78
-```
-
-- **Want it more eager?** Lower the first engage point.
-- **Want it calmer / less twitchy?** Raise the engage points, or increase
-  `cooldownDwell` and `hysteresisC`.
-
-The tier table itself — which TEC mode and fan speed each tier uses — is
-`AutopilotPolicy.tiers`. Those fan values are RPM-calibrated; read
-[`FINDINGS.md`](FINDINGS.md) before changing them.
+Lowering the engage threshold makes cooling start earlier. Increasing the
+threshold, dwell, or hysteresis makes the controller less eager. The tier fan
+values are RPM-calibrated; read [`FINDINGS.md`](FINDINGS.md) before changing
+them.

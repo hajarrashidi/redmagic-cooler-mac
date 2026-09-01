@@ -18,22 +18,6 @@ enum AppMode: String {
     }
 }
 
-/// The autopilot's aggressiveness preset.
-///
-/// Raw values are persisted. Builds before the profile rework wrote
-/// "aggressive"/"regular"; both migrate to `.standard`.
-enum AutoProfile: String {
-    /// A fixed, balanced tier ladder tuned for a cooler plate sitting on a Mac.
-    case standard
-    /// Tiers derived from a user-chosen engage temperature.
-    case custom
-
-    init(persisted raw: String?) {
-        self = (raw == AutoProfile.custom.rawValue) ? .custom : .standard
-    }
-
-    var displayName: String { self == .custom ? "Custom" : "Standard" }
-}
 
 /// macOS's own thermal pressure level, from `ProcessInfo.thermalState`.
 ///

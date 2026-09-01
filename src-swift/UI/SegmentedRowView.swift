@@ -2,7 +2,7 @@ import AppKit
 
 /// A labelled segmented control laid out as a menu row.
 ///
-/// Four rows in this menu — cooling mode, auto profile, LED effect, breath
+/// Three rows in this menu — cooling mode, LED effect, breath
 /// style — were near-identical copies of the same 25 lines of framing code.
 /// This is that layout, once. Subclasses supply their own typed API on top.
 class SegmentedRowView: PanelRowView {

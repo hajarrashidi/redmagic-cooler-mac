@@ -46,9 +46,10 @@ final class AutopilotPolicy {
 
     // ── Configuration ────────────────────────────────────────────────────────
 
-    private(set) var profile: AutoProfile
-    /// Temperature at which the first cooling step engages, for `.custom` (°C).
-    private(set) var customEngageC: Double
+    /// Temperature at which the first cooling step engages (°C). The whole
+    /// ladder is derived from this one number — it is the single knob the
+    /// menu's threshold slider drives.
+    private(set) var engageC: Double
 
     private let dwell: TimeInterval
     private let hysteresisC: Double
@@ -68,66 +69,45 @@ final class AutopilotPolicy {
     /// at or above it. Drives the dwell timer.
     private var coolingSince: TimeInterval?
 
-    init(profile: AutoProfile = .standard,
-         customEngageC: Double = Config.Autopilot.customEngageDefaultC,
+    init(engageC: Double = Config.Autopilot.engageDefaultC,
          dwell: TimeInterval = Config.Autopilot.cooldownDwell,
          hysteresisC: Double = Config.Autopilot.hysteresisC) {
         self.dwell = dwell
         self.hysteresisC = hysteresisC
-        self.profile = profile
-        self.customEngageC = customEngageC
-        configure(profile: profile, customEngageC: customEngageC)
+        self.engageC = engageC
+        configure(engageC: engageC)
     }
 
-    // ── Profile configuration ────────────────────────────────────────────────
+    // ── Ladder configuration ─────────────────────────────────────────────────
 
-    func setProfile(_ profile: AutoProfile) {
-        configure(profile: profile, customEngageC: customEngageC)
+    /// Moves the engage point and rebuilds the ladder around it.
+    func setEngage(_ celsius: Double) {
+        configure(engageC: celsius)
     }
 
-    /// Sets the custom engage point. Recomputes the ladder only when `.custom`
-    /// is the active profile; otherwise the value is just remembered.
-    func setCustomEngage(_ celsius: Double) {
-        let clamped = Self.clampEngage(celsius)
-        guard profile == .custom else { customEngageC = clamped; return }
-        configure(profile: .custom, customEngageC: clamped)
-    }
+    private func configure(engageC: Double) {
+        self.engageC = Self.clampEngage(engageC)
 
-    private func configure(profile: AutoProfile, customEngageC: Double) {
-        self.profile = profile
-        self.customEngageC = Self.clampEngage(customEngageC)
-
-        switch profile {
-        case .custom:
-            // Steps sit 10 °C apart above the user's engage point, with every
-            // tier capped so a high engage point can't push it past 95 °C. The
-            // intermediate steps need the cap too, not just the top one: a
-            // 80 °C engage point would otherwise put tier 3 at 100 °C — *above*
-            // tier 4's capped 95 — and the ladder would engage out of order.
-            let engage = self.customEngageC
-            let ceiling = min(engage + 30, 95)
-            engagePoints = [(engage, 1),
-                            (min(engage + 10, ceiling), 2),
-                            (min(engage + 20, ceiling), 3),
-                            (ceiling, 4)]
-            ledGreenC = max(30, engage - 10)
-            ledRedC = ceiling
-
-        case .standard:
-            // The cooler plate sits on the Mac's chassis, so it earns its keep
-            // while the machine is merely warm — not only under sustained load.
-            // Engage early and ramp quickly.
-            engagePoints = [(Config.Autopilot.standardEngageC, 1), (50, 2), (62, 3), (74, 4)]
-            ledGreenC = Config.Autopilot.standardEngageC
-            ledRedC = 78
-        }
+        // Steps sit 10 °C apart above the user's engage point, with every
+        // tier capped so a high engage point can't push it past 95 °C. The
+        // intermediate steps need the cap too, not just the top one: a
+        // 80 °C engage point would otherwise put tier 3 at 100 °C — *above*
+        // tier 4's capped 95 — and the ladder would engage out of order.
+        let engage = self.engageC
+        let ceiling = min(engage + 30, 95)
+        engagePoints = [(engage, 1),
+                        (min(engage + 10, ceiling), 2),
+                        (min(engage + 20, ceiling), 3),
+                        (ceiling, 4)]
+        ledGreenC = max(30, engage - 10)
+        ledRedC = ceiling
 
         // The ladder moved underneath us; abandon any dwell in progress.
         coolingSince = nil
     }
 
     private static func clampEngage(_ celsius: Double) -> Double {
-        let bounds = Config.Autopilot.customEngageMinC...Config.Autopilot.customEngageMaxC
+        let bounds = Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC
         return celsius.clamped(to: bounds)
     }
 
@@ -190,8 +170,8 @@ final class AutopilotPolicy {
     // ── LED heat colour ──────────────────────────────────────────────────────
 
     /// Green→red gradient for the current die temperature, used by the LED's
-    /// "Auto" effect. The endpoints track the active profile so the colour
-    /// stays meaningful when the user moves their engage point.
+    /// "Auto" effect. The endpoints track the ladder so the colour stays
+    /// meaningful when the user moves their engage point.
     func heatColor(for dieC: Double?) -> RGB {
         let temperature = dieC ?? ledGreenC
         let span = max(1, ledRedC - ledGreenC)
