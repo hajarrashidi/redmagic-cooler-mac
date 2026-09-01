@@ -11,6 +11,8 @@ Bluetooth REDMAGIC phone cooler.**
 [![Latest release](https://img.shields.io/badge/release-latest-blue)](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+<img src="docs/screenshot.png" width="345" alt="The menu, showing Mac temperature, cooler telemetry, the cooling and light sections, and settings">
+
 </div>
 
 ## What it does
