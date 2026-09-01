@@ -113,10 +113,12 @@ open it, and drag **RedMagic Cooler** to Applications.
 Releases are signed with a Developer ID certificate and notarized by Apple, so
 the app opens without any Gatekeeper warnings.
 
-The app checks for a newer release on GitHub each time it starts, and shows a
-banner at the top of the menu when one is out. It never downloads or installs
-anything itself — the banner opens the release page, and updating stays a
-deliberate drag to Applications.
+The app checks for a newer release on GitHub each time it starts, and once a
+day while it runs. When one is out it updates itself: the release DMG is
+downloaded, the app is swapped in place, and it relaunches — a banner at the
+top of the menu narrates the progress, with a **Skip This Version** item if
+you'd rather sit one out. If the install can't complete, or a release ships
+without a DMG, the banner falls back to opening the release page.
 
 ### Option 2 — Build from source
 

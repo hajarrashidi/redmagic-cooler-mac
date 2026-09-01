@@ -49,11 +49,12 @@ struct AppVersion: Comparable {
 
 /// Notices when a newer release has been published on GitHub.
 ///
-/// Deliberately check-only: it never downloads or replaces anything. The app
-/// ships as a notarized DMG that users drag to Applications, so the most useful
-/// thing it can do is say a new version exists and open the release page. That
-/// keeps releasing to `./release.sh` plus `gh release create` — there is no
-/// appcast to host and no second signing key to keep in step with the first.
+/// Check-only by design: this type never downloads or replaces anything
+/// itself. It reports what's available — including the release's DMG, when it
+/// carries one — and `UpdateInstaller` acts on that. Keeping the roles split
+/// keeps releasing to `./release.sh` plus `gh release create`: the release's
+/// own DMG asset is the update feed, so there is no appcast to host and no
+/// second signing key to keep in step with the first.
 ///
 /// Every failure path is silent. No network, a rate limit, or a payload we
 /// can't parse should never surface an error in a menu that exists to control
@@ -67,6 +68,10 @@ final class UpdateChecker {
         let tag: String
         /// The release page, which carries both the notes and the DMG.
         let page: URL
+        /// Direct download for the release's DMG asset, when it has one.
+        /// `nil` — a release published without a DMG — falls back to the old
+        /// behaviour: the banner opens `page` instead of installing.
+        let dmgURL: URL?
 
         /// The tag without its `v`, for display: `2.3`.
         var displayVersion: String { String(tag.drop { $0 == "v" || $0 == "V" }) }
@@ -139,8 +144,12 @@ final class UpdateChecker {
         guard UserDefaults.standard.string(forKey: Config.Key.skippedVersion) != release.tagName
         else { return }
 
+        let dmg = release.assets
+            .first { $0.name.lowercased().hasSuffix(".dmg") }
+            .flatMap { URL(string: $0.downloadURL) }
         available = Available(tag: release.tagName,
-                              page: URL(string: release.htmlURL) ?? Config.Updates.releasesPage)
+                              page: URL(string: release.htmlURL) ?? Config.Updates.releasesPage,
+                              dmgURL: dmg)
         EventLogger.record("update available: \(release.tagName)")
         onChange?()
     }
@@ -159,14 +168,26 @@ final class UpdateChecker {
 
     // ── Payload ──────────────────────────────────────────────────────────────
 
-    /// The two fields we need out of GitHub's release JSON.
+    /// The fields we need out of GitHub's release JSON.
     private struct Release: Decodable {
         let tagName: String
         let htmlURL: String
+        let assets: [Asset]
+
+        struct Asset: Decodable {
+            let name: String
+            let downloadURL: String
+
+            enum CodingKeys: String, CodingKey {
+                case name
+                case downloadURL = "browser_download_url"
+            }
+        }
 
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
             case htmlURL = "html_url"
+            case assets
         }
     }
 }

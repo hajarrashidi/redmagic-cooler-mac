@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var autopilot: AutopilotPolicy!
     var led: LedController!
     var updates: UpdateChecker!
+    var installer: UpdateInstaller!
 
     // ── Menu ─────────────────────────────────────────────────────────────────
 
@@ -109,9 +110,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ble.delegate = self
         led = LedController(ble: ble)
 
-        // Built before the menu, which wires a banner straight to it.
+        // Built before the menu, which wires a banner straight to them. A
+        // noticed release starts installing at once — the banner narrates the
+        // download and install, and the app relaunches itself when they land.
         updates = UpdateChecker()
-        updates.onChange = { [weak self] in self?.refresh() }
+        installer = UpdateInstaller()
+        installer.onChange = { [weak self] in self?.refresh() }
+        updates.onChange = { [weak self] in
+            self?.installAvailableUpdate()
+            self?.refresh()
+        }
 
         buildStatusItem()
         buildMenu()
@@ -128,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SystemInfo.resolveModelName { [weak self] _ in self?.refresh() }
 
         // Every launch, deliberately unthrottled: opening the app is exactly
-        // when a user wants to know they're behind. One request per launch is
+        // when a user wants to be brought current. One request per launch is
         // nothing against GitHub's unauthenticated budget, and it still stamps
         // the clock, so the periodic check below stays a day behind it.
         updates.check()

@@ -190,8 +190,20 @@ extension AppDelegate {
 
     // ── Updates ──────────────────────────────────────────────────────────────
 
-    /// Opens the release page in the browser. The app deliberately installs
-    /// nothing itself — see `UpdateChecker` for why.
+    /// Kicks off installing whatever release the checker has on offer.
+    ///
+    /// Wired to `updates.onChange`, so a new release starts installing the
+    /// moment it is noticed — at launch, or from the daily check of an app
+    /// left running. `install` itself refuses re-entry mid-flight and skips
+    /// releases without a DMG, so calling on every change is safe; a release
+    /// the user skipped never reaches `available` in the first place.
+    func installAvailableUpdate() {
+        guard let update = updates.available else { return }
+        installer.install(update)
+    }
+
+    /// Opens the release page in the browser — the update banner's click, and
+    /// the fallback when an install fails or a release ships without a DMG.
     func openReleasePage() {
         guard let update = updates.available else { return }
         NSWorkspace.shared.open(update.page)

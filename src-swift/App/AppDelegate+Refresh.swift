@@ -23,20 +23,44 @@ extension AppDelegate {
 
     // ── Update notice ────────────────────────────────────────────────────────
 
-    /// Shows the update row only while a newer, unskipped release is known.
-    /// Independent of the connection state — a pending update is worth seeing
-    /// whether or not a cooler is attached.
+    /// Shows the update row only while a newer, unskipped release is known,
+    /// narrating the automatic install as it runs. Independent of the
+    /// connection state — an update matters whether or not a cooler is
+    /// attached. Clicking the banner always opens the release page; while an
+    /// install is in flight that is the only thing left to offer (the notes),
+    /// and afterwards it is the fallback.
     private func refreshUpdateNotice() {
         let update = updates.available
+        let installing = installer.state == .downloading || installer.state == .installing
         rows.updateBanner.isHidden = (update == nil)
-        rows.skipUpdate.isHidden = (update == nil)
         rows.updateSeparator.isHidden = (update == nil)
+        // Skipping mid-install could not stop the swap already running; the
+        // row bows out once the download starts.
+        rows.skipUpdate.isHidden = (update == nil) || installing
 
         guard let update else { return }
-        updateBanner.configure(style: .info,
-                               text: "Version \(update.displayVersion) available",
-                               symbol: "arrow.down.circle.fill",
-                               showSpinner: false)
+        switch installer.state {
+        case .downloading:
+            updateBanner.configure(style: .info,
+                                   text: "Downloading version \(update.displayVersion)…",
+                                   symbol: "arrow.down.circle.fill",
+                                   showSpinner: true)
+        case .installing:
+            updateBanner.configure(style: .info,
+                                   text: "Installing version \(update.displayVersion)…",
+                                   symbol: "arrow.down.circle.fill",
+                                   showSpinner: true)
+        case .failed:
+            updateBanner.configure(style: .warning,
+                                   text: "Update failed — open the release page",
+                                   symbol: "exclamationmark.triangle.fill",
+                                   showSpinner: false)
+        case .idle:
+            updateBanner.configure(style: .info,
+                                   text: "Version \(update.displayVersion) available",
+                                   symbol: "arrow.down.circle.fill",
+                                   showSpinner: false)
+        }
     }
 
     // ── Control values ───────────────────────────────────────────────────────
