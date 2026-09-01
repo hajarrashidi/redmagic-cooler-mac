@@ -5,7 +5,8 @@
 # Usage:  ./release.sh [version]
 #           version   defaults to the CFBundleShortVersionString in build.sh
 #
-# Signing depends on what's in your environment:
+# Signing depends on what's in your environment (or in a `.env` beside this
+# script, which is sourced automatically and git-ignored):
 #
 #   Nothing set                 ad-hoc signature. Free, but Gatekeeper refuses
 #                               to open the downloaded app at all on current
@@ -19,13 +20,21 @@
 #                               staples the ticket, so the DMG opens with no
 #                               warning at all. This is the clean experience.
 #
-# Example:
-#   export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID)"
-#   export NOTARY_KEYCHAIN_PROFILE="notary"   # from: xcrun notarytool store-credentials
-#   ./release.sh 2.0
+# Example .env:
+#   DEVELOPER_ID="Developer ID Application: Your Name (TEAMID)"
+#   NOTARY_KEYCHAIN_PROFILE="notary"   # from: xcrun notarytool store-credentials
 
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# Environment variables already set win over the .env values.
+if [[ -f .env ]]; then
+    DEVELOPER_ID_FROM_ENV="${DEVELOPER_ID:-}"
+    NOTARY_FROM_ENV="${NOTARY_KEYCHAIN_PROFILE:-}"
+    source .env
+    [[ -n "$DEVELOPER_ID_FROM_ENV" ]] && DEVELOPER_ID="$DEVELOPER_ID_FROM_ENV"
+    [[ -n "$NOTARY_FROM_ENV" ]] && NOTARY_KEYCHAIN_PROFILE="$NOTARY_FROM_ENV"
+fi
 
 APP="RedMagic Cooler.app"
 VOLUME="RedMagic Cooler"
