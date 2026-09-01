@@ -29,7 +29,8 @@ final class DevicePickerView: PanelRowView {
     private let guideButton = NSButton()
 
     private enum Layout {
-        static let height: CGFloat = 196
+        /// Guide link ends at 182; UIStyle.panelPad below it closes the panel.
+        static let height: CGFloat = 190
         static let rowHeight: CGFloat = 30
         static let headerHeight: CGFloat = 18
         static let rowGap: CGFloat = 4

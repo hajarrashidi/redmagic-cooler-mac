@@ -46,20 +46,22 @@ final class CoolingSliderView: PanelRowView {
     /// Matches the panel content inset, which also keeps the slider's thumb
     /// from overhanging the panel edge.
     private let hPad: CGFloat = UIStyle.panelContentX
-    private let zoneLabelY: CGFloat = 4
+    private let zoneLabelY: CGFloat = UIStyle.panelPad
 
     init(width: CGFloat) {
-        let height: CGFloat = 66
+        // panelPad + zone labels + slider + gap + header 13 + panelPad.
+        let height: CGFloat = 76
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
+        let titleY = height - UIStyle.panelPad - 13
         let title = UIStyle.sectionLabel("POWER")
-        title.frame = NSRect(x: UIStyle.panelContentX, y: height - 14, width: width * 0.6, height: 13)
+        title.frame = NSRect(x: UIStyle.panelContentX, y: titleY, width: width * 0.6, height: 13)
         addSubview(title)
 
         nameLabel.font = UIStyle.captionFont
         nameLabel.textColor = .secondaryLabelColor
         nameLabel.alignment = .right
-        nameLabel.frame = NSRect(x: 0, y: height - 14, width: width - UIStyle.panelContentX, height: 13)
+        nameLabel.frame = NSRect(x: 0, y: titleY, width: width - UIStyle.panelContentX, height: 13)
         addSubview(nameLabel)
 
         slider.minValue = 0
@@ -74,7 +76,7 @@ final class CoolingSliderView: PanelRowView {
         slider.isContinuous = false
         slider.target = self
         slider.action = #selector(sliderMoved)
-        slider.frame = NSRect(x: hPad, y: 18, width: width - hPad * 2, height: 30)
+        slider.frame = NSRect(x: hPad, y: 22, width: width - hPad * 2, height: 30)
         addSubview(slider)
     }
 

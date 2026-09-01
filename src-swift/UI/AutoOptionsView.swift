@@ -29,13 +29,15 @@ final class AutoOptionsView: PanelRowView {
     private let valueLabel = NSTextField(labelWithString: "")
 
     /// Not flipped: y is measured from the bottom, as elsewhere in this view.
+    /// The height leaves `UIStyle.panelPad` above the header, and the bottom
+    /// row sits the same distance off the lower edge.
     private enum Layout {
-        static let height: CGFloat = 104
         static let headerY: CGFloat = 88
+        static let height: CGFloat = headerY + 13 + UIStyle.panelPad
         static let segmentedY: CGFloat = 56
         static let thresholdY: CGFloat = 34
-        static let sliderY: CGFloat = 8
-        static let descriptionY: CGFloat = 10
+        static let sliderY: CGFloat = UIStyle.panelPad
+        static let descriptionY: CGFloat = UIStyle.panelPad
     }
 
     init(width: CGFloat) {

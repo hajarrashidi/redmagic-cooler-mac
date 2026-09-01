@@ -7,7 +7,8 @@ import AppKit
 /// This is that layout, once. Subclasses supply their own typed API on top.
 class SegmentedRowView: PanelRowView {
 
-    static let rowHeight: CGFloat = 54
+    /// 8 + header 13 + gap 5 + control 26 + 8 — panelPad at both edges.
+    static let rowHeight: CGFloat = 60
 
     let control: NSSegmentedControl
 
@@ -22,14 +23,16 @@ class SegmentedRowView: PanelRowView {
 
         let hPad = UIStyle.panelContentX
         let header = UIStyle.sectionLabel(title)
-        header.frame = NSRect(x: hPad, y: 35, width: width - hPad * 2, height: 13)
+        header.frame = NSRect(x: hPad, y: Self.rowHeight - UIStyle.panelPad - 13,
+                              width: width - hPad * 2, height: 13)
         addSubview(header)
 
         control.segmentStyle = .rounded
         control.selectedSegment = 0
         control.target = self
         control.action = #selector(segmentChanged)
-        control.frame = NSRect(x: hPad, y: 6, width: width - hPad * 2, height: 26)
+        control.frame = NSRect(x: hPad, y: UIStyle.panelPad,
+                               width: width - hPad * 2, height: 26)
         control.autoresizingMask = .width
         addSubview(control)
     }

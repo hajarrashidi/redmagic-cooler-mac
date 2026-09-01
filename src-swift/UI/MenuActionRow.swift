@@ -46,10 +46,14 @@ final class MenuActionRow: PanelRowView {
     private let highlightInset: CGFloat = UIStyle.panelInset + 2
 
     init(width: CGFloat, title: String, symbol: String?) {
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 22))
+        // 22pt of content with UIStyle.panelPad above and below, so a row at
+        // either end of its panel shows the same breathing room as every
+        // other panelled section.
+        let vPad = UIStyle.panelPad
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 22 + vPad * 2))
         autoresizingMask = .width
 
-        iconView.frame = NSRect(x: hPad, y: 3, width: 16, height: 16)
+        iconView.frame = NSRect(x: hPad, y: vPad + 3, width: 16, height: 16)
         iconView.imageScaling = .scaleProportionallyUpOrDown
         if let symbol {
             iconView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
@@ -60,11 +64,11 @@ final class MenuActionRow: PanelRowView {
         label.stringValue = title
         label.font = .menuFont(ofSize: 0)
         label.lineBreakMode = .byTruncatingTail
-        label.frame = NSRect(x: hPad + 16 + 8, y: 2,
+        label.frame = NSRect(x: hPad + 16 + 8, y: vPad + 2,
                              width: width - (hPad + 16 + 8) - hPad - 18, height: 17)
         addSubview(label)
 
-        checkView.frame = NSRect(x: width - hPad - 14, y: 4, width: 14, height: 14)
+        checkView.frame = NSRect(x: width - hPad - 14, y: vPad + 4, width: 14, height: 14)
         checkView.imageScaling = .scaleProportionallyUpOrDown
         checkView.image = NSImage(systemSymbolName: "checkmark",
                                   accessibilityDescription: nil)?
@@ -98,7 +102,7 @@ final class MenuActionRow: PanelRowView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard isHighlighted, isEnabled else { return }
-        let rect = bounds.insetBy(dx: highlightInset, dy: 0)
+        let rect = bounds.insetBy(dx: highlightInset, dy: UIStyle.panelPad - 2)
         NSColor.controlAccentColor.setFill()
         NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
     }

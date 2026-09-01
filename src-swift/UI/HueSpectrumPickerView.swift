@@ -12,13 +12,14 @@ final class HueSpectrumPickerView: PanelRowView {
     private(set) var hue: CGFloat = 0
 
     private let hPad = UIStyle.panelContentX
-    private let barTop: CGFloat = 24
+    private let barTop: CGFloat = 27
     private let barHeight: CGFloat = 16
     /// How far the thumb overhangs the bar on each side.
     private let thumbOverhang: CGFloat = 3
 
     init(width: CGFloat) {
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 52))
+        // panelPad + header 13 + gap + bar 16 (+ thumb overhang) + panelPad.
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 54))
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
@@ -38,12 +39,12 @@ final class HueSpectrumPickerView: PanelRowView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        UIStyle.drawSectionHeader("COLOR", at: NSPoint(x: hPad, y: 4))
+        UIStyle.drawSectionHeader("COLOR", at: NSPoint(x: hPad, y: UIStyle.panelPad))
 
         // Hex readout, right-aligned against the header.
         let hex = UIStyle.text(RGB(hue: Double(hue)).hexString,
                                UIStyle.captionFont, .secondaryLabelColor)
-        hex.draw(at: NSPoint(x: bounds.width - hPad - hex.size().width, y: 4))
+        hex.draw(at: NSPoint(x: bounds.width - hPad - hex.size().width, y: UIStyle.panelPad))
 
         drawSpectrum()
         drawThumb()

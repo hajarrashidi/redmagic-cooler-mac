@@ -24,8 +24,11 @@ enum UIStyle {
 
     /// Margin between a panel's edge and the menu's.
     static let panelInset: CGFloat = 8
-    /// Vertical breathing room inside a panel.
-    static let panelPad: CGFloat = 14
+    /// Vertical breathing room inside a panel: the gap above the first piece
+    /// of content and below the last. Every panel row applies it at both of
+    /// its own edges, so a row junction inside a section reads as two of
+    /// these — one uniform rhythm across the whole menu, status card included.
+    static let panelPad: CGFloat = 8
     /// Horizontal breathing room inside a panel.
     static let panelContentPad: CGFloat = 12
     /// Left edge of anything drawn inside a panel.
