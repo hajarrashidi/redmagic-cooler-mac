@@ -34,18 +34,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var statusCard: StatusCardView!
     var coolerPanel: CoolerPanelView!
     var updateBanner: BannerView!
-    var autoWaitingBanner: BannerView!
     var devicePicker: DevicePickerView!
     var modeSwitch: ModeSwitchView!
     var autoOptions: AutoOptionsView!
     var coolingSlider: CoolingSliderView!
+    var manualTimerRow: ManualTimerView!
     var effectPicker: LedEffectPickerView!
     var breathToggle: BreathStyleToggleView!
     var colorPicker: HueSpectrumPickerView!
     var turnOffRow: MenuActionRow!
-    var turnOffDisconnectRow: MenuActionRow!
-    var startAtLoginRow: MenuActionRow!
     var changeDeviceRow: MenuActionRow!
+    var turnOffQuitRow: MenuActionRow!
 
     /// The menu items wrapping those rows, plus the plain items whose
     /// visibility depends on state.
@@ -57,6 +56,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// own mode: in `.auto` the autopilot writes the device mode, in `.manual`
     /// the slider does.
     var appMode: AppMode = .auto
+
+    /// The auto-off clock for Manual. Armed whenever Manual is actually
+    /// cooling; see `ManualTimer` for why Manual is the mode that needs one.
+    var manualTimer = ManualTimer(timeout: .oneHour)
+    /// The timer ran down and switched the cooler off, and the user has not
+    /// touched anything since. Cleared by the next cooling command, so the
+    /// panel says what happened exactly once.
+    var manualTimedOut = false
 
     /// Latest thermal sample, refreshed each tick.
     var thermal = ThermalMonitor.Reading(thermalState: .nominal, dieTemperatureC: nil)
@@ -153,6 +160,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func loadSettings() {
         let defaults = UserDefaults.standard
         appMode = AppMode(persisted: defaults.string(forKey: Config.Key.appMode))
+        manualTimer = ManualTimer(timeout: ManualTimer.Timeout(
+            persisted: defaults.object(forKey: Config.Key.manualTimeout) as? Int))
 
         let engageC: Double
         if let saved = defaults.object(forKey: Config.Key.engageC) as? Double {
@@ -186,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handlePendingProbeCommand()
         thermal = ThermalMonitor.read()
         updateSwitchMonitor()
+        expireManualTimerIfDue()
 
         if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
             runAutopilot()

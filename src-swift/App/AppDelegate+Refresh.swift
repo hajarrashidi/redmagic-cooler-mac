@@ -27,9 +27,8 @@ extension AppDelegate {
         refreshControls(isManual: isManual)
         refreshVisibility(connected: connected, coolerOn: coolerOn, isManual: isManual,
                           pickingDevice: pickingDevice)
-        refreshSettingsItems(connected: connected, coolerOn: coolerOn,
-                             pickingDevice: pickingDevice)
-        refreshStatusItemButton(coolerOn: coolerOn)
+        refreshSettingsItems(coolerOn: coolerOn, pickingDevice: pickingDevice)
+        refreshStatusItemButton()
         refreshCards(connected: connected)
     }
 
@@ -96,6 +95,10 @@ extension AppDelegate {
         }
         coolingSlider.setEnabled(enabled)
 
+        manualTimerRow.setTimeout(manualTimer.timeout)
+        manualTimerRow.setRemaining(manualTimer.remainingText())
+        manualTimerRow.setEnabled(enabled)
+
         // The picker narrates discovery entirely from these two, so it stays
         // truthful about scans that end without a result — including ones that
         // never start, because the adapter is off or was never allowed.
@@ -120,36 +123,14 @@ extension AppDelegate {
         rows.modeSwitch.isHidden = !connected
         rows.autoOptions.isHidden = !connected || isManual
         rows.coolingSlider.isHidden = !connected || !isManual
-        let deviceOff = connected && switchMonitor.looksPoweredOff
-        rows.deviceOffBanner.isHidden = !deviceOff
-
-        // The manual reminder is about the cooler staying on. While its own
-        // switch is off it is not on, and stacking two warnings would bury the
-        // one that actually explains what the user is seeing.
-        rows.manualWarning.isHidden =
-            !connected || !(isManual && coolerOn) || isSwitching || deviceOff
-        rows.switchingBanner.isHidden = !connected || !isSwitching
-
+        // The auto-off limit belongs to Manual, and only Manual: Auto stands
+        // itself down as the Mac cools, so it has nothing to time out.
+        rows.manualTimer.isHidden = !connected || !isManual
         // LED controls only mean something while the cooler is running — its
         // LED cannot show a colour when it isn't.
         rows.effect.isHidden = !coolerOn
         rows.breathToggle.isHidden = !coolerOn || led.effect != .breath
         rows.color.isHidden = !coolerOn || !led.usesPickedColor
-
-        // An idle cooler under Auto is the autopilot working correctly, but it
-        // is indistinguishable from a broken one until someone says so. Only
-        // while nothing more urgent is on screen: a cooler whose own switch is
-        // off is idle for a very different reason.
-        let autoWaiting = connected && appMode == .auto && !coolerOn
-                       && !isSwitching && !deviceOff
-        rows.autoWaitingBanner.isHidden = !autoWaiting
-        if autoWaiting {
-            autoWaitingBanner.configure(
-                style: .neutral,
-                text: "Waiting for the Mac to reach \(Int(autopilot.engageC))°C",
-                symbol: "thermometer.medium",
-                showSpinner: false)
-        }
 
         // Cooling and LED effect form one cooler-control panel. Membership
         // follows the active mode and effect, so recompute all panel corners.
@@ -157,15 +138,15 @@ extension AppDelegate {
             (modeSwitch, !rows.modeSwitch.isHidden),
             (autoOptions, !rows.autoOptions.isHidden),
             (coolingSlider, !rows.coolingSlider.isHidden),
+            (manualTimerRow, !rows.manualTimer.isHidden),
             (effectPicker, !rows.effect.isHidden),
             (breathToggle, !rows.breathToggle.isHidden),
             (colorPicker, !rows.color.isHidden),
         ])
 
-        // Power items: "Turn Off" only while it's running, "Turn Off &
-        // Disconnect" whenever we hold a link at all.
+        // "Turn Off" only while it's running. "Turn Off & Quit" always: it is
+        // the way out of the app, so it can never be the row that isn't there.
         rows.turnOff.isHidden = !coolerOn
-        rows.turnOffAndDisconnect.isHidden = !connected
 
         // "Change Device" duplicates what the open picker already offers, so
         // it steps aside while the picker is on screen.
@@ -185,23 +166,19 @@ extension AppDelegate {
         }
     }
 
-    private func refreshSettingsItems(connected: Bool, coolerOn: Bool,
-                                      pickingDevice: Bool) {
-        startAtLoginRow.isChecked = LoginItem.isEnabled
-
+    private func refreshSettingsItems(coolerOn: Bool, pickingDevice: Bool) {
         // Mirrors the isHidden decisions made for these rows elsewhere in this
         // file, so the panel's corners always land on the rows actually shown.
         applyPanelSegments(to: [
             (turnOffRow, coolerOn),
-            (turnOffDisconnectRow, connected),
-            (startAtLoginRow, true),
             (changeDeviceRow, !pickingDevice),
+            (turnOffQuitRow, true),
         ])
     }
 
     // ── Menu-bar button ──────────────────────────────────────────────────────
 
-    private func refreshStatusItemButton(coolerOn: Bool) {
+    private func refreshStatusItemButton() {
         guard let button = statusItem.button else { return }
         let temperature = ble.isConnected
             ? SystemInfo.formatTemp(thermal.dieTemperatureC, degreeOnly: true)
@@ -214,17 +191,11 @@ extension AppDelegate {
         // tint of *template* images in the menu bar itself and ignores
         // contentTintColor there, so a template mark can't be forced white.
         //
-        // White by default, heat-graded while the cooler is actually
-        // running — so a coloured mark always means something is happening
-        // — and dimmed while there's no link.
-        let markColor: NSColor
-        if !ble.isConnected {
-            markColor = NSColor.white.withAlphaComponent(0.55)
-        } else if coolerOn {
-            markColor = UIStyle.heatColor(thermal.dieTemperatureC)
-        } else {
-            markColor = .white
-        }
+        // Always plain white. It used to be heat-graded while the cooler ran
+        // and dimmed while it didn't, which put three states into a 16pt mark
+        // sitting among two dozen monochrome system icons — read as a glitch
+        // far more often than as a reading. The menu says all of it in words.
+        let markColor = NSColor.white
 
         if markColor != menuBarIconColor {
             menuBarIconColor = markColor
@@ -238,10 +209,7 @@ extension AppDelegate {
     private func refreshCards(connected: Bool) {
         statusCard.update(StatusCardView.ViewModel(
             dieTempC: thermal.dieTemperatureC,
-            thermalState: thermal.thermalState,
-            mode: ble.mode,
-            isConnected: connected,
-            appMode: appMode))
+            thermalState: thermal.thermalState))
 
         coolerPanel.update(CoolerPanelView.ViewModel(
             isConnected: connected,
@@ -249,8 +217,35 @@ extension AppDelegate {
             deviceModelName: ble.profile?.modelName,
             telemetry: telemetry,
             mode: ble.mode,
-            fanTint: led.fanTint(dieC: thermal.dieTemperatureC),
-            deviceLooksPoweredOff: switchMonitor.looksPoweredOff))
+            deviceLooksPoweredOff: switchMonitor.looksPoweredOff,
+            note: coolerNote(connected: connected)))
+    }
+
+    /// The single thing the cooler panel says beyond its numbers, chosen in
+    /// priority order.
+    ///
+    /// These were four banner rows that decided independently whether to
+    /// appear, and the decisions had to be kept from contradicting each
+    /// other — the manual reminder suppressed while switching, and again while
+    /// the device's own switch was off, because two stacked warnings bury the
+    /// one that explains what the user is actually seeing. As a single choice
+    /// that can't happen: the most urgent fact wins, and the rest wait.
+    private func coolerNote(connected: Bool) -> CoolerPanelView.Note? {
+        guard connected else { return nil }
+        if isSwitching { return .switching }
+        if switchMonitor.looksPoweredOff { return .powerSwitchOff }
+        if appMode == .manual {
+            guard ble.mode.isOn else {
+                // Off, and the user didn't do it — say who did.
+                return manualTimedOut ? .manualTimedOut : nil
+            }
+            // "Stays on" is the honest line only when nothing else will end the
+            // session. With a limit running, the countdown beside the picker
+            // already says when it ends, and this would contradict it.
+            return manualTimer.deadline == nil ? .manualStaysOn : nil
+        }
+        // Auto below its threshold: doing nothing, on purpose.
+        return ble.mode.isOn ? nil : .autoWaiting(engageC: Int(autopilot.engageC))
     }
 
 }

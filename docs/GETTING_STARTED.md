@@ -12,7 +12,8 @@ and using the menu-bar controls. For supported hardware, see
   responsive.
 - A supported Bluetooth cooler.
 
-macOS asks for Bluetooth permission on first launch.
+The app asks for Bluetooth permission when you press **Allow Bluetooth
+Access**, not at launch.
 
 ## Install a release
 
@@ -47,8 +48,9 @@ A local build does not need to pass through Gatekeeper.
    permission prompt, until you ask it to.
 3. Press **Scan**, then click a cooler under *Supported*.
 4. Once a cooler has been chosen, the menu leads with its panel instead, and
-   **Connect** on that panel reconnects to it. A green **Connected** mark beside
-   the model name means the Bluetooth link is live.
+   **Connect** on that panel reconnects to it. The line under the model name
+   reads **Connected over Bluetooth** once the link is live, and reports the
+   connection's progress before that.
 
 If access was refused at some point, the button becomes **Open Bluetooth
 Settings** — macOS only asks once, so System Settings → Privacy & Security →
@@ -69,14 +71,24 @@ support and links to the porting guide.
   when cooling begins; higher power tiers are derived from that value. The
   detailed ladder and cooldown behaviour are in [`AUTOPILOT.md`](AUTOPILOT.md).
 - **Manual** holds the level selected with the power slider until you change it.
+  Because nothing else will end that session, Manual carries an **auto-off**
+  limit — 1, 2 or 3 hours, with the time left shown beside it. When it runs out
+  the cooler switches off and stays off; it does not hand back to Auto, which
+  would simply start it again. Choosing **∞** removes the limit and asks you to
+  confirm: a thermoelectric plate held cold for hours condenses moisture onto
+  itself whether or not anyone is at the Mac.
 - **Cooler effect** changes the cooler's LED mode and colour. The Auto effect
   uses colour as a heat gauge.
 - **Turn Off** stops cooling while keeping the connection available.
-- **Turn Off & Disconnect** stops the cooler and releases its Bluetooth link.
+- **Turn Off & Quit** stops the cooler, releases its Bluetooth link, and closes
+  the app. It is the way out — a cooler must never be left running with nothing
+  controlling it, so quitting always turns it off first.
 
-The menu-bar readout shows the Mac's current die temperature and changes tint
-as the Mac heats up. Connected cooler telemetry includes cold-plate, hot-side,
-ambient, and fan-speed readings.
+The menu-bar readout shows the Mac's current die temperature beside a plain
+white mark. Connected cooler telemetry includes cold-plate, hot-side, ambient,
+and fan-speed readings, with the cooler's own line reporting anything that needs
+saying — a switch that is off, a change in flight, or Auto waiting for the Mac
+to warm up.
 
 The cooler reports plate temperatures only while actively cooling. A cold or
 hot reading of `0 °C` while off is device behaviour, not a sensor fault.

@@ -25,9 +25,6 @@ final class StatusCardView: NSView {
     struct ViewModel {
         var dieTempC: Double?
         var thermalState: ThermalState = .nominal
-        var mode: CoolingMode = .off
-        var isConnected = false
-        var appMode: AppMode = .auto
     }
 
     private var model = ViewModel()
@@ -48,7 +45,6 @@ final class StatusCardView: NSView {
     private static let headerFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
     private static let tempFont = NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .light)
     private static let stateFont = NSFont.systemFont(ofSize: 11, weight: .regular)
-    private static let badgeFont = NSFont.systemFont(ofSize: 9, weight: .medium)
 
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.height))
@@ -101,7 +97,7 @@ final class StatusCardView: NSView {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
             .map { "v\($0)" }
 
-    /// Logo, title, version and the mode badge.
+    /// Logo, title and version.
     private func drawBrandHeader(y: inout CGFloat) {
         let pad = Self.pad
         let logoSize = Self.logoSize
@@ -115,10 +111,6 @@ final class StatusCardView: NSView {
             let version = UIStyle.text(versionText, UIStyle.captionFont, .tertiaryLabelColor)
             version.draw(at: NSPoint(x: titleX + title.size().width + 8, y: y + 5))
         }
-
-        let (badgeText, badgeColor) = modeBadge()
-        let badge = UIStyle.text(badgeText, Self.badgeFont, badgeColor)
-        badge.draw(at: NSPoint(x: bounds.width - pad - badge.size().width, y: y + 5))
 
         y += logoSize + Self.headerGap
     }
@@ -143,21 +135,4 @@ final class StatusCardView: NSView {
         y += tempHeight
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-
-    /// The badge top-right: Auto, or the active manual cooling level.
-    private func modeBadge() -> (String, NSColor) {
-        guard model.isConnected else { return ("", .clear) }
-        if model.appMode == .auto {
-            return ("Auto", .systemBlue)
-        }
-        let color: NSColor
-        switch model.mode.zone {
-        case .off:    color = .secondaryLabelColor
-        case .low:    color = .systemTeal
-        case .medium: color = .systemCyan
-        case .max:    color = .systemRed
-        }
-        return (model.mode.displayName, color)
-    }
 }

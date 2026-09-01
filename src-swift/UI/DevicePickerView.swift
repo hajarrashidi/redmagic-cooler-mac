@@ -141,8 +141,11 @@ final class DevicePickerView: PanelRowView {
         addSubview(listSpinner)
         y += Layout.listHeight + 8
 
+        // Full panel width. It is the only action on this row, and often the
+        // only one in the whole menu — sizing it to the word "Scan" made the
+        // primary thing to do here the smallest thing on screen.
         scanButton.onClick = { [weak self] in self?.scanTapped() }
-        scanButton.frame = NSRect(x: pad, y: y, width: scanButton.fittingWidth,
+        scanButton.frame = NSRect(x: pad, y: y, width: content,
                                   height: PillButton.height)
         addSubview(scanButton)
         y += PillButton.height + 10
@@ -203,8 +206,6 @@ final class DevicePickerView: PanelRowView {
         case .notAsked: scanButton.title = Text.allow
         case .denied:   scanButton.title = Text.openSettings
         }
-        scanButton.setFrameSize(NSSize(width: scanButton.fittingWidth,
-                                       height: PillButton.height))
         // Only a running scan disables it; the permission titles are the two
         // cases where pressing it is the entire point.
         scanButton.isEnabled = !isScanning && (permission != .granted || phase != .bluetoothOff)

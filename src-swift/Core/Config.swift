@@ -47,6 +47,7 @@ enum Config {
         static let legacyAutoProfile = "AutoProfile"
         static let legacyCustomEngageC = "CustomEngageTempC"
         static let manualStep      = "ManualSliderStep"    // Int, 0…9
+        static let manualTimeout   = "ManualTimeoutHours"  // Int; 0 = unlimited
         static let ledEffect       = "LedEffect"           // LedEffect.rawValue
         static let ledHue          = "LedHue"              // Double, 0…1
         static let breathStyle     = "BreathStyle"         // BreathStyle.rawValue

@@ -19,9 +19,13 @@ extension AppDelegate {
             // tick, so the cooler follows the temperature the moment Auto is
             // chosen instead of holding the manual level for a few seconds.
             EventLogger.record("switch → auto")
+            // Auto backs itself off as the Mac cools, so it needs no deadline.
+            manualTimer.stop()
+            manualTimedOut = false
             runAutopilot()
 
         case .manual:
+            manualTimedOut = false
             // Entering Manual should actually cool. If the remembered level is
             // Off — never set, or left off last time — fall back to a mid step
             // rather than switching to a mode that does nothing.
@@ -60,43 +64,111 @@ extension AppDelegate {
         setAppMode(.manual)
         UserDefaults.standard.set(index, forKey: Config.Key.manualStep)
 
+        // Restarted on every command, not just on entering Manual. Someone
+        // working the slider has plainly not forgotten the cooler, and cutting
+        // them off mid-session on a clock they started an hour ago would be the
+        // timer punishing exactly the user it isn't for.
+        manualTimedOut = false
+        if step.mode.isOn {
+            manualTimer.start()
+        } else {
+            manualTimer.stop()
+        }
+
         ble.apply(mode: step.mode, fanPercent: step.fanPercent)
         EventLogger.record("manual → \(step.name)")
+        refresh()
+    }
+
+    // ── Manual auto-off ──────────────────────────────────────────────────────
+
+    /// Applies a new limit, asking first when it is "no limit at all".
+    ///
+    /// The confirmation is the point of the feature: a timer that can be
+    /// removed with one unremarkable click on a segmented control is a timer
+    /// most people will remove by accident.
+    func setManualTimeout(_ timeout: ManualTimer.Timeout) {
+        guard timeout == .unlimited else {
+            applyManualTimeout(timeout)
+            return
+        }
+        // The menu has already dismissed itself — a modal cannot open under a
+        // tracking menu — so the alert goes up on the next turn of the loop.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.confirmUnlimitedManual() {
+                self.applyManualTimeout(.unlimited)
+            } else {
+                // Nothing to undo: the stored timeout never changed, and
+                // refresh puts the control back where it was.
+                self.refresh()
+            }
+        }
+    }
+
+    private func applyManualTimeout(_ timeout: ManualTimer.Timeout) {
+        manualTimer.setTimeout(timeout, running: appMode == .manual && ble.mode.isOn)
+        UserDefaults.standard.set(timeout.rawValue, forKey: Config.Key.manualTimeout)
+        EventLogger.record("manual auto-off → \(timeout.label)")
+        refresh()
+    }
+
+    private func confirmUnlimitedManual() -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Run Manual cooling with no time limit?"
+        alert.informativeText =
+            "Manual will then keep the cooler running until you turn it off. "
+            + "A thermoelectric plate held below room temperature for hours "
+            + "draws moisture out of the air onto itself, and it does that "
+            + "whether or not you are at the Mac. The auto-off timer is what "
+            + "normally ends a session you forget about."
+        alert.addButton(withTitle: "Remove the Limit")
+        alert.addButton(withTitle: "Keep the Timer")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// Ends a Manual session that has run its course.
+    ///
+    /// Deliberately stops at "off" rather than handing back to Auto. The whole
+    /// premise is that nobody is watching, and Auto would read the temperature
+    /// and start the cooler up again within seconds — which is the one outcome
+    /// a user who set a one-hour limit did not ask for.
+    func expireManualTimerIfDue() {
+        guard appMode == .manual, ble.mode.isOn, manualTimer.hasExpired() else { return }
+        manualTimer.stop()
+        manualTimedOut = true
+        UserDefaults.standard.set(0, forKey: Config.Key.manualStep)
+        ble.apply(mode: .off, fanPercent: 0)
+        EventLogger.record("manual auto-off timer expired → cooler off")
         refresh()
     }
 
     @objc func turnOff() {
         guard beginSwitching() else { return }
         setAppMode(.manual)
+        manualTimer.stop()
+        manualTimedOut = false
         UserDefaults.standard.set(0, forKey: Config.Key.manualStep)
         ble.apply(mode: .off, fanPercent: 0)
         EventLogger.record("manual → off")
         refresh()
     }
 
-    /// Turns the cooler off and drops the Bluetooth link, leaving the app idle
-    /// until the user reconnects. Frees the cooler's single connection slot —
-    /// needed before the phone app can pair with it.
-    @objc func turnOffAndDisconnect() {
+    /// Turns the cooler off and quits — the app's way out, and the only one.
+    ///
+    /// The hardware work is `applicationShouldTerminate`'s: it commands the
+    /// cooler off and waits for a clean disconnect before letting the process
+    /// go, because a cooler left running after its controller exits keeps
+    /// running with nothing to stop it. All that's left here is to record the
+    /// off state, so the next launch doesn't restore a level the user has just
+    /// asked to end.
+    @objc func turnOffAndQuit() {
         setAppMode(.manual)
         UserDefaults.standard.set(0, forKey: Config.Key.manualStep)
-
-        guard ble.isConnected else {
-            EventLogger.record("disconnect (user)")
-            ble.disconnectAndStop()
-            refresh()
-            return
-        }
-
-        // Command off first, then drop the link once both writes have
-        // flushed — apply spaces the fan write clear of the mode change.
-        ble.apply(mode: .off, fanPercent: 0)
-        EventLogger.record("manual → off + disconnect (user)")
-        DispatchQueue.main.asyncAfter(deadline: .now() + Config.BLE.disconnectFlushDelay) {
-            [weak self] in
-            self?.ble.disconnectAndStop()
-        }
-        refresh()
+        EventLogger.record("turn off & quit (user)")
+        NSApp.terminate(self)
     }
 
     /// Sets and persists the active control loop.
@@ -229,14 +301,4 @@ extension AppDelegate {
         refresh()
     }
 
-    // ── Settings ─────────────────────────────────────────────────────────────
-
-    @objc func toggleStartAtLogin() {
-        LoginItem.setEnabled(!LoginItem.isEnabled)
-        refresh()
-    }
-
-    @objc func quitApp() {
-        NSApp.terminate(self)
-    }
 }

@@ -7,7 +7,8 @@ import AppKit
 /// This is that layout, once. Subclasses supply their own typed API on top.
 class SegmentedRowView: PanelRowView {
 
-    /// 8 + header 13 + gap 5 + control 26 + 8 — panelPad at both edges.
+    /// 8 + header 13 + gap 5 + control 26 + 8 — panelPad at both edges. A row
+    /// with a caption is taller by however many lines that caption wraps to.
     static let rowHeight: CGFloat = 60
 
     let control: NSSegmentedControl
@@ -15,26 +16,52 @@ class SegmentedRowView: PanelRowView {
     /// - Parameters:
     ///   - title: uppercase section header drawn above the control.
     ///   - labels: segment titles, in order.
-    init(width: CGFloat, title: String, labels: [String]) {
+    ///   - caption: optional sentence between the header and the control,
+    ///     for a choice whose labels can't carry their own meaning.
+    init(width: CGFloat, title: String, labels: [String], caption: String? = nil) {
         control = NSSegmentedControl(labels: labels,
                                      trackingMode: .selectOne,
                                      target: nil, action: nil)
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.rowHeight))
 
         let hPad = UIStyle.panelContentX
-        let header = UIStyle.sectionLabel(title)
-        header.frame = NSRect(x: hPad, y: Self.rowHeight - UIStyle.panelPad - 13,
-                              width: width - hPad * 2, height: 13)
-        addSubview(header)
+        let content = width - hPad * 2
 
+        // Built bottom-up: this view is unflipped, and the caption's height is
+        // only known once it has wrapped, so everything above it follows from
+        // where it lands rather than from a constant.
         control.segmentStyle = .rounded
         control.selectedSegment = 0
         control.target = self
         control.action = #selector(segmentChanged)
         control.frame = NSRect(x: hPad, y: UIStyle.panelPad,
-                               width: width - hPad * 2, height: 26)
+                               width: content, height: 26)
         control.autoresizingMask = .width
         addSubview(control)
+
+        var top = UIStyle.panelPad + 26
+
+        if let caption {
+            let label = NSTextField(wrappingLabelWithString: caption)
+            label.font = UIStyle.captionFont
+            label.textColor = .tertiaryLabelColor
+            label.preferredMaxLayoutWidth = content
+            let height = ceil(label.fittingSize.height)
+            // `wrappingLabelWithString` hands back an Auto Layout field; every
+            // row here is placed by frame, and a constraint-driven label with
+            // no constraints collapses to nothing.
+            label.translatesAutoresizingMaskIntoConstraints = true
+            top += 6
+            label.frame = NSRect(x: hPad, y: top, width: content, height: height)
+            addSubview(label)
+            top += height + 3
+            frame.size.height = top + 13 + UIStyle.panelPad
+        }
+
+        let header = UIStyle.sectionLabel(title)
+        header.frame = NSRect(x: hPad, y: frame.height - UIStyle.panelPad - 13,
+                              width: content, height: 13)
+        addSubview(header)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -52,7 +79,15 @@ final class ModeSwitchView: SegmentedRowView {
     var onSelect: ((AppMode) -> Void)?
 
     init(width: CGFloat) {
-        super.init(width: width, title: "COOLING", labels: ["Auto", "Manual"])
+        // Two words that both sound like "it cools". Which one is in charge of
+        // the fan, and when, is the thing the menu was never saying.
+        super.init(width: width, title: "COOLING", labels: ["Auto", "Manual"],
+                   // No "the slider below": that slider is hidden in Manual,
+                   // and a caption that points at something absent is worse
+                   // than one that names it.
+                   caption: "Auto turns cooling on by itself once the Mac "
+                          + "passes your engage threshold, and backs off as it "
+                          + "cools. Manual holds one level until you change it.")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 

@@ -71,9 +71,9 @@ final class CoolerBLEManager: NSObject {
             case supported(DeviceProfile)
             /// Recognisably a vendor cooler, but no profile matches.
             case unsupported
-            /// Any other named device. Listed only when the user asks to see
-            /// everything, so a cooler advertising an unexpected name is still
-            /// findable — that name is step one of the porting guide.
+            /// Any other named device. Listed too, so a cooler advertising an
+            /// unexpected name is still findable — that name is step one of
+            /// the porting guide.
             case other
         }
 
@@ -133,10 +133,9 @@ final class CoolerBLEManager: NSObject {
 
     private var scanSettleTimer: Timer?
     private var connectTimeoutTimer: Timer?
-    /// The one scheduled reconnect, kept so it can be cancelled — by a user
-    /// disconnect, a rescan, or a newer schedule. A plain `asyncAfter` here
-    /// used to fire anyway after "Turn Off & Disconnect", reconnecting a link
-    /// the user had just asked to stay down.
+    /// The one scheduled reconnect, kept so it can be cancelled — by a
+    /// rescan, or by a newer schedule. A plain `asyncAfter` here used to fire
+    /// regardless, starting a second attempt racing the first.
     private var pendingReconnect: DispatchWorkItem?
 
     /// Set while deliberately dropping a stale system-level link at launch, so
@@ -144,9 +143,6 @@ final class CoolerBLEManager: NSObject {
     /// normal reconnect delay.
     private var clearingStaleLink = false
 
-    /// Set when the user chose "Turn Off & Disconnect". Suppresses the
-    /// automatic reconnect so the link stays down until they ask for it back.
-    private var userRequestedDisconnect = false
     /// True only after the user has initiated a connection in this app session.
     /// Before that, the menu stays idle and leads with its Connect action.
     private var connectionRequested = false
@@ -212,11 +208,10 @@ final class CoolerBLEManager: NSObject {
     /// Reconnects to a previously selected cooler, or scans so the user can
     /// choose one when this manager has no selection yet.
     ///
-    /// Safe to call repeatedly; it cancels any standing user-requested
-    /// disconnect but will not disturb an attempt already in flight.
+    /// Safe to call repeatedly; it will not disturb an attempt already in
+    /// flight.
     func startScanning() {
         connectionRequested = true
-        userRequestedDisconnect = false
         // This call supersedes any reconnect still queued; letting it fire too
         // would start a second attempt racing this one.
         pendingReconnect?.cancel()
@@ -358,26 +353,6 @@ final class CoolerBLEManager: NSObject {
         if let peripheral {
             central?.cancelPeripheralConnection(peripheral)
         }
-    }
-
-    /// User-initiated disconnect that stays down, freeing the cooler's single
-    /// connection slot (so, say, the phone app can pair) until the user
-    /// explicitly reconnects.
-    func disconnectAndStop() {
-        connectionRequested = false
-        userRequestedDisconnect = true
-        cancelTimers()
-        central?.stopScan()
-
-        guard let peripheral else {
-            // Nothing connected — settle straight into idle.
-            userRequestedDisconnect = false
-            setPhase(.idle)
-            delegate?.bleManager(self, didChangeConnected: false)
-            return
-        }
-        EventLogger.record("BLE — user requested disconnect")
-        central?.cancelPeripheralConnection(peripheral)
     }
 
     /// Forgets the current device and clears discovery state, for "Change Device".
@@ -633,14 +608,6 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
             self.peripheral = nil
             setPhase(.idle)
             completion()
-            return
-        }
-
-        // User asked to stay disconnected — free the slot and idle.
-        if userRequestedDisconnect {
-            userRequestedDisconnect = false
-            self.peripheral = nil
-            setPhase(.idle)
             return
         }
 

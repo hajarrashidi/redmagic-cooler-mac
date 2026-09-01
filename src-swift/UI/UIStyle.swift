@@ -8,11 +8,25 @@ enum UIStyle {
 
     // ── Metrics ──────────────────────────────────────────────────────────────
 
+    /// The width the menu's proportions were drawn against. Every horizontal
+    /// metric below is expressed as its value at *this* width and scaled to the
+    /// real one, so widening the menu widens its panels, their insets and their
+    /// corners together. Stretching the panels alone would leave a wider menu
+    /// looking like the same menu with padding sucked out of it.
+    private static let baseWidth: CGFloat = 300
+
     /// Width of every custom menu row. NSMenu sizes itself to its widest item,
     /// so these must agree or rows will not line up.
-    static let menuWidth: CGFloat = 300
+    static let menuWidth: CGFloat = 330
+
+    /// Rounded to whole points: half-pixel insets blur every edge that lands
+    /// on them, and the error never exceeds half a point anyway.
+    private static func scaled(_ value: CGFloat) -> CGFloat {
+        (value * menuWidth / baseWidth).rounded()
+    }
+
     /// Horizontal inset matching the system's own menu-item text alignment.
-    static let hPad: CGFloat = 14
+    static let hPad = scaled(14)
 
     // ── Panels ───────────────────────────────────────────────────────────────
     //
@@ -23,7 +37,7 @@ enum UIStyle {
     // the whole menu reads as one system.
 
     /// Margin between a panel's edge and the menu's.
-    static let panelInset: CGFloat = 8
+    static let panelInset = scaled(8)
     /// Vertical gap between two panels stacked in the menu. Shared, because the
     /// panels either side of it are separate menu rows and each supplies half
     /// the run-up to it.
@@ -34,11 +48,22 @@ enum UIStyle {
     /// these — one uniform rhythm across the whole menu, status card included.
     static let panelPad: CGFloat = 8
     /// Horizontal breathing room inside a panel.
-    static let panelContentPad: CGFloat = 12
+    static let panelContentPad = scaled(12)
     /// Left edge of anything drawn inside a panel.
     static let panelContentX = panelInset + panelContentPad
-    static let panelRadius: CGFloat = 9
-    static var panelColor: NSColor { NSColor.labelColor.withAlphaComponent(0.045) }
+    static let panelRadius = scaled(9)
+    /// Fill for every panel in the menu.
+    ///
+    /// White rather than the old barely-there grey wash, because it is doing a
+    /// different job now: `NSMenu` draws its own vibrant, translucent backdrop
+    /// and AppKit gives no way to make that opaque, so the panels are the only
+    /// surface the app controls — and between them they cover nearly the whole
+    /// menu. Filling them lifts the content off whatever happens to be behind
+    /// the menu, which a 4.5%-opacity grey could never do.
+    ///
+    /// This is the number to turn if the menu still reads as too transparent
+    /// (or, past about 0.8, as a flat white box).
+    static var panelColor: NSColor { NSColor.white.withAlphaComponent(0.62) }
 
     /// Where a row sits within a multi-row panel, which decides which of its
     /// corners are rounded. Rows stack with no gap in the menu, so a section

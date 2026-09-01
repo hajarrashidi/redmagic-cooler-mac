@@ -122,20 +122,4 @@ final class LedController {
             lastWrittenColor = nil
         }
     }
-
-    // ── Presentation ─────────────────────────────────────────────────────────
-
-    /// The tint for the status card's spinning fan, mirroring what the LED is
-    /// actually showing. Multi-colour effects have no single representative
-    /// colour, so they get teal.
-    func fanTint(dieC: Double?) -> NSColor {
-        guard ble.isConnected, ble.mode.isOn else { return .tertiaryLabelColor }
-        switch effect {
-        case .off:      return .secondaryLabelColor
-        case .auto:     return UIStyle.heatColor(dieC)
-        case .stroke:   return pickedColor.nsColor
-        case .breath:   return breathStyle == .monochrome ? pickedColor.nsColor : .systemTeal
-        case .colorful: return .systemTeal
-        }
-    }
 }

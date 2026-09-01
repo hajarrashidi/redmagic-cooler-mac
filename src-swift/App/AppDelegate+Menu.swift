@@ -13,16 +13,11 @@ struct MenuRows {
     let modeSwitch: NSMenuItem
     let autoOptions: NSMenuItem
     let coolingSlider: NSMenuItem
-    let manualWarning: NSMenuItem
-    let switchingBanner: NSMenuItem
-    let deviceOffBanner: NSMenuItem
+    let manualTimer: NSMenuItem
     let effect: NSMenuItem
     let breathToggle: NSMenuItem
     let color: NSMenuItem
-    let autoWaitingBanner: NSMenuItem
     let turnOff: NSMenuItem
-    let turnOffAndDisconnect: NSMenuItem
-    let startAtLogin: NSMenuItem
     let changeDevice: NSMenuItem
 }
 
@@ -98,6 +93,14 @@ extension AppDelegate: NSMenuDelegate {
         let coolingSliderItem = wrap(coolingSlider)
         menu.addItem(coolingSliderItem)
 
+        // Directly under the level it limits, so the two read as one control:
+        // how hard, and for how long.
+        manualTimerRow = ManualTimerView(width: width)
+        manualTimerRow.onSelect = { [weak self] in self?.setManualTimeout($0) }
+        manualTimerRow.panelSegment = .bottom
+        let manualTimerItem = wrap(manualTimerRow)
+        menu.addItem(manualTimerItem)
+
         // LED controls are part of the same cooler-control panel as its mode.
         effectPicker = LedEffectPickerView(width: width)
         effectPicker.onSelect = { [weak self] in self?.applyLedEffect($0) }
@@ -114,35 +117,6 @@ extension AppDelegate: NSMenuDelegate {
         let colorItem = wrap(colorPicker)
         menu.addItem(colorItem)
 
-        let manualWarning = wrap(banner(width, .warning,
-                                        "Manual stays on until you turn it off",
-                                        symbol: "exclamationmark.triangle.fill"))
-        menu.addItem(manualWarning)
-
-        let switchingBanner = wrap(banner(width, .info, "Switching… please wait",
-                                          symbol: "arrow.triangle.2.circlepath",
-                                          spinner: true))
-        menu.addItem(switchingBanner)
-
-        // The app can command this cooler over Bluetooth but cannot override
-        // its physical switch, so when that switch is off every control in the
-        // menu silently does nothing. Say so rather than let the user conclude
-        // the app is broken.
-        let deviceOffBanner = wrap(banner(width, .warning,
-                                          "Cooler's power switch is off",
-                                          symbol: "power.circle.fill"))
-        menu.addItem(deviceOffBanner)
-
-        // Auto's whole job is to do nothing until the Mac gets hot, which
-        // looks exactly like a cooler that isn't working. The banner names the
-        // temperature being waited for, so the silence reads as intent.
-        autoWaitingBanner = BannerView(width: width)
-        let autoWaiting = wrap(autoWaitingBanner)
-        // Configured by refresh(), which names the current threshold; until
-        // then it would render as an empty banner.
-        autoWaiting.isHidden = true
-        menu.addItem(autoWaiting)
-
         // ── Settings ─────────────────────────────────────────────────────────
         // Custom rows rather than plain items, so the section can sit on a
         // panel like every other group. Which row opens and closes the panel
@@ -155,20 +129,6 @@ extension AppDelegate: NSMenuDelegate {
         let turnOff = wrap(turnOffRow)
         menu.addItem(turnOff)
 
-        turnOffDisconnectRow = settingsRow("Turn Off & Disconnect Bluetooth",
-                                           symbol: "antenna.radiowaves.left.and.right.slash") {
-            [weak self] in self?.turnOffAndDisconnect()
-        }
-        let turnOffAndDisconnect = wrap(turnOffDisconnectRow)
-        menu.addItem(turnOffAndDisconnect)
-
-        startAtLoginRow = settingsRow("Start at Login",
-                                      symbol: "arrow.right.to.line.compact") {
-            [weak self] in self?.toggleStartAtLogin()
-        }
-        let startAtLogin = wrap(startAtLoginRow)
-        menu.addItem(startAtLogin)
-
         // Unlike its neighbours this row leaves the menu open, because
         // everything it does — the inline picker, the scan progress — is
         // displayed in the rows above it.
@@ -178,8 +138,16 @@ extension AppDelegate: NSMenuDelegate {
         let changeDevice = wrap(changeDeviceRow)
         menu.addItem(changeDevice)
 
-        menu.addItem(actionItem("Quit RedMagic Cooler", #selector(quitApp),
-                                symbol: "xmark.circle"))
+        // The way out of the app, and the last row for that reason. It replaces
+        // a plain "Quit": quitting already turned the cooler off and dropped the
+        // link — leaving hardware running after its controller exits is not an
+        // option — so a separate Quit only offered the same thing under a name
+        // that hid what it did.
+        turnOffQuitRow = settingsRow("Turn Off & Quit", symbol: "power.circle") {
+            [weak self] in self?.turnOffAndQuit()
+        }
+        let turnOffAndQuit = wrap(turnOffQuitRow)
+        menu.addItem(turnOffAndQuit)
 
         rows = MenuRows(updateBanner: updateBannerItem,
                         skipUpdate: skipUpdate,
@@ -188,16 +156,11 @@ extension AppDelegate: NSMenuDelegate {
                         modeSwitch: modeSwitchItem,
                         autoOptions: autoOptionsItem,
                         coolingSlider: coolingSliderItem,
-                        manualWarning: manualWarning,
-                        switchingBanner: switchingBanner,
-                        deviceOffBanner: deviceOffBanner,
+                        manualTimer: manualTimerItem,
                         effect: effectItem,
                         breathToggle: breathToggleItem,
                         color: colorItem,
-                        autoWaitingBanner: autoWaiting,
                         turnOff: turnOff,
-                        turnOffAndDisconnect: turnOffAndDisconnect,
-                        startAtLogin: startAtLogin,
                         changeDevice: changeDevice)
 
         statusItem.menu = menu

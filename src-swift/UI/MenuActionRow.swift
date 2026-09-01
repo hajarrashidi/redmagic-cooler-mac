@@ -21,12 +21,6 @@ final class MenuActionRow: PanelRowView {
     /// items did.
     var dismissesMenu = false
 
-    /// Shows a trailing checkmark, for a row that is a toggle ("Start at
-    /// Login") rather than a one-shot action.
-    var isChecked = false {
-        didSet { checkView.isHidden = !isChecked }
-    }
-
     /// Greyed out and unclickable, for a row that is information rather than an
     /// action — a cooler we can see but have no profile for.
     var isEnabled = true {
@@ -38,7 +32,6 @@ final class MenuActionRow: PanelRowView {
 
     private let iconView = NSImageView()
     private let label = NSTextField(labelWithString: "")
-    private let checkView = NSImageView()
     private var isHighlighted = false
 
     private let hPad: CGFloat = UIStyle.panelContentX
@@ -68,14 +61,6 @@ final class MenuActionRow: PanelRowView {
                              width: width - (hPad + 16 + 8) - hPad - 18, height: 17)
         addSubview(label)
 
-        checkView.frame = NSRect(x: width - hPad - 14, y: vPad + 4, width: 14, height: 14)
-        checkView.imageScaling = .scaleProportionallyUpOrDown
-        checkView.image = NSImage(systemSymbolName: "checkmark",
-                                  accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-        checkView.isHidden = true
-        addSubview(checkView)
-
         applyTint()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -95,7 +80,6 @@ final class MenuActionRow: PanelRowView {
         }
         label.textColor = color
         iconView.contentTintColor = color
-        checkView.contentTintColor = color
         needsDisplay = true
     }
 
