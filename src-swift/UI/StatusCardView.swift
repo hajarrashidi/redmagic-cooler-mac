@@ -53,23 +53,17 @@ final class StatusCardView: NSView {
     // ── Metrics ──────────────────────────────────────────────────────────────
 
     private static let pad = UIStyle.hPad
-    /// Vertical breathing room inside a section panel.
-    private static let panelPad: CGFloat = 14
-    /// Margin between a panel's edge and the menu's, so the panels read as
-    /// cards sitting *in* the menu rather than as full-bleed bands.
-    private static let panelInset: CGFloat = 8
-    /// Horizontal breathing room inside a panel.
-    private static let panelContentPad: CGFloat = 12
-    /// Left edge of anything drawn inside a panel.
-    ///
-    /// Deliberately indented past `pad`, which stays where AppKit puts the text
-    /// of the plain items further down the menu. Raising `pad` itself to gain a
-    /// margin would drag those out of alignment; indenting only panel content
-    /// is the same arrangement System Settings uses — a section label at the
-    /// window inset, with its group box content sitting further in.
-    private static let panelContentX = panelInset + panelContentPad
+    // Panel metrics live in UIStyle now, shared with every panelled section of
+    // the menu, so this card and the control rows below it can never drift.
+    private static let panelPad = UIStyle.panelPad
+    private static let panelInset = UIStyle.panelInset
+    private static let panelContentX = UIStyle.panelContentX
     private static let panelGap: CGFloat = 10
-    private static let panelRadius: CGFloat = 9
+    private static let panelRadius = UIStyle.panelRadius
+    /// The animated fan in the cooler panel: its glyph size, and the lane
+    /// reserved for it so telemetry cells never run underneath it.
+    private static let fanSize: CGFloat = 26
+    private static let fanLane = fanSize + 10
     private static let logoSize: CGFloat = 18
     /// Gap below the brand header, used twice: once by the header's own
     /// bottom margin and once before the first panel.
@@ -146,6 +140,7 @@ final class StatusCardView: NSView {
         y += Self.macPanelHeight + Self.panelGap
 
         drawPanel(at: y, height: Self.devicePanelHeight)
+        drawFan(panelTop: y)
         var deviceY = y + Self.panelPad
         drawDeviceSection(y: &deviceY)
     }
@@ -153,9 +148,19 @@ final class StatusCardView: NSView {
     private func drawPanel(at y: CGFloat, height: CGFloat) {
         let inset = Self.panelInset
         let rect = NSRect(x: inset, y: y, width: bounds.width - inset * 2, height: height)
-        NSColor.labelColor.withAlphaComponent(0.045).setFill()
+        UIStyle.panelColor.setFill()
         NSBezierPath(roundedRect: rect, xRadius: Self.panelRadius,
                      yRadius: Self.panelRadius).fill()
+    }
+
+    /// The spinning fan, centred vertically along the cooler panel's trailing
+    /// edge — it lives with the device it narrates, not in the brand header.
+    private func drawFan(panelTop: CGFloat) {
+        let rect = NSRect(x: bounds.width - Self.panelContentX - Self.fanSize,
+                          y: panelTop + (Self.devicePanelHeight - Self.fanSize) / 2,
+                          width: Self.fanSize, height: Self.fanSize)
+        FanGlyph.draw(in: rect, angleRadians: fanAngle,
+                      color: model.fanTint, zone: runningZone)
     }
 
     // Measured once from the fonts themselves, so `height` below stays correct
@@ -170,7 +175,13 @@ final class StatusCardView: NSView {
     static let devicePanelHeight =
         panelPad + 14 + cellLabelHeight + 2 + cellValueHeight + panelPad
 
-    /// Logo, title, spinning fan and the mode badge.
+    /// The running app's version, shown beside the title. Read once — the
+    /// bundle can't change under a running process.
+    private static let versionText: String? =
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
+            .map { "v\($0)" }
+
+    /// Logo, title, version and the mode badge.
     private func drawBrandHeader(y: inout CGFloat) {
         let pad = Self.pad
         let logoSize = Self.logoSize
@@ -180,12 +191,10 @@ final class StatusCardView: NSView {
         let titleX = pad + logoSize + 7
         title.draw(at: NSPoint(x: titleX, y: y + 2))
 
-        let fanSize: CGFloat = 20
-        FanGlyph.draw(in: NSRect(x: titleX + title.size().width + 8, y: y,
-                                 width: fanSize, height: fanSize),
-                      angleRadians: fanAngle,
-                      color: model.fanTint,
-                      zone: runningZone)
+        if let versionText = Self.versionText {
+            let version = UIStyle.text(versionText, UIStyle.captionFont, .tertiaryLabelColor)
+            version.draw(at: NSPoint(x: titleX + title.size().width + 8, y: y + 5))
+        }
 
         let (badgeText, badgeColor) = modeBadge()
         let badge = UIStyle.text(badgeText, Self.badgeFont, badgeColor)
@@ -253,7 +262,8 @@ final class StatusCardView: NSView {
             return
         }
 
-        let cellWidth = (bounds.width - pad * 2) / CGFloat(cells.count)
+        // The fan occupies the panel's trailing edge; keep the cells clear of it.
+        let cellWidth = (bounds.width - pad * 2 - Self.fanLane) / CGFloat(cells.count)
         let labelHeight = UIStyle.text("A", Self.cellLabelFont).size().height
         let valueHeight = UIStyle.text("0", UIStyle.valueFont).size().height
 

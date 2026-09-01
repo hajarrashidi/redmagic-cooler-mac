@@ -12,7 +12,7 @@ import AppKit
 /// coolers found", unable to tell whether the app had even seen their device.
 /// Showing the advertised name gives them step one of the porting guide, which
 /// the footer links to.
-final class DevicePickerView: NSView {
+final class DevicePickerView: PanelRowView {
 
     var onSelect: ((CoolerBLEManager.DiscoveredDevice) -> Void)?
     var onScanAgain: (() -> Void)?
@@ -52,8 +52,10 @@ final class DevicePickerView: NSView {
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Layout.height))
         autoresizingMask = .width
+        // The picker is a section of its own, on the same surface as the rest.
+        panelSegment = .only
 
-        let pad = UIStyle.hPad
+        let pad = UIStyle.panelContentX
         let content = width - pad * 2
 
         let header = UIStyle.sectionLabel("AVAILABLE DEVICES")

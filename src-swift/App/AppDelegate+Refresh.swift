@@ -16,7 +16,7 @@ extension AppDelegate {
         refreshUpdateNotice()
         refreshControls(isManual: isManual)
         refreshVisibility(connected: connected, coolerOn: coolerOn, isManual: isManual)
-        refreshSettingsItems()
+        refreshSettingsItems(connected: connected, coolerOn: coolerOn)
         refreshStatusItemButton(coolerOn: coolerOn)
         refreshStatusCard(connected: connected)
     }
@@ -123,10 +123,35 @@ extension AppDelegate {
         rows.color.isHidden = !coolerOn || !led.usesPickedColor
         rows.ledOffBanner.isHidden = !connected || coolerOn
 
+        // The LED panel's membership follows the effect, so which row rounds
+        // it off has to be recomputed alongside the visibility above.
+        applyPanelSegments(to: [
+            (effectPicker, !rows.effect.isHidden),
+            (breathToggle, !rows.breathToggle.isHidden),
+            (colorPicker, !rows.color.isHidden),
+        ])
+
         // Power items: "Turn Off" only while it's running, "Turn Off &
         // Disconnect" whenever we hold a link at all.
         rows.turnOff.isHidden = !coolerOn
         rows.turnOffAndDisconnect.isHidden = !connected
+
+        // "Change Device" duplicates what the open picker already offers, so
+        // it steps aside while the picker is on screen.
+        rows.changeDevice.isHidden = isSelectingDevice
+    }
+
+    /// Hands each visible row its slice of the section panel — first rounds the
+    /// top, last rounds the bottom, a sole survivor rounds both.
+    private func applyPanelSegments(to rows: [(view: PanelRowView, visible: Bool)]) {
+        let visible = rows.filter(\.visible).map(\.view)
+        for (index, view) in visible.enumerated() {
+            let top = (index == 0)
+            let bottom = (index == visible.count - 1)
+            view.panelSegment = top && bottom ? .only
+                              : top ? .top
+                              : bottom ? .bottom : .middle
+        }
     }
 
     /// Reflects the live connection phase, so the user never clicks "Connect"
@@ -141,69 +166,51 @@ extension AppDelegate {
         }
     }
 
-    /// The persisted menu-bar style, read fresh on every refresh so the
-    /// submenu's checkmark and the button itself can never disagree.
-    private var menuBarStyle: MenuBarIndicator {
-        MenuBarIndicator(
-            persisted: UserDefaults.standard.string(forKey: Config.Key.indicatorStyle))
-    }
+    private func refreshSettingsItems(connected: Bool, coolerOn: Bool) {
+        startAtLoginRow.isChecked = LoginItem.isEnabled
 
-    private func refreshSettingsItems() {
-        let style = menuBarStyle
-        for item in rows.indicatorStyle.submenu?.items ?? [] {
-            let itemStyle = (item.representedObject as? String).map(MenuBarIndicator.init(rawValue:))
-            item.state = (itemStyle == style) ? .on : .off
-        }
-        rows.startAtLogin.state = LoginItem.isEnabled ? .on : .off
+        // Mirrors the isHidden decisions made for these rows elsewhere in this
+        // file, so the panel's corners always land on the rows actually shown.
+        applyPanelSegments(to: [
+            (turnOffRow, coolerOn),
+            (turnOffDisconnectRow, connected),
+            (startAtLoginRow, true),
+            (changeDeviceRow, !isSelectingDevice),
+        ])
     }
 
     // ── Menu-bar button ──────────────────────────────────────────────────────
 
     private func refreshStatusItemButton(coolerOn: Bool) {
         guard let button = statusItem.button else { return }
-        let style = menuBarStyle
         let temperature = ble.isConnected
             ? SystemInfo.formatTemp(thermal.dieTemperatureC, degreeOnly: true)
             : ""
 
-        switch style {
-        case .text:
-            button.image = nil
-            // Forget the cached mark colour along with the image it described.
-            // Left in place, switching back to the icon style with an unchanged
-            // colour would skip the redraw below and leave no mark at all.
-            menuBarIconColor = nil
-            button.title = ble.isConnected
-                ? (temperature.isEmpty ? "Magic" : "Magic \(temperature)")
-                : ble.phase.menuBarText
-            button.contentTintColor = nil
+        button.imagePosition = temperature.isEmpty ? .imageOnly : .imageLeading
+        button.title = temperature.isEmpty ? "" : " \(temperature)"
 
-        case .icon:
-            button.imagePosition = temperature.isEmpty ? .imageOnly : .imageLeading
-            button.title = temperature.isEmpty ? "" : " \(temperature)"
-
-            // Drawn in its final colour rather than tinted: macOS manages the
-            // tint of *template* images in the menu bar itself and ignores
-            // contentTintColor there, so a template mark can't be forced white.
-            //
-            // White by default, heat-graded while the cooler is actually
-            // running — so a coloured mark always means something is happening
-            // — and dimmed while there's no link.
-            let markColor: NSColor
-            if !ble.isConnected {
-                markColor = NSColor.white.withAlphaComponent(0.55)
-            } else if coolerOn {
-                markColor = UIStyle.heatColor(thermal.dieTemperatureC)
-            } else {
-                markColor = .white
-            }
-
-            if markColor != menuBarIconColor {
-                menuBarIconColor = markColor
-                button.image = RedMagicLogo.image(size: 16, color: markColor)
-            }
-            button.contentTintColor = nil
+        // Drawn in its final colour rather than tinted: macOS manages the
+        // tint of *template* images in the menu bar itself and ignores
+        // contentTintColor there, so a template mark can't be forced white.
+        //
+        // White by default, heat-graded while the cooler is actually
+        // running — so a coloured mark always means something is happening
+        // — and dimmed while there's no link.
+        let markColor: NSColor
+        if !ble.isConnected {
+            markColor = NSColor.white.withAlphaComponent(0.55)
+        } else if coolerOn {
+            markColor = UIStyle.heatColor(thermal.dieTemperatureC)
+        } else {
+            markColor = .white
         }
+
+        if markColor != menuBarIconColor {
+            menuBarIconColor = markColor
+            button.image = RedMagicLogo.image(size: 16, color: markColor)
+        }
+        button.contentTintColor = nil
     }
 
     // ── Status card ──────────────────────────────────────────────────────────

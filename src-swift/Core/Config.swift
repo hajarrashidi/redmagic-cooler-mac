@@ -41,7 +41,6 @@ enum Config {
     /// existing user, so treat these as a migration surface.
     enum Key {
         static let preferredDevice = "PreferredDeviceUUID"
-        static let indicatorStyle  = "IndicatorStyle"      // MenuBarIndicator.rawValue
         static let appMode         = "AppMode"             // AppMode.rawValue
         static let autoProfile     = "AutoProfile"         // AutoProfile.rawValue
         static let customEngageC   = "CustomEngageTempC"   // Double, °C

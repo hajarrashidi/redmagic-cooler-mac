@@ -24,8 +24,8 @@ struct MenuRows {
     let ledOffBanner: NSMenuItem
     let turnOff: NSMenuItem
     let turnOffAndDisconnect: NSMenuItem
-    let indicatorStyle: NSMenuItem
     let startAtLogin: NSMenuItem
+    let changeDevice: NSMenuItem
 }
 
 extension AppDelegate: NSMenuDelegate {
@@ -78,17 +78,23 @@ extension AppDelegate: NSMenuDelegate {
 
         modeSwitch = ModeSwitchView(width: width)
         modeSwitch.onSelect = { [weak self] in self?.selectMode($0) }
+        // The cooling section is one panel: the mode switch on top, and exactly
+        // one of the auto options or the slider closing it (refresh shows one
+        // or the other, never both).
+        modeSwitch.panelSegment = .top
         let modeSwitchItem = wrap(modeSwitch)
         menu.addItem(modeSwitchItem)
 
         autoOptions = AutoOptionsView(width: width)
         autoOptions.onProfile = { [weak self] in self?.selectAutoProfile($0) }
         autoOptions.onEngageChange = { [weak self] in self?.setCustomEngage($0) }
+        autoOptions.panelSegment = .bottom
         let autoOptionsItem = wrap(autoOptions)
         menu.addItem(autoOptionsItem)
 
         coolingSlider = CoolingSliderView(width: width)
         coolingSlider.onStep = { [weak self] in self?.applyManualStep($0) }
+        coolingSlider.panelSegment = .bottom
         let coolingSliderItem = wrap(coolingSlider)
         menu.addItem(coolingSliderItem)
 
@@ -138,32 +144,40 @@ extension AppDelegate: NSMenuDelegate {
         menu.addItem(ledOffBanner)
 
         // ── Settings ─────────────────────────────────────────────────────────
+        // Custom rows rather than plain items, so the section can sit on a
+        // panel like every other group. Which row opens and closes the panel
+        // depends on what is visible, so refresh() assigns the segments.
         menu.addItem(.separator())
         menu.addItem(sectionHeader("Settings"))
 
-        let turnOff = actionItem("Turn Off", #selector(turnOff), symbol: "power")
+        turnOffRow = settingsRow("Turn Off", symbol: "power") {
+            [weak self] in self?.turnOff()
+        }
+        let turnOff = wrap(turnOffRow)
         menu.addItem(turnOff)
 
-        let turnOffAndDisconnect = actionItem(
-            "Turn Off & Disconnect Bluetooth",
-            #selector(turnOffAndDisconnect),
-            symbol: "antenna.radiowaves.left.and.right.slash")
+        turnOffDisconnectRow = settingsRow("Turn Off & Disconnect Bluetooth",
+                                           symbol: "antenna.radiowaves.left.and.right.slash") {
+            [weak self] in self?.turnOffAndDisconnect()
+        }
+        let turnOffAndDisconnect = wrap(turnOffDisconnectRow)
         menu.addItem(turnOffAndDisconnect)
 
-        let indicatorStyle = indicatorStyleItem()
-        menu.addItem(indicatorStyle)
-
-        let startAtLogin = actionItem("Start at Login", #selector(toggleStartAtLogin),
-                                      symbol: "arrow.right.to.line.compact")
+        startAtLoginRow = settingsRow("Start at Login",
+                                      symbol: "arrow.right.to.line.compact") {
+            [weak self] in self?.toggleStartAtLogin()
+        }
+        let startAtLogin = wrap(startAtLoginRow)
         menu.addItem(startAtLogin)
 
-        // A custom row, not a plain item: this one has to leave the menu open,
-        // because everything it does — the inline picker, the scan progress —
-        // is displayed in the rows above it.
-        let changeDeviceRow = MenuActionRow(width: width, title: "Change Device…",
-                                            symbol: "antenna.radiowaves.left.and.right")
+        // Unlike its neighbours this row leaves the menu open, because
+        // everything it does — the inline picker, the scan progress — is
+        // displayed in the rows above it.
+        changeDeviceRow = MenuActionRow(width: width, title: "Change Device…",
+                                        symbol: "antenna.radiowaves.left.and.right")
         changeDeviceRow.onClick = { [weak self] in self?.changeDevice() }
-        menu.addItem(wrap(changeDeviceRow))
+        let changeDevice = wrap(changeDeviceRow)
+        menu.addItem(changeDevice)
 
         menu.addItem(.separator())
         menu.addItem(actionItem("Quit RedMagic Cooler", #selector(quitApp),
@@ -187,8 +201,8 @@ extension AppDelegate: NSMenuDelegate {
                         ledOffBanner: ledOffBanner,
                         turnOff: turnOff,
                         turnOffAndDisconnect: turnOffAndDisconnect,
-                        indicatorStyle: indicatorStyle,
-                        startAtLogin: startAtLogin)
+                        startAtLogin: startAtLogin,
+                        changeDevice: changeDevice)
 
         statusItem.menu = menu
     }
@@ -251,24 +265,13 @@ extension AppDelegate: NSMenuDelegate {
         return item
     }
 
-    /// The "Menu Bar Display" submenu. Item tags carry the `MenuBarIndicator`
-    /// each one selects, so the action needs no index arithmetic.
-    private func indicatorStyleItem() -> NSMenuItem {
-        let submenu = NSMenu()
-        for (index, style) in [MenuBarIndicator.icon, .text].enumerated() {
-            let title = (style == .icon) ? "Icon + temperature" : "Text label"
-            let item = NSMenuItem(title: title,
-                                  action: #selector(setIndicatorStyle(_:)),
-                                  keyEquivalent: "")
-            item.target = self
-            item.tag = index
-            item.representedObject = style.rawValue
-            submenu.addItem(item)
-        }
-
-        let item = NSMenuItem(title: "Menu Bar Display", action: nil, keyEquivalent: "")
-        item.image = symbolImage("menubar.rectangle")
-        item.submenu = submenu
-        return item
+    /// A settings-panel action row that closes the menu when clicked, the way
+    /// the plain items it replaced did.
+    private func settingsRow(_ title: String, symbol: String,
+                             onClick: @escaping () -> Void) -> MenuActionRow {
+        let row = MenuActionRow(width: UIStyle.menuWidth, title: title, symbol: symbol)
+        row.dismissesMenu = true
+        row.onClick = onClick
+        return row
     }
 }

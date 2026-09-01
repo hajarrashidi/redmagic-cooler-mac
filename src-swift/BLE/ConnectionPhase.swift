@@ -64,17 +64,4 @@ enum ConnectionPhase: Equatable {
         }
     }
 
-    /// Compact text for the menu-bar item in its "Text label" style.
-    var menuBarText: String {
-        switch self {
-        case .scanning:              return "Scanning…"
-        case .connecting:            return "Connecting…"
-        case .discoveringServices,
-             .discoveringCharacteristics: return "Setting up…"
-        case .reconnecting:          return "Reconnecting…"
-        case .bluetoothOff:          return "BT Off"
-        case .bluetoothUnauthorized: return "BT Denied"
-        default:                     return "Magic"
-        }
-    }
 }

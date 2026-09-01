@@ -4,14 +4,14 @@ import AppKit
 ///
 /// Replaces an earlier fixed-swatch picker; the cooler accepts arbitrary RGB,
 /// so there was no reason to ration the choices.
-final class HueSpectrumPickerView: NSView {
+final class HueSpectrumPickerView: PanelRowView {
 
     /// Reports the chosen hue in 0…1, continuously during a drag.
     var onSelect: ((Double) -> Void)?
 
     private(set) var hue: CGFloat = 0
 
-    private let hPad = UIStyle.hPad
+    private let hPad = UIStyle.panelContentX
     private let barTop: CGFloat = 24
     private let barHeight: CGFloat = 16
     /// How far the thumb overhangs the bar on each side.
@@ -37,6 +37,7 @@ final class HueSpectrumPickerView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
         UIStyle.drawSectionHeader("COLOR", at: NSPoint(x: hPad, y: 4))
 
         // Hex readout, right-aligned against the header.

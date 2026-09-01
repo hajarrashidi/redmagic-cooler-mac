@@ -40,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var effectPicker: LedEffectPickerView!
     var breathToggle: BreathStyleToggleView!
     var colorPicker: HueSpectrumPickerView!
+    var turnOffRow: MenuActionRow!
+    var turnOffDisconnectRow: MenuActionRow!
+    var startAtLoginRow: MenuActionRow!
+    var changeDeviceRow: MenuActionRow!
 
     /// The menu items wrapping those rows, plus the plain items whose
     /// visibility depends on state.

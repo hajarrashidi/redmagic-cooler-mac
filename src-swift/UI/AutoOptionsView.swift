@@ -9,7 +9,7 @@ import AppKit
 /// slider read as an unlabelled setting. Only Custom gets the slider: Standard's
 /// ladder is fixed, and its 40 °C engage point sits below the slider's own
 /// minimum, so a disabled slider could not even be positioned honestly.
-final class AutoOptionsView: NSView {
+final class AutoOptionsView: PanelRowView {
 
     var onProfile: ((AutoProfile) -> Void)?
     /// Engage temperature in °C, fired continuously as the slider moves.
@@ -17,7 +17,7 @@ final class AutoOptionsView: NSView {
 
     private(set) var profile: AutoProfile = .standard
 
-    private let hPad = UIStyle.hPad
+    private let hPad = UIStyle.panelContentX
     private let segmented = NSSegmentedControl(labels: ["Standard", "Custom"],
                                                trackingMode: .selectOne,
                                                target: nil, action: nil)

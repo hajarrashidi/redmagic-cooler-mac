@@ -5,9 +5,9 @@ import AppKit
 /// Four rows in this menu — cooling mode, auto profile, LED effect, breath
 /// style — were near-identical copies of the same 25 lines of framing code.
 /// This is that layout, once. Subclasses supply their own typed API on top.
-class SegmentedRowView: NSView {
+class SegmentedRowView: PanelRowView {
 
-    static let rowHeight: CGFloat = 50
+    static let rowHeight: CGFloat = 54
 
     let control: NSSegmentedControl
 
@@ -20,9 +20,9 @@ class SegmentedRowView: NSView {
                                      target: nil, action: nil)
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.rowHeight))
 
-        let hPad = UIStyle.hPad
+        let hPad = UIStyle.panelContentX
         let header = UIStyle.sectionLabel(title)
-        header.frame = NSRect(x: hPad, y: 34, width: width - hPad * 2, height: 13)
+        header.frame = NSRect(x: hPad, y: 35, width: width - hPad * 2, height: 13)
         addSubview(header)
 
         control.segmentStyle = .rounded

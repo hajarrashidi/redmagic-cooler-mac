@@ -217,12 +217,6 @@ extension AppDelegate {
 
     // ── Settings ─────────────────────────────────────────────────────────────
 
-    @objc func setIndicatorStyle(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String else { return }
-        UserDefaults.standard.set(raw, forKey: Config.Key.indicatorStyle)
-        refresh()
-    }
-
     @objc func toggleStartAtLogin() {
         LoginItem.setEnabled(!LoginItem.isEnabled)
         refresh()

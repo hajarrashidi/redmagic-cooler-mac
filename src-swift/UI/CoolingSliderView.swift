@@ -4,7 +4,7 @@ import AppKit
 ///
 /// Mirrors the vendor app's layout — Off, then three sub-steps each within Low,
 /// Medium and Max — so muscle memory carries over.
-final class CoolingSliderView: NSView {
+final class CoolingSliderView: PanelRowView {
 
     /// One slider position: a TEC mode paired with a fan speed.
     ///
@@ -43,8 +43,9 @@ final class CoolingSliderView: NSView {
     private let slider = NSSlider()
     private let nameLabel = NSTextField(labelWithString: "Off")
 
-    /// Wider than `UIStyle.hPad` so the slider's thumb doesn't overhang the row.
-    private let hPad: CGFloat = 20
+    /// Matches the panel content inset, which also keeps the slider's thumb
+    /// from overhanging the panel edge.
+    private let hPad: CGFloat = UIStyle.panelContentX
     private let zoneLabelY: CGFloat = 4
 
     init(width: CGFloat) {
@@ -52,13 +53,13 @@ final class CoolingSliderView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
         let title = UIStyle.sectionLabel("POWER")
-        title.frame = NSRect(x: UIStyle.hPad, y: height - 14, width: width * 0.6, height: 13)
+        title.frame = NSRect(x: UIStyle.panelContentX, y: height - 14, width: width * 0.6, height: 13)
         addSubview(title)
 
         nameLabel.font = UIStyle.captionFont
         nameLabel.textColor = .secondaryLabelColor
         nameLabel.alignment = .right
-        nameLabel.frame = NSRect(x: 0, y: height - 14, width: width - UIStyle.hPad, height: 13)
+        nameLabel.frame = NSRect(x: 0, y: height - 14, width: width - UIStyle.panelContentX, height: 13)
         addSubview(nameLabel)
 
         slider.minValue = 0
