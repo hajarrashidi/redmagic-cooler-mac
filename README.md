@@ -11,7 +11,7 @@ Bluetooth REDMAGIC phone cooler.**
 [![Latest release](https://img.shields.io/badge/release-latest-blue)](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-https://github.com/user-attachments/assets/5cb1d11a-144d-45fd-8af2-f1497c26474c
+https://github.com/user-attachments/assets/f54d4e59-15c9-4597-b938-ab11829f4c0d
 
 </div>
 
