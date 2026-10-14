@@ -30,8 +30,8 @@ extension AppDelegate {
             // Off — never set, or left off last time — fall back to a mid step
             // rather than switching to a mode that does nothing.
             var step = UserDefaults.standard.object(forKey: Config.Key.manualStep) as? Int
-                ?? CoolingSliderView.defaultStep
-            if step <= 0 { step = CoolingSliderView.defaultStep }
+                ?? activeProfile.defaultManualStep
+            if step <= 0 { step = activeProfile.defaultManualStep }
             EventLogger.record("switch → manual")
             applyManualStep(step, alreadySwitching: true)
         }
@@ -48,6 +48,93 @@ extension AppDelegate {
         refresh()
     }
 
+    /// The profile of the connected model, or the 6 Pro's before any is chosen,
+    /// so the slider always has a layout to show.
+    var activeProfile: DeviceProfile { ble.profile ?? .vcCooler6Pro }
+
+    // ── Temperature source and Auto curve ────────────────────────────────────
+
+    func showTemperatureSourceWindow() {
+        let window = temperatureSourceWindow ?? TemperatureSourceWindow(current: temperatureSource)
+        window.onSelect = { [weak self] in self?.setTemperatureSource($0) }
+        temperatureSourceWindow = window
+        window.show(current: temperatureSource)
+    }
+
+    func setTemperatureSource(_ source: ThermalMonitor.Source) {
+        temperatureSource = source
+        UserDefaults.standard.set(source.stored, forKey: Config.Key.temperatureSource)
+        EventLogger.record("temperature source → \(source.title)")
+        thermal = ThermalMonitor.read(source: source)
+        if appMode == .auto { runAutopilot() }
+        refresh()
+    }
+
+    func showPlateLimitWindow() {
+        let window = plateLimitWindow ?? PlateLimitWindow()
+        window.onSave = { [weak self] in self?.setPlateLimit(enabled: $0, floorC: $1) }
+        plateLimitWindow = window
+        window.show(enabled: plateLimitOn, floorC: plateLimitC)
+    }
+
+    func setPlateLimit(enabled: Bool, floorC: Double) {
+        let defaults = UserDefaults.standard
+        plateLimitOn = enabled
+        plateLimitC = floorC.clamped(to: Config.PlateLimit.minC...Config.PlateLimit.maxC)
+        defaults.set(plateLimitOn, forKey: Config.Key.plateLimitOn)
+        defaults.set(plateLimitC, forKey: Config.Key.plateLimitC)
+        EventLogger.record(enabled
+            ? "plate limit → hold cooling back below \(Int(plateLimitC.rounded()))°C"
+            : "plate limit → off")
+        // Re-judge at once instead of waiting for the next tick.
+        updatePlateGuard()
+        refresh()
+    }
+
+    func showAutoCurveWindow() {
+        let defaults = UserDefaults.standard
+        let window = autoCurveWindow ?? AutoCurveWindow()
+        window.onSave = { [weak self] in self?.applyCustomCurve(enabled: $0, temperaturesC: $1) }
+        autoCurveWindow = window
+
+        // One stage per step of the connected cooler, so the curve can use all
+        // of them: the 8 Pro's eight levels and Diablo, or the 6 Pro's nine.
+        let stages = activeProfile.curveStages
+        let saved = (defaults.array(forKey: Config.Key.customCurveC) as? [Double])
+            .flatMap { AutopilotPolicy.isValidCurve($0, stages: stages.count) ? $0 : nil }
+        let fallback = AutopilotPolicy.spreadCurve(engageC: autopilot.engageC, stages: stages.count)
+        window.show(stageNames: stages.map(\.name),
+                    enabled: autopilot.customCurveC != nil,
+                    curveC: autopilot.customCurveC ?? saved ?? fallback,
+                    defaultCurveC: fallback)
+    }
+
+    /// Puts the saved custom curve in force, if one is switched on and fits the
+    /// connected cooler (a curve has one point per stage, so it belongs to a
+    /// model with that many). Otherwise the ladder from the threshold slider
+    /// applies. Called at launch, on connect and after a save, since each can
+    /// change which cooler it is for.
+    func syncCustomCurve() {
+        let defaults = UserDefaults.standard
+        let saved = defaults.array(forKey: Config.Key.customCurveC) as? [Double]
+        let usable = defaults.bool(forKey: Config.Key.customCurveOn)
+            && saved.map { AutopilotPolicy.isValidCurve($0, stages: activeProfile.curveStages.count) } == true
+        autopilot.setCustomCurve(usable ? saved : nil)
+    }
+
+    func applyCustomCurve(enabled: Bool, temperaturesC: [Double]) {
+        let defaults = UserDefaults.standard
+        defaults.set(enabled, forKey: Config.Key.customCurveOn)
+        if AutopilotPolicy.isValidCurve(temperaturesC, stages: activeProfile.curveStages.count) {
+            defaults.set(temperaturesC, forKey: Config.Key.customCurveC)
+        }
+        syncCustomCurve()
+        let summary = temperaturesC.map { String(format: "%.0f", $0) }.joined(separator: "/")
+        EventLogger.record(enabled ? "auto curve → custom \(summary)°C" : "auto curve → default ladder")
+        if appMode == .auto { runAutopilot() }
+        refresh()
+    }
+
     /// Applies a manual slider position.
     ///
     /// - Parameter alreadySwitching: set when called from `selectMode`, which
@@ -58,8 +145,9 @@ extension AppDelegate {
         }
         // Persist the clamped index too, so a bad value can't round-trip
         // through UserDefaults and come back out of range.
-        let index = index.clamped(to: CoolingSliderView.indexRange)
-        let step = CoolingSliderView.steps[index]
+        let steps = activeProfile.manualSteps
+        let index = index.clamped(to: 0...(steps.count - 1))
+        let step = steps[index]
 
         setAppMode(.manual)
         UserDefaults.standard.set(index, forKey: Config.Key.manualStep)
@@ -75,7 +163,7 @@ extension AppDelegate {
             manualTimer.stop()
         }
 
-        ble.apply(mode: step.mode, fanPercent: step.fanPercent)
+        ble.apply(mode: step.mode, fanPercent: step.fanPercent, boost: step.boost)
         EventLogger.record("manual → \(step.name)")
         refresh()
     }

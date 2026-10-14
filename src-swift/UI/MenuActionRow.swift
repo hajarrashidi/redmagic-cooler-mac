@@ -25,9 +25,22 @@ final class MenuActionRow: PanelRowView {
     /// action — a cooler we can see but have no profile for.
     var isEnabled = true {
         didSet {
+            // refresh() sets this on every pass; only a real change may touch the
+            // hover tracking or the highlight.
+            guard isEnabled != oldValue else { return }
+            if !isEnabled { isHighlighted = false }
             applyTint()
             updateTrackingAreas()
         }
+    }
+
+    /// Drops the hover highlight. A menu can close, or a click can dismiss it,
+    /// without the row ever being sent "mouse exited", and the row would then
+    /// open highlighted next time.
+    func clearHighlight() {
+        guard isHighlighted else { return }
+        isHighlighted = false
+        applyTint()
     }
 
     private let iconView = NSImageView()
@@ -112,6 +125,7 @@ final class MenuActionRow: PanelRowView {
         guard isEnabled else { return }
         // Read the menu before acting — the handler may mutate the rows.
         let menu = dismissesMenu ? enclosingMenuItem?.menu : nil
+        clearHighlight()
         onClick?()
         menu?.cancelTracking()
     }

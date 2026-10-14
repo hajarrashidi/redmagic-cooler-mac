@@ -1,7 +1,7 @@
 # Adding support for another cooler
 
-The app only *knows* one device today — the REDMAGIC VC Cooler 6 Pro — but all
-of that knowledge lives in a single place:
+The app *knows* two devices today — the REDMAGIC VC Cooler 6 Pro and the Cryo
+Cooler 8 Pro — and all of that knowledge lives in a single place:
 [`src-swift/BLE/DeviceProfile.swift`](../src-swift/BLE/DeviceProfile.swift).
 A profile bundles everything model-specific: the name to match in a Bluetooth
 scan, the GATT service and characteristic UUIDs, and how to decode the
@@ -12,15 +12,17 @@ the discovery results.
 So supporting a new cooler is a reverse-engineering exercise that ends in one
 new `DeviceProfile`. This guide walks the whole path. Read
 [`FINDINGS.md`](FINDINGS.md) alongside it — that's the finished worked example
-for the 6 Pro, and other REDMAGIC coolers will likely look very similar.
+for the 6 Pro. [`FINDINGS_CRYO_COOLER_8_PRO.md`](FINDINGS_CRYO_COOLER_8_PRO.md)
+shows a sibling that shares the service and most UUIDs but not the meaning of
+the bytes, so check each one rather than assuming.
 
 The current candidate list is in [`COMPATIBILITY.md`](COMPATIBILITY.md). It
 intentionally focuses on Bluetooth/app-controlled coolers; button-only models
 cannot be supported by a macOS controller without a remote interface.
 
-**Pull requests are very welcome.** The 6 Pro is the only cooler the author
-owns, so every other model depends entirely on someone who has the hardware
-being willing to poke at it. If you own one, the work below is the whole job —
+**Pull requests are very welcome.** The 6 Pro is the cooler the author owns; the
+8 Pro came from someone who had one. Every other model depends on someone who
+has the hardware and is willing to poke at it. If you own one, the work below is the whole job —
 and it is genuinely small once the bytes are known.
 
 You don't have to finish to be useful. If you stall halfway, open an issue with
@@ -59,7 +61,10 @@ shows nothing at all.
 Pick a lowercase substring of the name that's unlikely to match anything else —
 that'll be the profile's `nameHints` entry. Keep it specific: it is matched
 against every device in Bluetooth range, so a hint like `cooler` will collide
-with unrelated hardware. If the name is also plausibly another REDMAGIC cooler,
+with unrelated hardware. It must also not be a substring of a sibling's name
+that another profile already claims: the 6 Pro's hint `magcooler` matches
+`RM Magcooler 8pro` too, which is why the 8 Pro hint is `magcooler 8pro` and its
+profile is listed first in `DeviceProfile.all` (first match wins). If the name is also plausibly another REDMAGIC cooler,
 add it to `DeviceProfile.vendorHints` too, so devices the app can't yet drive
 are still listed for the next person.
 
@@ -119,8 +124,20 @@ no hall sensor), give it a placeholder UUID that won't be found — discovery
 skips characteristics the device doesn't expose — and the related feature
 simply stays inert. If it needs *more* than the profile can express (a
 different write payload shape, extra controls), extend `DeviceProfile` with a
-new closure the way `decodeTelemetry` works, and keep the model-specific bytes
-out of `CoolerBLEManager`.
+new closure the way `modeBytes`, `fanBytes` and `makeTelemetryDecoder` work, and
+keep the model-specific bytes out of `CoolerBLEManager`. The 8 Pro profile uses
+all three: its single cooling level has no separate mode and fan, and its
+telemetry arrives as one field per frame, so the decoder is created per
+connection and keeps the latest value of each field. Make sure `fanBytes` is
+safe for `0`, which the app sends whenever it turns the cooler off.
+
+`autoFanPercents` lets a model choose the fan value Auto sends for each tier when
+the autopilot's own values don't suit its range. The manual power slider shows
+whatever the profile lists in `manualSteps`, with
+`sliderLabels` under it, so a model can offer its own levels. If the cooler has a
+separate maximum-output mode (the 8 Pro's Diablo), give it a `boostUUID` and
+`boostBytes`, and mark the step `boost: true`. The app clears boost with every
+command that doesn't ask for it, so it cannot be left on.
 
 ## Step 5 — Verify with the probe scripts
 

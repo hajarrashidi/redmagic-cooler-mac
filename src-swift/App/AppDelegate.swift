@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var turnOffRow: MenuActionRow!
     var changeDeviceRow: MenuActionRow!
     var turnOffQuitRow: MenuActionRow!
+    var autoCurveRow: MenuActionRow!
+    var temperatureSourceRow: MenuActionRow!
+    var plateLimitRow: MenuActionRow!
     var skipUpdateRow: MenuActionRow!
 
     /// The menu items wrapping those rows, plus the plain items whose
@@ -66,10 +69,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// panel says what happened exactly once.
     var manualTimedOut = false
 
+    /// Which temperature counts as the Mac's: the SoC die average unless the
+    /// user picked another in Temperature Source.
+    var temperatureSource = ThermalMonitor.Source.dieAverage
+    var temperatureSourceWindow: TemperatureSourceWindow?
+    var autoCurveWindow: AutoCurveWindow?
+
+    /// Holds cooling back while the cold plate is below the user's limit, so a
+    /// cooler left running does not take it far under the room's dew point.
+    var plateGuard = PlateGuard()
+    var plateLimitOn = true
+    var plateLimitC = Config.PlateLimit.defaultC
+    var plateLimitWindow: PlateLimitWindow?
+
     /// Latest thermal sample, refreshed each tick.
     var thermal = ThermalMonitor.Reading(thermalState: .nominal, dieTemperatureC: nil)
     /// Latest telemetry frame from the cooler, cleared when the link drops.
     var telemetry: CoolerTelemetry?
+    /// When telemetry last redrew the menu. Some coolers report several times a
+    /// second, and every redraw while the menu is open disturbs the controls.
+    var lastTelemetryRefresh: TimeInterval = 0
     /// Whether the magnetic mount is seated.
     var mountAttached: Bool?
 
@@ -133,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ble = CoolerBLEManager()
         ble.delegate = self
         led = LedController(ble: ble)
+        syncCustomCurve()
 
         // Built before the menu, which wires a banner straight to them. A
         // noticed release starts installing at once — the banner narrates the
@@ -148,10 +168,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         buildMenu()
 
-        tickTimer = Timer.scheduledTimer(withTimeInterval: Config.Timing.poll,
-                                         repeats: true) { [weak self] _ in
+        // In the common modes, so it keeps running while a menu is open. In the
+        // default mode alone the Mac's temperature, Auto and the plate limit all
+        // froze for as long as the menu was on screen.
+        let ticker = Timer(timeInterval: Config.Timing.poll, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        RunLoop.main.add(ticker, forMode: .common)
+        tickTimer = ticker
 
         EventLogger.record("app start — mode=\(appMode.rawValue) engage=\(autopilot.engageC)°C")
 
@@ -188,6 +212,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         autopilot = AutopilotPolicy(engageC: engageC)
         defaults.set(autopilot.engageC, forKey: Config.Key.engageC)
+        temperatureSource = ThermalMonitor.Source(
+            stored: defaults.string(forKey: Config.Key.temperatureSource))
+        plateLimitOn = defaults.object(forKey: Config.Key.plateLimitOn) as? Bool ?? true
+        plateLimitC = (defaults.object(forKey: Config.Key.plateLimitC) as? Double
+            ?? Config.PlateLimit.defaultC)
+            .clamped(to: Config.PlateLimit.minC...Config.PlateLimit.maxC)
     }
 
     private func buildStatusItem() {
@@ -204,8 +234,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tickCount += 1
 
         handlePendingProbeCommand()
-        thermal = ThermalMonitor.read()
+        thermal = ThermalMonitor.read(source: temperatureSource)
         updateSwitchMonitor()
+        updatePlateGuard()
         expireManualTimerIfDue()
 
         if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
@@ -234,11 +265,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let decision = autopilot.evaluate(thermalState: thermal.thermalState,
                                           dieC: thermal.dieTemperatureC,
                                           now: Date().timeIntervalSince1970)
-        let tier = decision.tier
-        guard tier.mode != ble.mode || tier.fanPercent != ble.fanPercent else { return }
+        let target = autoTarget(forStep: decision.index)
+        // Against what was asked for, not what was sent: the plate limit can hold
+        // the sent level lower, and that must not look like a change to make.
+        guard target.mode != ble.requested.mode || target.fanPercent != ble.requested.fanPercent
+                || target.boost != ble.requested.boost else { return }
 
-        EventLogger.record("\(decision.reason)  → cooler \(tier.label), fan \(tier.fanPercent)%")
-        ble.apply(mode: tier.mode, fanPercent: tier.fanPercent)
+        EventLogger.record("\(decision.reason)  → cooler \(target.label), fan \(target.fanPercent)%")
+        ble.apply(mode: target.mode, fanPercent: target.fanPercent, boost: target.boost)
+    }
+
+    /// What to send for one step of the autopilot: with a custom curve, the
+    /// matching step of the connected cooler's own slider; otherwise a tier of the
+    /// default ladder (with the model's fan speed for it, if it has its own).
+    private func autoTarget(forStep index: Int)
+        -> (mode: CoolingMode, fanPercent: UInt8, boost: Bool, label: String) {
+        let steps = activeProfile.manualSteps
+        if autopilot.customCurveC != nil, steps.indices.contains(index) {
+            let step = steps[index]
+            return (step.mode, step.fanPercent, step.boost, step.name)
+        }
+        let tier = AutopilotPolicy.tiers[min(index, AutopilotPolicy.tiers.count - 1)]
+        let fan = activeProfile.autoFanPercents?[index] ?? tier.fanPercent
+        return (tier.mode, fan, false, tier.label)
     }
 
     // ── Switching lockout ────────────────────────────────────────────────────

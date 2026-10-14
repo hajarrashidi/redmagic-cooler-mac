@@ -12,15 +12,17 @@ is no remote connection for the macOS app to use.
 
 | Model | Introduced | Official control evidence | Project status |
 |-------|------------|---------------------------|----------------|
-| [REDMAGIC Cryo Cooler 8 Pro](https://redmagic.tech/products/redmagic-cryo-cooler-8-pro) | 2026 | REDMAGIC app connectivity | **Unsupported — unverified and untested** |
+| [REDMAGIC Cryo Cooler 8 Pro](https://redmagic.tech/products/redmagic-cryo-cooler-8-pro) | 2026 | REDMAGIC app connectivity | **Supported — hardware verified** ([findings](FINDINGS_CRYO_COOLER_8_PRO.md)) |
 | [REDMAGIC VC Cooler 6 Pro](https://redmagic.tech/products/redmagic-vc-cooler-6-pro) | 2025 | Goper app | **Supported — hardware verified** |
 | [REDMAGIC VC Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro) | 2024 | Goper app | **Unsupported — unverified and untested** |
 | [REDMAGIC Dual-Core Ice Dock](https://redmagic.tech/blogs/product-information/the-battle-of-redmagic-external-cooling-solutions) | 2022 | Bluetooth and REDMAGIC Equipment app | **Unsupported — unverified and untested** |
 
 The Cryo Cooler 8 series launched on March 10, 2026. REDMAGIC describes the
 Cryo Cooler 8 Pro as its latest generation of external active cooling and
-documents app control; this project has not yet inspected that model's radio,
-GATT table, or protocol. The companion Cryo Cooler 8 Air uses button adjustment
+documents app control. It advertises as `RM Magcooler 8pro` and uses the same
+vendor service as the 6 Pro with different semantics, mapped in
+[`FINDINGS_CRYO_COOLER_8_PRO.md`](FINDINGS_CRYO_COOLER_8_PRO.md). The companion
+Cryo Cooler 8 Air uses button adjustment
 according to its official product page, so it is not included in the table.
 
 The same rule excludes older coolers whose official controls are mechanical or

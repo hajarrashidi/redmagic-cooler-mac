@@ -44,14 +44,21 @@ final class AutoOptionsView: PanelRowView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    /// Syncs the row to the app's current engage temperature.
-    func configure(engageC: Double) {
+    /// True while a custom curve sets the tier temperatures: the slider then has
+    /// nothing to drive, so it is greyed and the row reports where cooling starts.
+    private var usesCustomCurve = false
+
+    /// Syncs the row to the app's current engage temperature, or, with a custom
+    /// curve in use, to the temperature where its first tier engages.
+    func configure(engageC: Double, customFirstC: Double? = nil) {
+        usesCustomCurve = customFirstC != nil
         slider.doubleValue = engageC
-        updateValueLabel()
+        thresholdTitle.stringValue = usesCustomCurve ? "CUSTOM CURVE" : "ENGAGE THRESHOLD"
+        valueLabel.stringValue = "≥ " + SystemInfo.formatTemp(customFirstC ?? engageC)
     }
 
     func setEnabled(_ enabled: Bool) {
-        slider.isEnabled = enabled
+        slider.isEnabled = enabled && !usesCustomCurve
     }
 
     private func updateValueLabel() {

@@ -91,16 +91,23 @@ extension AppDelegate {
         modeSwitch.setMode(appMode)
         modeSwitch.setEnabled(enabled)
 
-        autoOptions.configure(engageC: autopilot.engageC)
+        autoOptions.configure(engageC: autopilot.engageC,
+                              customFirstC: autopilot.customCurveC == nil ? nil : autopilot.firstEngageC)
         autoOptions.setEnabled(enabled)
 
         // While a switch is in flight the fan write hasn't landed yet, so
         // re-deriving the step here would briefly snap the thumb to a
         // neighbouring sub-step. Leave it where the user dropped it and re-sync
         // once the device has settled.
+        coolingSlider.configure(steps: activeProfile.manualSteps,
+                                labels: activeProfile.sliderLabels)
         if !isSwitching {
             coolingSlider.setStep(isManual
-                ? CoolingSliderView.step(matching: ble.mode, fanPercent: ble.fanPercent)
+                // What was asked for, so the thumb stays where the user put it
+                // while the plate limit holds the sent level lower.
+                ? activeProfile.manualSteps.index(matching: ble.requested.mode,
+                                                  fanPercent: ble.requested.fanPercent,
+                                                  boost: ble.requested.boost)
                 : 0)
         }
         coolingSlider.setEnabled(enabled)
@@ -184,7 +191,8 @@ extension AppDelegate {
     }
 
     private func refreshSettingsItems(coolerOn: Bool, pickingDevice: Bool) {
-        for row in [turnOffRow, changeDeviceRow, turnOffQuitRow] {
+        for row in [turnOffRow, autoCurveRow, temperatureSourceRow, plateLimitRow,
+                    changeDeviceRow, turnOffQuitRow] {
             row?.isEnabled = !isInstallingUpdate
         }
 
@@ -192,6 +200,9 @@ extension AppDelegate {
         // file, so the panel's corners always land on the rows actually shown.
         applyPanelSegments(to: [
             (turnOffRow, coolerOn),
+            (autoCurveRow, true),
+            (temperatureSourceRow, true),
+            (plateLimitRow, true),
             (changeDeviceRow, !pickingDevice),
             (turnOffQuitRow, true),
         ])
@@ -256,6 +267,7 @@ extension AppDelegate {
         guard connected else { return nil }
         if isSwitching { return .switching }
         if switchMonitor.looksPoweredOff { return .powerSwitchOff }
+        if ble.heldBack > 0 { return .plateLimit(floorC: plateLimitC) }
         if appMode == .manual {
             guard ble.mode.isOn else {
                 // Off, and the user didn't do it — say who did.
@@ -267,7 +279,7 @@ extension AppDelegate {
             return manualTimer.deadline == nil ? .manualStaysOn : nil
         }
         // Auto below its threshold: doing nothing, on purpose.
-        return ble.mode.isOn ? nil : .autoWaiting(engageC: Int(autopilot.engageC))
+        return ble.mode.isOn ? nil : .autoWaiting(engageC: Int(autopilot.firstEngageC))
     }
 
 }

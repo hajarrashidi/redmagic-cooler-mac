@@ -36,12 +36,15 @@ enum ThermalState: String {
         }
     }
 
-    /// The lowest cooling tier the autopilot may settle at in this state.
-    var tierFloor: Int {
+    /// The lowest step the autopilot may settle at in this state, for a ladder
+    /// whose top ordinary step is `top`: three quarters of the way up under
+    /// `serious` pressure and the top under `critical`. With the default
+    /// four-tier ladder that is tier 3 (medium) and tier 4 (max).
+    func floor(top: Int) -> Int {
         switch self {
         case .nominal, .fair: return 0
-        case .serious:        return 3
-        case .critical:       return 4
+        case .serious:        return Int((Double(top) * 0.75).rounded(.up))
+        case .critical:       return top
         }
     }
 }

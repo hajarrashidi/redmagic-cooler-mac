@@ -28,13 +28,12 @@ vendor app. See the [protocol findings](docs/FINDINGS.md) for the full mapping.
 
 ## Device support
 
-The **REDMAGIC VC Cooler 6 Pro** is currently the only supported and
-hardware-verified model.
-
-The **REDMAGIC Cryo Cooler 8 Pro** is REDMAGIC's latest app-connected cooler as
-of September 2026. It has **not been tested or verified with this project** and
-is not currently supported. Other Bluetooth/app-controlled models are also
-unverified; button-only coolers are outside this project's scope.
+The **REDMAGIC VC Cooler 6 Pro** and the **REDMAGIC Cryo Cooler 8 Pro** are the
+supported and hardware-verified models. The 8 Pro's cooling is a single level
+rather than separate TEC and fan controls, and it has no mount sensor or
+hot-side/ambient readings; see its
+[findings](docs/FINDINGS_CRYO_COOLER_8_PRO.md). Other Bluetooth/app-controlled
+models are unverified; button-only coolers are outside this project's scope.
 
 Read [device compatibility](docs/COMPATIBILITY.md) for the researched model
 list, evidence, and exact support status. If you own an untested Bluetooth

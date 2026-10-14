@@ -149,6 +149,23 @@ extension AppDelegate: NSMenuDelegate {
         let turnOff = wrap(turnOffRow)
         menu.addItem(turnOff)
 
+        // Both open a window of their own, so they dismiss the menu like the
+        // other rows here.
+        autoCurveRow = settingsRow("Auto Curve…", symbol: "chart.xyaxis.line") {
+            [weak self] in self?.showAutoCurveWindow()
+        }
+        menu.addItem(wrap(autoCurveRow))
+
+        temperatureSourceRow = settingsRow("Temperature Source…", symbol: "thermometer.medium") {
+            [weak self] in self?.showTemperatureSourceWindow()
+        }
+        menu.addItem(wrap(temperatureSourceRow))
+
+        plateLimitRow = settingsRow("Plate Limit…", symbol: "snowflake") {
+            [weak self] in self?.showPlateLimitWindow()
+        }
+        menu.addItem(wrap(plateLimitRow))
+
         // Unlike its neighbours this row leaves the menu open, because
         // everything it does — the inline picker, the scan progress — is
         // displayed in the rows above it.
@@ -197,11 +214,14 @@ extension AppDelegate: NSMenuDelegate {
 
     /// Animate the fan only while the menu is actually visible.
     func menuWillOpen(_ menu: NSMenu) {
+        // Rows can be left highlighted by a menu that closed under the pointer.
+        menu.items.forEach { ($0.view as? MenuActionRow)?.clearHighlight() }
         coolerPanel.startAnimating()
         refresh()
     }
 
     func menuDidClose(_ menu: NSMenu) {
+        menu.items.forEach { ($0.view as? MenuActionRow)?.clearHighlight() }
         coolerPanel.stopAnimating()
     }
 

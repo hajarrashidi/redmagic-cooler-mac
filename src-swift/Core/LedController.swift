@@ -93,7 +93,7 @@ final class LedController {
     private func push() {
         switch effect {
         case .off:
-            ble.setLight(effect: LedEffect.DeviceEffect.off.rawValue)
+            ble.setLight(effect: ble.lightOffEffect)
             lastWrittenColor = .black
 
         case .colorful:

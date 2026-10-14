@@ -71,13 +71,30 @@ support and links to the porting guide.
 - **Auto** follows the Mac's temperature. The engage-threshold slider chooses
   when cooling begins; higher power tiers are derived from that value. The
   detailed ladder and cooldown behaviour are in [`AUTOPILOT.md`](AUTOPILOT.md).
+- **Settings → Auto Curve…** sets your own temperature for each stage of your
+  cooler instead of the single threshold, and **Settings → Temperature Source…** picks
+  which Mac sensor Auto mode follows. Both are described in
+  [`AUTOPILOT.md`](AUTOPILOT.md).
 - **Manual** holds the level selected with the power slider until you change it.
   Because nothing else will end that session, Manual carries an **auto-off**
   limit — 1, 2 or 3 hours, with the time left shown beside it. When it runs out
   the cooler switches off and stays off; it does not hand back to Auto, which
   would simply start it again. Choosing **∞** removes the limit and asks you to
   confirm: a thermoelectric plate held cold for hours condenses moisture onto
-  itself whether or not anyone is at the Mac.
+  itself whether or not anyone is at the Mac. The slider's steps belong to the
+  cooler: on the 6 Pro they are Low, Medium and Max with three sub-steps each;
+  on the Cryo Cooler 8 Pro they are Off, Levels 1 to 8 and **Diablo**, its
+  maximum-output mode (about 37 W). Diablo is only ever chosen by hand, and any
+  other command switches it off.
+- **Settings → Plate Limit…** protects against condensation and frost. A
+  thermoelectric plate run for long falls well below the room's dew point, and
+  the 8 Pro's reached about −20 °C in free air. The app has no humidity reading,
+  so it watches the cold plate instead: while the plate is colder than your limit
+  (5 °C by default) it steps cooling down a level at a time, and gives the levels
+  back once the plate has stayed 3 °C above the limit for 30 seconds. The level
+  you chose stays selected, and the cooler shows a notice while it is holding
+  back. It applies in Auto and Manual, Diablo included. It is on by default; the
+  Manual auto-off timer is separate and still applies.
 - **Cooler effect** changes the cooler's LED mode and colour. The Auto effect
   uses colour as a heat gauge.
 - **Turn Off** stops cooling while keeping the connection available.

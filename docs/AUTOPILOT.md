@@ -5,7 +5,7 @@ heats up, raises cooling power with temperature, and turns it off after the Mac
 has cooled. Auto is the default mode after connection.
 
 This guide explains the temperature signal, engage threshold, cooling ladder,
-anti-flap behaviour, safety floor, and LED heat gauge.
+custom curve, anti-flap behaviour, safety floor, and LED heat gauge.
 
 Implementation:
 [`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift).
@@ -21,12 +21,30 @@ damped. Autopilot uses it as a safety floor rather than its primary input.
 
 | Temperature | Source | Use |
 |-------------|--------|-----|
-| **Mac die °C** | Mac SoC sensors | Drives Auto mode |
+| **Mac °C** | Mac SoC sensors, or the sensor you choose | Drives Auto mode |
 | Cooler cold/hot °C | Cooler telemetry | Display only |
 | Ambient °C | Cooler telemetry | Display only |
 
 The cooler reports plate temperatures only while actively cooling. Cold or hot
 readings of `0 °C` while it is off are device behaviour.
+
+### Choosing the sensor
+
+By default Auto mode follows the **average of the SoC die sensors** (`PMU tdie*`).
+**Settings → Temperature Source…** opens a live list of everything this Mac
+reports, and the one you pick drives Auto mode, the status card and the LED's
+Auto colour:
+
+- **Groups:** SoC die average (the default) or hottest sensor, device sensors
+  (`PMU tdev*`) average or hottest, battery, and SSD. A group appears only if
+  this Mac has sensors for it.
+- **Individual sensors,** by name (`PMU tdie3`, `gas gauge battery`, and so on).
+  A sensor exposed more than once is shown as the mean of its readings.
+
+The choice is saved by name. If the chosen sensor is missing at a later launch,
+Auto mode uses the SoC die average instead of going blind. The sensors are
+read-only and the list is what the HID interface exposes on your Mac, so names
+and counts differ between models.
 
 ## Engage threshold and cooling levels
 
@@ -48,9 +66,44 @@ at 95 °C so a high engage point cannot create an out-of-order ladder.
 
 For the default `E = 45 °C`, the tier boundaries are 45, 55, 65, and 75 °C.
 
-The TEC and fan are independent cooler controls. Fan percentages are not
-linear in RPM; these values were selected from hardware probes of the
-firmware's response curve. See [`FINDINGS.md`](FINDINGS.md).
+## Custom curve
+
+**Settings → Auto Curve…** replaces that derived ladder with a temperature of
+your own for **every stage of your cooler**. The stages are the steps of the
+cooler's own manual slider after Off, so Auto can use all of them: the Cryo
+Cooler 8 Pro has nine (Level 1 to 8, then Diablo) and the VC Cooler 6 Pro has
+nine (Low · to Max).
+
+- Tick **Use a custom curve**, type a temperature for each stage, and Save. The
+  fields are in your system temperature unit.
+- Each stage must be at least 1 °C hotter than the one before, and all must fall
+  between 30 and 100 °C. The window says what is wrong and keeps Save disabled
+  until the curve is valid.
+- **Reset** fills in an even spread from the threshold slider's temperature up to
+  95 °C, last stage included. Unticking the box returns to the ladder and keeps
+  your values for next time.
+- While a custom curve is on, the threshold slider is greyed and the row reads
+  **Custom curve** with the temperature where the first stage engages.
+
+A custom curve is literal. Below the first temperature the cooler is **off**, and
+each stage engages when the Mac reaches its temperature and is released once the
+Mac is below it. There is no 5 °C hold zone, which belongs to the default ladder.
+The 15-second cool-down delay still applies, and it still steps down one stage at
+a time, so a reading hovering on a threshold does not switch the cooler on and
+off every few seconds.
+
+Other things that stay the same: the safety floor applies (under `serious`
+thermal pressure Auto goes at least three quarters of the way up your stages, and
+under `critical` to the last one), and the LED heat gauge runs from 10 °C below the
+first stage to red at the last.
+
+The last stage is whatever your cooler's top step is. On the 8 Pro that is
+**Diablo** (about 37 W), so a curve that reaches it will use it. Reset puts it at
+95 °C; lower it only if you want that.
+
+A curve has one point per stage, so it belongs to a cooler with that many. If you
+connect a cooler with a different number of stages, the ladder from the threshold
+slider is used until you set a curve for it.
 
 ## Fast to turn on, slow to turn off
 
@@ -120,7 +173,8 @@ Transitions are written to `~/.cooler.log`.
 The threshold range, default, hysteresis, and dwell are in
 [`Config.swift`](../src-swift/Core/Config.swift). The tier ladder and LED band
 are built by `configure(engageC:)` in
-[`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift).
+[`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift), from either
+`defaultCurve(engageC:)` or a validated custom curve (`isValidCurve`).
 
 ```swift
 enum Autopilot {

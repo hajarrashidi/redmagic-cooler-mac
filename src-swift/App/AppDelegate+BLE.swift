@@ -19,6 +19,8 @@ extension AppDelegate: CoolerBLEManagerDelegate {
             // Seed the telemetry clock at connect, so a device that never sends
             // a frame still registers as silent rather than as "no data yet".
             lastTelemetryAt = Date().timeIntervalSince1970
+            // The curve has one point per stage of the cooler it was made for.
+            syncCustomCurve()
             onConnected()
         } else {
             // Stale telemetry is worse than none — it would keep showing the
@@ -30,6 +32,40 @@ extension AppDelegate: CoolerBLEManagerDelegate {
         }
         refresh()
         writeProbeSnapshot()
+    }
+
+    /// Holds cooling back while the cold plate is under the user's limit, and lets
+    /// it go again once the plate has recovered. See `PlateGuard`.
+    ///
+    /// Cooling counts as wanted whenever the app has asked for it and the cooler's
+    /// own switch isn't off; that stays true while the guard itself has switched
+    /// the cooler off, so the plate gets the time to warm up and the guard to
+    /// release, rather than the cooler restarting at once.
+    func updatePlateGuard() {
+        let now = Date().timeIntervalSince1970
+        let steps = activeProfile.manualSteps
+        let fresh = ble.isConnected && lastTelemetryAt.map { now - $0 < 5 } == true
+        // 0 is how some coolers say "not measured", and a reading outside the
+        // plausible range (a 6 Pro plate below zero reads as a big unsigned byte)
+        // is not believed either; the guard then keeps what it has.
+        let plate = fresh ? telemetry.map { Double($0.coldC) } : nil
+        let believed = plate.flatMap { $0 != 0 && Config.PlateLimit.plausibleC.contains($0) ? $0 : nil }
+
+        let levels = plateGuard.update(
+            plateC: believed,
+            isCooling: ble.isConnected && ble.requested.mode.isOn && !switchMonitor.looksPoweredOff,
+            floorC: plateLimitOn ? plateLimitC : nil,
+            maxLevels: max(steps.count - 1, 0),
+            now: now)
+        guard levels != ble.heldBack else { return }
+
+        if levels > ble.heldBack, let plate = believed {
+            EventLogger.record("cold plate \(Int(plate))°C is under the \(Int(plateLimitC))°C limit → holding cooling back \(levels) level(s)")
+        } else if levels < ble.heldBack {
+            EventLogger.record("cold plate recovered → holding cooling back \(levels) level(s)")
+        }
+        ble.setHeldBack(levels)
+        refresh()
     }
 
     /// Re-evaluates whether the cooler's physical switch looks off. Driven from
@@ -71,7 +107,16 @@ extension AppDelegate: CoolerBLEManagerDelegate {
     func bleManager(_ manager: CoolerBLEManager, didReceive telemetry: CoolerTelemetry) {
         self.telemetry = telemetry
         lastTelemetryAt = Date().timeIntervalSince1970
-        refresh()
+        // Also here, not only on the 1 s tick: the tick does not run while a menu
+        // is open, and a limit that protects the plate must not depend on whether
+        // anyone is looking at the menu.
+        updatePlateGuard()
+        // At most once a second: the cooler can report several times a second,
+        // and redrawing the menu that often fights whatever the user is doing in it.
+        if lastTelemetryAt.map({ $0 - lastTelemetryRefresh >= 1 }) ?? true {
+            lastTelemetryRefresh = lastTelemetryAt ?? 0
+            refresh()
+        }
         writeProbeSnapshot()
     }
 

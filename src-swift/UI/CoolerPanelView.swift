@@ -31,6 +31,8 @@ final class CoolerPanelView: PanelRowView {
         case autoWaiting(engageC: Int)
         /// The manual auto-off timer ran down and switched the cooler off.
         case manualTimedOut
+        /// The cold plate is under its limit and cooling is being held back.
+        case plateLimit(floorC: Double)
 
         var text: String {
             switch self {
@@ -39,6 +41,8 @@ final class CoolerPanelView: PanelRowView {
             case .powerSwitchOff:     return "Cooler's power switch is off"
             case .autoWaiting(let c): return "Waiting for the Mac to reach \(c)°C"
             case .manualTimedOut:     return "Auto-off timer ended Manual cooling"
+            case .plateLimit(let c):
+                return "Cold plate under \(SystemInfo.formatTemp(c, degreeOnly: true)): holding cooling back"
             }
         }
 
@@ -49,6 +53,7 @@ final class CoolerPanelView: PanelRowView {
                  .manualTimedOut: return "exclamationmark.triangle"
             case .powerSwitchOff: return "power.circle.fill"
             case .autoWaiting:    return "thermometer.medium"
+            case .plateLimit:     return "snowflake"
             }
         }
 
@@ -58,6 +63,10 @@ final class CoolerPanelView: PanelRowView {
             // A genuine hardware fault: the app is commanding a cooler that
             // cannot answer. This one earns the amber.
             case .powerSwitchOff: return .systemOrange
+            // The app is deliberately cooling less than asked, to protect the
+            // plate. The user should notice that the level they chose is not
+            // what is running.
+            case .plateLimit: return .systemOrange
             // Plain ink. Manual staying on is the mode working as documented,
             // not a fault, and an amber line that is on screen for the whole of
             // every manual session teaches the reader to ignore amber.
@@ -381,17 +390,25 @@ final class CoolerPanelView: PanelRowView {
 
     /// Telemetry laid out as evenly spaced cells. A sensor reporting 0 is
     /// reporting "not measured yet", so it shows an em dash rather than 0°.
+    /// Below zero is a real reading (the 8 Pro's cold plate gets there).
     private func telemetryCells() -> [(label: String, value: String)] {
         guard let telemetry = model.telemetry else { return [] }
         func temp(_ celsius: Int) -> String {
-            celsius > 0 ? SystemInfo.formatTemp(celsius, degreeOnly: true) : "—"
+            celsius != 0 ? SystemInfo.formatTemp(celsius, degreeOnly: true) : "—"
         }
         var cells = [(label: String, value: String)]()
         cells.append(("Cold", temp(telemetry.coldC)))
-        cells.append(("Hot", temp(telemetry.hotC)))
-        cells.append(("Ambient", SystemInfo.formatTemp(telemetry.ambientC, degreeOnly: true)))
+        if let hot = telemetry.hotC {
+            cells.append(("Hot", temp(hot)))
+        }
+        if let ambient = telemetry.ambientC {
+            cells.append(("Ambient", SystemInfo.formatTemp(ambient, degreeOnly: true)))
+        }
         if let rpm = telemetry.fanRPM {
             cells.append(("RPM", rpm > 0 ? "\(rpm)" : "—"))
+        }
+        if let watts = telemetry.powerW {
+            cells.append(("Power", "\(watts) W"))
         }
         return cells
     }
