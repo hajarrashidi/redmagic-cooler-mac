@@ -170,6 +170,10 @@ See the [README](../README.md) for usage and the source layout.
   Every caller changing both goes through it.
 - **Heartbeat.** Mode and fan are re-asserted every 30 s, so a dropped write
   can't leave the UI and the hardware disagreeing indefinitely.
+- **Connect at launch.** If a cooler was already chosen and Bluetooth access
+  already granted, a starting app takes the same path as the Connect button
+  (cooler commanded off, Auto mode) without a click. It never asks for
+  permission itself, so a first run still waits for the user.
 - **Auto-reconnect** after a 5 s delay when the link drops (e.g. the cooler is
   power-cycled).
 - **The single connection slot** is not released promptly on a half-open link —

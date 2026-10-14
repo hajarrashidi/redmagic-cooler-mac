@@ -165,7 +165,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the clock, so the periodic check below stays a day behind it.
         updates.check()
 
+        connectAtLaunchIfAlreadyChosen()
         writeProbeSnapshot()
+    }
+
+    /// Reconnects to the saved cooler without anyone clicking Connect, for an app
+    /// that starts unattended: at login, after a relaunch for an update, or after
+    /// a crash.
+    ///
+    /// Only when nothing can be asked of the user: a cooler was already chosen
+    /// and Bluetooth access already granted. A first run, or a refused
+    /// permission, still waits for the user, so no prompt ever appears at launch.
+    /// It takes the same path as the Connect button, which commands the cooler
+    /// off once linked and starts in Auto. That matters here: a cooler can start
+    /// running by itself when powered up, and nothing would otherwise be in
+    /// charge of it.
+    private func connectAtLaunchIfAlreadyChosen() {
+        guard ble.permission == .granted, ble.hasKnownDevice else { return }
+        EventLogger.record("launch — reconnecting to the saved cooler")
+        connectDevice()
     }
 
     private func loadSettings() {

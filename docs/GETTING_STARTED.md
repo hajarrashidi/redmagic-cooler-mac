@@ -53,6 +53,11 @@ A local build does not need to pass through Gatekeeper.
    reads **Connected over Bluetooth** once the link is live, and reports the
    connection's progress before that.
 
+After that the app reconnects on its own whenever it starts, so a launch at
+login needs no click. It does this only once you have chosen a cooler and
+granted Bluetooth access; a first run still waits for you. As with the Connect
+button, the cooler is switched off on connection and the app starts in Auto.
+
 If access was refused at some point, the button becomes **Open Bluetooth
 Settings** — macOS only asks once, so System Settings → Privacy & Security →
 Bluetooth is the only way back.
