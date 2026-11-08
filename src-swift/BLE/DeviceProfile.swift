@@ -50,6 +50,9 @@ struct DeviceProfile {
     /// Whether a hall-sensor frame means the magnetic mount is attached.
     let decodeMountAttached: (Data) -> Bool
 
+    /// Maps a logical cooling mode to the raw hardware byte accepted by this cooler.
+    let hardwareMode: (CoolingMode) -> UInt8
+
     // ── Derived ──────────────────────────────────────────────────────────────
 
     /// Characteristics to subscribe to.
@@ -64,7 +67,7 @@ struct DeviceProfile {
     // ── Registry ─────────────────────────────────────────────────────────────
 
     /// Every model the app can drive, in match order. Add new profiles here.
-    static let all: [DeviceProfile] = [.vcCooler6Pro]
+    static let all: [DeviceProfile] = [.magcooler5Pro, .vcCooler6Pro]
 
     /// The profile whose name hints match an advertised device name, if any.
     static func matching(deviceName: String) -> DeviceProfile? {
@@ -95,6 +98,32 @@ struct DeviceProfile {
 
 extension DeviceProfile {
 
+    /// REDMAGIC Magnetic Cooler 5 Pro (advertises as `RM Magcooler 5pro`).
+    static let magcooler5Pro = DeviceProfile(
+        modelName: "REDMAGIC Magnetic Cooler 5 Pro",
+        nameHints: ["5pro", "cooler 5", "magcooler 5"],
+        serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
+        coolingModeUUID: CBUUID(string: "00001011-0000-1000-8000-00805f9b34fb"),
+        fanSpeedUUID:    CBUUID(string: "00001012-0000-1000-8000-00805f9b34fb"),
+        lightModeUUID:   CBUUID(string: "00001013-0000-1000-8000-00805f9b34fb"),
+        hallUUID:        CBUUID(string: "00001015-0000-1000-8000-00805f9b34fb"),
+        telemetryUUID:   CBUUID(string: "00001016-0000-1000-8000-00805f9b34fb"),
+        decodeTelemetry: { data in
+            guard data.count >= 8, data[0] == 0xAA else { return nil }
+            let rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
+            return CoolerTelemetry(coldC: Int(data[2]),
+                                   hotC: Int(data[3]),
+                                   ambientC: Int(data[7]),
+                                   fanRPM: rpm)
+        },
+        decodeMountAttached: { data in
+            !data.isEmpty && data[0] == 4
+        },
+        hardwareMode: { mode in
+            mode == .off ? 0x03 : 0x02
+        }
+    )
+
     /// REDMAGIC VC Cooler 6 Pro (advertises as `RM Magcooler 6pro`).
     ///
     /// The protocol was reverse-engineered from BLE captures and the vendor
@@ -106,7 +135,7 @@ extension DeviceProfile {
         // "RM Cooler 5" in range was silently driven with 6 Pro byte layouts.
         // It now sits in `vendorHints`, so an unknown RM cooler is listed as
         // unsupported instead of being written to on a hunch.
-        nameHints: ["magcooler"],
+        nameHints: ["6pro", "cooler 6", "magcooler 6", "magcooler"],
         serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
         coolingModeUUID: CBUUID(string: "00001011-0000-1000-8000-00805f9b34fb"),
         fanSpeedUUID:    CBUUID(string: "00001012-0000-1000-8000-00805f9b34fb"),
@@ -127,6 +156,9 @@ extension DeviceProfile {
         decodeMountAttached: { data in
             // Byte 0 == 4 means the magnetic mount is seated (5 = detached).
             !data.isEmpty && data[0] == 4
+        },
+        hardwareMode: { mode in
+            mode.rawValue
         }
     )
 }

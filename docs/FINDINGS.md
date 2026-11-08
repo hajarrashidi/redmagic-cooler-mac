@@ -206,6 +206,32 @@ colour (byte `4`) on a timer, graded by die temperature.
 
 ---
 
+## REDMAGIC Magnetic Cooler 5 Pro Protocol Differences
+
+Hardware testing with the **REDMAGIC Magnetic Cooler 5 Pro** (`RM Magcooler 5pro`) revealed critical protocol differences compared to the 6 Pro:
+
+### 1. TEC Power Switch (char `0x1011`)
+- **Binary switch:** The 5 Pro does **not** support discrete mode levels (`0x01` Low or `0x04`–`0x08`).
+- **Valid values:**
+  - `0x02`: TEC Power **ON**
+  - `0x03`: TEC Power **OFF**
+- **Rejection behavior:** Writing any other value (e.g. `0x01` or `0x08`) causes the firmware to reject the packet and immediately flip char `0x1011` back to `0x03` (OFF).
+- **Cooling modulation:** Rather than multi-step TEC voltage modes, cooling intensity on the 5 Pro is scaled directly by adjusting fan speed (char `0x1012`, 0–100%).
+
+### 2. Telemetry (char `0x1016`)
+- Matches the 6 Pro layout:
+  - Header: `0xAA` at byte 0
+  - Cold-plate temperature: byte 2 (°C)
+  - Hot-side temperature: byte 3 (°C)
+  - Ambient sensor: byte 7 (°C)
+  - Fan RPM: bytes 13–14 (16-bit little-endian)
+
+### 3. Magnetic Hall Sensor (char `0x1015`)
+- Byte 0 == `0x04`: phone mounted
+- Byte 0 == `0x05`: unmounted
+
+---
+
 ## Tools Used
 
 - [`bleak`](https://github.com/hbldh/bleak) — Python BLE library (CoreBluetooth backend on macOS)

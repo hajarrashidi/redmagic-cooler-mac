@@ -439,7 +439,8 @@ final class CoolerBLEManager: NSObject {
     func setMode(_ mode: CoolingMode) {
         guard let profile else { return }
         self.mode = mode
-        write([mode.rawValue], to: profile.coolingModeUUID)
+        let rawByte = profile.hardwareMode(mode)
+        write([rawByte], to: profile.coolingModeUUID)
     }
 
     func setFanPercent(_ percent: UInt8) {
@@ -681,7 +682,14 @@ extension CoolerBLEManager: CBPeripheralDelegate {
 
         switch characteristic.uuid {
         case profile.coolingModeUUID:
-            mode = CoolingMode(rawValue: data[0])
+            let raw = data[0]
+            if raw == 0x03 {
+                mode = .off
+            } else if raw == 0x02 && profile.modelName.contains("5 Pro") {
+                if mode == .off { mode = .medium }
+            } else {
+                mode = CoolingMode(rawValue: raw)
+            }
             delegate?.bleManagerDidChangeSettings(self)
 
         case profile.fanSpeedUUID:

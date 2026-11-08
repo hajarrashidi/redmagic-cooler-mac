@@ -56,8 +56,12 @@ extension AppDelegate: CoolerBLEManagerDelegate {
         // had chosen, and Auto still engages on its own once the Mac heats up.
         if turnOffOnConnect {
             turnOffOnConnect = false
-            ble.apply(mode: .off, fanPercent: 0)
-            EventLogger.record("forced cooler off on connect (preference preserved)")
+            if appMode == .auto {
+                EventLogger.record("connected — running autopilot immediately")
+                runAutopilot()
+            } else {
+                EventLogger.record("connected in manual mode — holding initial state")
+            }
         }
 
         // The cooler forgets its light state across a disconnect. Re-push it,

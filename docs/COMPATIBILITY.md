@@ -14,7 +14,7 @@ is no remote connection for the macOS app to use.
 |-------|------------|---------------------------|----------------|
 | [REDMAGIC Cryo Cooler 8 Pro](https://redmagic.tech/products/redmagic-cryo-cooler-8-pro) | 2026 | REDMAGIC app connectivity | **Unsupported — unverified and untested** |
 | [REDMAGIC VC Cooler 6 Pro](https://redmagic.tech/products/redmagic-vc-cooler-6-pro) | 2025 | Goper app | **Supported — hardware verified** |
-| [REDMAGIC VC Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro) | 2024 | Goper app | **Unsupported — unverified and untested** |
+| [REDMAGIC Magnetic Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro) | 2024 | Goper app | **Supported — hardware verified** |
 | [REDMAGIC Dual-Core Ice Dock](https://redmagic.tech/blogs/product-information/the-battle-of-redmagic-external-cooling-solutions) | 2022 | Bluetooth and REDMAGIC Equipment app | **Unsupported — unverified and untested** |
 
 The Cryo Cooler 8 series launched on March 10, 2026. REDMAGIC describes the

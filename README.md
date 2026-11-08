@@ -28,8 +28,8 @@ vendor app. See the [protocol findings](docs/FINDINGS.md) for the full mapping.
 
 ## Device support
 
-The **REDMAGIC VC Cooler 6 Pro** is currently the only supported and
-hardware-verified model.
+The **REDMAGIC VC Cooler 6 Pro** and **REDMAGIC Magnetic Cooler 5 Pro** are
+currently supported and hardware-verified models.
 
 The **REDMAGIC Cryo Cooler 8 Pro** is REDMAGIC's latest app-connected cooler as
 of September 2026. It has **not been tested or verified with this project** and
