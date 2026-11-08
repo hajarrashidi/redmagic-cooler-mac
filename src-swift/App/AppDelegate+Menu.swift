@@ -101,6 +101,7 @@ extension AppDelegate: NSMenuDelegate {
 
         autoOptions = AutoOptionsView(width: width)
         autoOptions.onEngageChange = { [weak self] in self?.setEngage($0) }
+        autoOptions.onProfileChange = { [weak self] in self?.setAutoProfile($0) }
         autoOptions.panelSegment = .bottom
         let autoOptionsItem = wrap(autoOptions)
         menu.addItem(autoOptionsItem)

@@ -153,6 +153,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.tick()
         }
 
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(macWillSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(macDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(macWillPowerOff),
+            name: NSWorkspace.willPowerOffNotification,
+            object: nil
+        )
+
         EventLogger.record("app start — mode=\(appMode.rawValue) engage=\(autopilot.engageC)°C")
 
         // The friendly Mac name needs system_profiler, which is far too slow to
@@ -164,6 +183,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // nothing against GitHub's unauthenticated budget, and it still stamps
         // the clock, so the periodic check below stays a day behind it.
         updates.check()
+
+        if ble.hasKnownDevice {
+            EventLogger.record("auto-connecting to preferred cooler on launch")
+            ble.startScanning()
+        }
 
         writeProbeSnapshot()
     }
@@ -187,6 +211,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             engageC = Config.Autopilot.engageDefaultC
         }
         autopilot = AutopilotPolicy(engageC: engageC)
+        if let savedProfile = defaults.string(forKey: "AutoProfile") {
+            if let p = AutoProfile(rawValue: savedProfile) {
+                autopilot.setProfile(p)
+            } else if savedProfile == "Max Inteligente" || savedProfile == "maxIntel" {
+                autopilot.setProfile(.smartMax)
+            } else if savedProfile == "Equilibrado" {
+                autopilot.setProfile(.balanced)
+            }
+        }
         defaults.set(autopilot.engageC, forKey: Config.Key.engageC)
     }
 
@@ -263,6 +296,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         refresh()
         return true
+    }
+
+    // ── Sleep / Wake Lifecycle ───────────────────────────────────────────────
+
+    @objc private func macWillSleep() {
+        EventLogger.record("system will sleep — turning cooler off")
+        if ble != nil && ble.isConnected {
+            ble.apply(mode: .off, fanPercent: 0)
+        }
+    }
+
+    @objc private func macDidWake() {
+        EventLogger.record("system did wake — resuming thermal autopilot")
+        if ble != nil && ble.isConnected {
+            if appMode == .auto {
+                runAutopilot()
+            }
+        }
+    }
+
+    @objc private func macWillPowerOff(_ notification: Notification) {
+        EventLogger.record("system shutting down / power off — turning cooler off")
+        if ble != nil && ble.isConnected {
+            ble.apply(mode: .off, fanPercent: 0)
+        }
     }
 
     // ── Termination ──────────────────────────────────────────────────────────

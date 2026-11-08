@@ -41,6 +41,14 @@ extension AppDelegate {
     /// Fires continuously while the engage slider moves, so it deliberately
     /// skips the switching lockout — the autopilot simply re-evaluates against
     /// the new threshold on each change.
+    func setAutoProfile(_ profile: AutoProfile) {
+        autopilot.setProfile(profile)
+        UserDefaults.standard.set(profile.rawValue, forKey: "AutoProfile")
+        EventLogger.record("auto profile → \(profile.rawValue)")
+        if appMode == .auto { runAutopilot() }
+        refresh()
+    }
+
     func setEngage(_ celsius: Double) {
         autopilot.setEngage(celsius)
         UserDefaults.standard.set(autopilot.engageC, forKey: Config.Key.engageC)

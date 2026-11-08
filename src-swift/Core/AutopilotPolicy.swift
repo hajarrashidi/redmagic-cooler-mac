@@ -1,3 +1,17 @@
+enum AutoProfile: String, CaseIterable {
+    case balanced = "Balanced"
+    case smartMax = "Smart Max"
+
+    var caption: String {
+        switch self {
+        case .balanced:
+            return "Smooth ramp: scales cooling power up as temperature rises."
+        case .smartMax:
+            return "Full power at ≥ threshold. Safely ramps down when cooled."
+        }
+    }
+}
+
 import Foundation
 
 /// Decides how hard to cool, from Mac die temperature and macOS thermal
@@ -50,6 +64,7 @@ final class AutopilotPolicy {
     /// ladder is derived from this one number — it is the single knob the
     /// menu's threshold slider drives.
     private(set) var engageC: Double
+    private(set) var profile: AutoProfile = .balanced
 
     private let dwell: TimeInterval
     private let hysteresisC: Double
@@ -79,6 +94,11 @@ final class AutopilotPolicy {
     }
 
     // ── Ladder configuration ─────────────────────────────────────────────────
+
+    func setProfile(_ profile: AutoProfile) {
+        self.profile = profile
+        coolingSince = nil
+    }
 
     /// Moves the engage point and rebuilds the ladder around it.
     func setEngage(_ celsius: Double) {
@@ -150,7 +170,17 @@ final class AutopilotPolicy {
 
     /// The tier the current conditions call for, before dwell/hysteresis smoothing.
     private func targetTierIndex(thermalState: ThermalState, dieC: Double?) -> Int {
-        max(thermalState.tierFloor, temperatureTierIndex(for: dieC))
+        if profile == .smartMax, let dieC {
+            if dieC >= engageC {
+                return 4 // Max Tier (100% fan)
+            } else if dieC >= (engageC - hysteresisC) {
+                return 1 // Low Tier (60% fan) - safely eases down
+            } else {
+                return 0 // Off (cool, prevents condensation)
+            }
+        }
+
+        return max(thermalState.tierFloor, temperatureTierIndex(for: dieC))
     }
 
     /// Highest tier whose engage point the temperature has reached, with
