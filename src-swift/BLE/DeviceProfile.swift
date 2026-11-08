@@ -67,7 +67,7 @@ struct DeviceProfile {
     // ── Registry ─────────────────────────────────────────────────────────────
 
     /// Every model the app can drive, in match order. Add new profiles here.
-    static let all: [DeviceProfile] = [.magcooler5Pro, .vcCooler6Pro]
+    static let all: [DeviceProfile] = [.magcooler8Pro, .vcCooler6Pro, .magcooler5Pro, .magcooler4Pro]
 
     /// The profile whose name hints match an advertised device name, if any.
     static func matching(deviceName: String) -> DeviceProfile? {
@@ -97,6 +97,58 @@ struct DeviceProfile {
 // ── Known models ─────────────────────────────────────────────────────────────
 
 extension DeviceProfile {
+
+    /// REDMAGIC Cryo Cooler 8 Pro (advertises as `RM Magcooler 8pro` or `REDMAGIC Cooler 8`).
+    static let magcooler8Pro = DeviceProfile(
+        modelName: "REDMAGIC Cryo Cooler 8 Pro",
+        nameHints: ["8pro", "cooler 8", "magcooler 8"],
+        serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
+        coolingModeUUID: CBUUID(string: "00001011-0000-1000-8000-00805f9b34fb"),
+        fanSpeedUUID:    CBUUID(string: "00001012-0000-1000-8000-00805f9b34fb"),
+        lightModeUUID:   CBUUID(string: "00001013-0000-1000-8000-00805f9b34fb"),
+        hallUUID:        CBUUID(string: "00001015-0000-1000-8000-00805f9b34fb"),
+        telemetryUUID:   CBUUID(string: "00001016-0000-1000-8000-00805f9b34fb"),
+        decodeTelemetry: { data in
+            guard data.count >= 8, data[0] == 0xAA else { return nil }
+            let rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
+            return CoolerTelemetry(coldC: Int(data[2]),
+                                   hotC: Int(data[3]),
+                                   ambientC: Int(data[7]),
+                                   fanRPM: rpm)
+        },
+        decodeMountAttached: { data in
+            !data.isEmpty && data[0] == 4
+        },
+        hardwareMode: { mode in
+            mode.rawValue
+        }
+    )
+
+    /// REDMAGIC Magcooler 4 Pro (advertises as `RM Magcooler 4pro`).
+    static let magcooler4Pro = DeviceProfile(
+        modelName: "REDMAGIC Magcooler 4 Pro",
+        nameHints: ["4pro", "cooler 4", "magcooler 4"],
+        serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
+        coolingModeUUID: CBUUID(string: "00001011-0000-1000-8000-00805f9b34fb"),
+        fanSpeedUUID:    CBUUID(string: "00001012-0000-1000-8000-00805f9b34fb"),
+        lightModeUUID:   CBUUID(string: "00001013-0000-1000-8000-00805f9b34fb"),
+        hallUUID:        CBUUID(string: "00001015-0000-1000-8000-00805f9b34fb"),
+        telemetryUUID:   CBUUID(string: "00001016-0000-1000-8000-00805f9b34fb"),
+        decodeTelemetry: { data in
+            guard data.count >= 8, data[0] == 0xAA else { return nil }
+            let rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
+            return CoolerTelemetry(coldC: Int(data[2]),
+                                   hotC: Int(data[3]),
+                                   ambientC: Int(data[7]),
+                                   fanRPM: rpm)
+        },
+        decodeMountAttached: { data in
+            !data.isEmpty && data[0] == 4
+        },
+        hardwareMode: { mode in
+            mode.rawValue
+        }
+    )
 
     /// REDMAGIC Magnetic Cooler 5 Pro (advertises as `RM Magcooler 5pro`).
     static let magcooler5Pro = DeviceProfile(

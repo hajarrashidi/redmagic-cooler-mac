@@ -116,8 +116,19 @@ final class CoolerBLEManager: NSObject {
     /// `knownPeripheral()`: whether macOS still has the peripheral cached
     /// decides how `startScanning` reconnects, not whether the menu should
     /// offer to. With nothing saved the menu leads with the picker instead.
+    private var preferredDeviceUUIDString: String? {
+        if let saved = UserDefaults.standard.string(forKey: Config.Key.preferredDevice) {
+            return saved
+        }
+        if let legacy = UserDefaults(suiteName: "com.redmagic.cooler")?.string(forKey: Config.Key.preferredDevice) {
+            UserDefaults.standard.set(legacy, forKey: Config.Key.preferredDevice)
+            return legacy
+        }
+        return nil
+    }
+
     var hasKnownDevice: Bool {
-        UserDefaults.standard.string(forKey: Config.Key.preferredDevice) != nil
+        preferredDeviceUUIDString != nil
     }
 
     /// One-shot, fired once the peripheral has fully disconnected. Quit uses it
@@ -298,7 +309,7 @@ final class CoolerBLEManager: NSObject {
     /// knows it. Returns `nil` on a cold cache, which sends us down the scan
     /// path instead.
     private func knownPeripheral() -> CBPeripheral? {
-        guard let saved = UserDefaults.standard.string(forKey: Config.Key.preferredDevice),
+        guard let saved = preferredDeviceUUIDString,
               let uuid = UUID(uuidString: saved) else { return nil }
         return central?.retrievePeripherals(withIdentifiers: [uuid]).first
     }

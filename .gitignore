@@ -2,7 +2,7 @@
 applet_bin
 dist/
 *.dSYM/
-RedMagic Cooler.app/
+*.app/
 
 # macOS
 .DS_Store

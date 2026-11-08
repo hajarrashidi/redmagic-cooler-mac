@@ -105,7 +105,7 @@ final class StatusCardView: PanelRowView {
         let logoSize = Self.logoSize
         RedMagicLogo.drawR(in: NSRect(x: pad, y: y + 1, width: logoSize, height: logoSize))
 
-        let title = UIStyle.text("REDMAGIC COOLER", Self.headerFont)
+        let title = UIStyle.text("SMART COOLER CONTROL", Self.headerFont)
         let titleX = pad + logoSize + 7
         title.draw(at: NSPoint(x: titleX, y: y + 2))
 

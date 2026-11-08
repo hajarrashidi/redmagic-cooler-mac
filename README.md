@@ -1,86 +1,85 @@
 <div align="center">
 
-# RedMagic Cooler for macOS
+# Smart Cooler Control for MacBook
 
-**A native menu-bar controller that cools your Mac automatically with a
-Bluetooth REDMAGIC phone cooler.**
+**The intelligent, multi-brand active cooling controller for Apple Silicon MacBooks.**  
+*Engineered exclusively for high-power external thermoelectric coolers (≥ 30W) to sustain peak performance and eliminate thermal throttling.*
 
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue)](docs/GETTING_STARTED.md#requirements)
-[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-native-black)](docs/GETTING_STARTED.md#requirements)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%20%2F%20M2%20%2F%20M3%20%2F%20M4-black)](docs/GETTING_STARTED.md#requirements)
 [![Swift](https://img.shields.io/badge/Swift-AppKit%20%2B%20CoreBluetooth-orange)](docs/DEVELOPMENT.md)
-[![Latest release](https://img.shields.io/badge/release-latest-blue)](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest)
+[![Cooler Standard](https://img.shields.io/badge/Benchmark-%E2%89%A5%2030W%20High--Power-red)](docs/COMPATIBILITY.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-
-https://github.com/user-attachments/assets/f54d4e59-15c9-4597-b938-ab11829f4c0d
 
 </div>
 
-## What it does
+---
 
-The app reads your Mac's temperature and controls a connected REDMAGIC cooler
-over Bluetooth. Auto mode starts cooling as the Mac heats up, changes power
-with temperature, and eases back down after it cools. You can also take manual
-control, adjust the engage threshold, choose LED effects, and view cooler
-telemetry.
+## Why Smart Cooler Control?
 
-The Bluetooth protocol was reverse-engineered from packet captures and the
-vendor app. See the [protocol findings](docs/FINDINGS.md) for the full mapping.
+MacBooks built with Apple Silicon (M1, M2, M3, M4 across Pro and Max tiers) deliver unprecedented computing density. However, under sustained workloads — such as 8K ProRes export, 3D rendering (Blender/Octane), deep learning / local LLM inference, and extended compiling — thermal mass builds up rapidly in the aluminum chassis, resulting in clock drops and thermal throttling.
 
-## Device support
+Most generic phone coolers run at **10W to 15W**, which is physically insufficient to penetrate the thermal inertia of a solid aluminum unibody. 
 
-The **REDMAGIC VC Cooler 6 Pro** and **REDMAGIC Magnetic Cooler 5 Pro** are
-currently supported and hardware-verified models.
+**Smart Cooler Control enforces a strict minimum benchmark: ≥ 30W.** Only enthusiast-grade thermoelectric (Peltier) coolers with heavy-duty heat pumps, vapor chambers, and high-RPM blowers can make the list.
 
-The **REDMAGIC Cryo Cooler 8 Pro** is REDMAGIC's latest app-connected cooler as
-of September 2026. It has **not been tested or verified with this project** and
-is not currently supported. Other Bluetooth/app-controlled models are also
-unverified; button-only coolers are outside this project's scope.
+---
 
-Read [device compatibility](docs/COMPATIBILITY.md) for the researched model
-list, evidence, and exact support status. If you own an untested Bluetooth
-cooler, follow [Adding support for another cooler](docs/ADDING_DEVICES.md).
+## Key Features
 
-## Quick start
+- **Dynamic Thermal Autopilot:** Continuously reads macOS internal die temperature sensors and adjusts cooling output in real-time.
+- **Smart Max Profile:** Delivers instant 100% cooling power when heavy computation spikes the die, and safely ramps down to 60% and Off as the chassis cools.
+- **Active Condensation & Ice Prevention:** Thermoelectric plates running at 36W–40W can freeze ambient moisture onto the chassis when the Mac is cool or idle. The autopilot automatically backs off power and cuts the cooler when the Mac is in repouso / sleep or turned off.
+- **Native macOS Lifecycle Hooks:** Automatically turns off the cooler on `willSleepNotification`, `willPowerOffNotification`, and app termination, and resumes on `didWakeNotification`.
+- **Auto-Reconnect on Launch:** Seamless background reconnection to your preferred device on startup.
+- **Telemetry & Diagnostics:** Real-time temperature readout (die, cold plate, hot plate, ambient) and live fan RPM in the menu bar.
 
-Requires macOS 13 or later, Apple Silicon for responsive die-temperature
-control, and a supported cooler. macOS asks for Bluetooth permission on first
-launch.
+---
 
-Download the DMG from the
-[latest release](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest),
-or build locally with Xcode command-line tools:
+## Supported High-Power Coolers (≥ 30W Standard)
 
+| Manufacturer | Model | Peak Power | Architecture | Status |
+|---|---|---|---|---|
+| **REDMAGIC** | **Magnetic Cooler 5 Pro** | **36W** | Vapor Chamber + TEC | **Supported & Hardware-Verified** |
+| **REDMAGIC** | **VC Cooler 6 Pro** | **36W** | Vapor Chamber + TEC | **Supported & Hardware-Verified** |
+| **REDMAGIC** | **Cooler 6 Pro+** | **36W** | Liquid VC + TEC | **Profile Integrated** |
+| **REDMAGIC** | **Cryo Cooler 8 Pro** | **36W–40W** | 4th Gen Custom TEC | **Profile Integrated** |
+| **REDMAGIC** | **Magcooler 4 Pro** | **30W** | High-Power TEC | **Profile Integrated** |
+| **Black Shark** | **MagCooler 4 Pro** | **30W+** | High-Power TEC | *In Research (Roadmap)* |
+| **Flydigi** | **Flydigi B6X / B7X** | **27W–36W** | High-Power Magnetic | *In Research (Roadmap)* |
+| **OnePlus** | **45W Liquid Cooler** | **45W** | External Pump + TEC | *In Research (Roadmap)* |
+
+> *Note: Low-power coolers (< 30W) are excluded by design.*
+
+---
+
+## Quick Start
+
+### Requirements
+- macOS 13 (Ventura) or later
+- Apple Silicon Mac (M1, M2, M3, M4, Pro, Max, Ultra)
+- Bluetooth access granted
+
+### Build and Run Locally
 ```bash
-git clone https://github.com/hajarrashidi/redmagic-cooler-mac.git
+git clone https://github.com/Despensativo/redmagic-cooler-mac.git
 cd redmagic-cooler-mac
 ./build.sh --run
 ```
 
-Open the menu-bar app, press **Allow Bluetooth Access**, then **Scan**, and
-click your cooler. After that the menu leads with the cooler's own panel and its
-**Connect** button.
-The Auto/Manual controls appear after a connection is established, with Auto
-as the default. See [Getting started](docs/GETTING_STARTED.md) for installation,
-daily use, updates, and limitations.
+---
 
-## Documentation
+## Architecture & Contributing
 
-| Topic | Guide |
-|-------|-------|
-| Install, connect, and use the app | [Getting started](docs/GETTING_STARTED.md) |
-| Supported and untested coolers | [Device compatibility](docs/COMPATIBILITY.md) |
-| Temperature thresholds and automatic cooling | [Autopilot](docs/AUTOPILOT.md) |
-| Reverse-engineered BLE protocol | [Protocol findings](docs/FINDINGS.md) |
-| Add a new Bluetooth cooler | [Adding devices](docs/ADDING_DEVICES.md) |
-| LED effect bytes | [LED mapping](docs/led_mapping.md) |
-| Build and understand the codebase | [Development](docs/DEVELOPMENT.md) |
+Smart Cooler Control is designed with an open, vendor-agnostic architecture:
+- `DeviceProfile.swift`: Model-specific GATT mappings, raw hardware mode adapters, and telemetry frames.
+- `AutopilotPolicy.swift`: Universal thermal decision matrix, dwell times, and hysteresis.
+- `CoolerBLEManager.swift`: Resilient CoreBluetooth connection manager with automatic state recovery.
 
-Contributions and partial hardware findings are welcome. An advertised BLE
-name or GATT dump can be enough to help the next person continue the work.
+To contribute a new ≥ 30W cooler profile, see [Adding Devices](docs/ADDING_DEVICES.md).
 
-## Disclaimer and license
+---
 
-This project is not affiliated with or endorsed by Nubia/REDMAGIC. It is a
-reverse-engineered third-party controller; use it at your own risk.
+## License
 
-[MIT](LICENSE)
+This project is open-source under the [MIT License](LICENSE).

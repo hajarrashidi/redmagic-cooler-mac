@@ -14,10 +14,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-APP="RedMagic Cooler.app"
-BUNDLE_ID="com.redmagic.cooler"
-VERSION="3.0"
-BUILD="16"
+APP="Smart Cooler Control.app"
+BUNDLE_ID="com.smartcooler.mac"
+VERSION="3.1"
+BUILD="17"
 
 RUN_AFTER_BUILD=false
 WITH_PROBES=false
@@ -81,7 +81,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>RedMagic Cooler</string>
+	<string>Smart Cooler Control</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -93,7 +93,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>This app needs Bluetooth to connect to and control a supported REDMAGIC cooler.</string>
+	<string>Smart Cooler Control needs Bluetooth to connect to and control supported high-power coolers.</string>
 </dict>
 </plist>
 PLIST
