@@ -127,12 +127,15 @@ enum Config {
         /// How long the temperature must stay low before stepping down a tier.
         static let cooldownDwell: TimeInterval = 15.0
 
-        /// Slider minimum doubles as the default: the retired Standard profile
-        /// engaged at 40 °C, and 45 °C is the closest the ladder now gets —
-        /// out of the box the cooler still helps while the Mac is merely warm.
+        /// Slider defaults and range:
+        /// Lowered to 38 °C so the user can configure aggressive cooling down to 38 °C.
         static let engageDefaultC: Double = 45.0
-        static let engageMinC: Double = 45.0
+        static let engageMinC: Double = 38.0
         static let engageMaxC: Double = 85.0
+
+        /// Minimum floor below which cooling turns off completely (Tier 0 / Standby)
+        /// to avoid condensation when the Mac is cold.
+        static let shutoffFloorC: Double = 38.0
     }
 
     // ── Diagnostics ──────────────────────────────────────────────────────────

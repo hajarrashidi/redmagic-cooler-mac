@@ -192,9 +192,8 @@ final class CoolerBLEManager: NSObject {
     private func activateCentral() -> CBCentralManager {
         if let central { return central }
         EventLogger.record("BLE — activating adapter (may prompt for permission)")
-        // A nil queue delivers delegate callbacks on the main queue, which is
-        // what every consumer here expects.
-        let created = CBCentralManager(delegate: self, queue: nil)
+        let created = CBCentralManager(delegate: self, queue: DispatchQueue.main)
+        EventLogger.record("BLE — created central, delegate set to: \(type(of: created.delegate!))")
         central = created
         return created
     }
@@ -479,6 +478,7 @@ final class CoolerBLEManager: NSObject {
 extension CoolerBLEManager: CBCentralManagerDelegate {
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        EventLogger.record("BLE — centralManagerDidUpdateState: \(central.state.rawValue)")
         switch central.state {
         case .poweredOn:
             EventLogger.record("BLE — adapter powered on")

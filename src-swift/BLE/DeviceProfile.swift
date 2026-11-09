@@ -63,7 +63,18 @@ struct DeviceProfile: Equatable {
 
         // Flydigi (27W - 30W)
         .flydigiB8X,
-        .flydigiB7X
+        .flydigiB7X,
+
+        // iQOO (27W - 30W)
+        .iqooCoolingBackClip2Pro,
+
+        // OnePlus / OPPO (27W - 45W)
+        .onePlus45WLiquidCooler,
+        .onePlus27WCooler,
+
+        // MEMO (30W - 36W)
+        .memoCX08,
+        .memoCX07
     ]
 
     /// Matches an advertised device by name, service UUID, or manufacturer data.
@@ -86,8 +97,17 @@ struct DeviceProfile: Equatable {
         if let adv = advertisementData,
            let services = adv[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
             if services.contains(CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB")) {
+                if lower.contains("memo") || lower.contains("cx07") || lower.contains("cx08") {
+                    return lower.contains("cx08") ? .memoCX08 : .memoCX07
+                }
                 if lower.contains("b7") { return .flydigiB7X }
                 return .flydigiB8X
+            }
+            if services.contains(CBUUID(string: "0000FFF0-0000-1000-8000-00805F9B34FB")) {
+                return .iqooCoolingBackClip2Pro
+            }
+            if services.contains(CBUUID(string: "0000FEE7-0000-1000-8000-00805F9B34FB")) {
+                return lower.contains("45") ? .onePlus45WLiquidCooler : .onePlus27WCooler
             }
             if services.contains(CBUUID(string: "0000A0A0-3C17-D293-8E48-14FE2E4DA212")) {
                 if lower.contains("4") || lower.contains("4pro") {
@@ -112,6 +132,21 @@ struct DeviceProfile: Equatable {
 
         if lower.contains("b8x") { return .flydigiB8X }
         if lower.contains("b7x") { return .flydigiB7X }
+
+        // iQOO Lineup
+        if lower.contains("iqoo") || lower.contains("ira2") {
+            return .iqooCoolingBackClip2Pro
+        }
+
+        // OnePlus / OPPO Lineup
+        if lower.contains("oneplus") || lower.contains("oppo cooler") {
+            return (lower.contains("45") || lower.contains("liquid")) ? .onePlus45WLiquidCooler : .onePlus27WCooler
+        }
+
+        // MEMO Lineup
+        if lower.contains("memo") || lower.contains("cx07") || lower.contains("cx08") {
+            return lower.contains("cx08") ? .memoCX08 : .memoCX07
+        }
 
         // REDMAGIC specific models
         if lower.contains("8pro") || lower.contains("cooler 8") {
@@ -280,5 +315,76 @@ extension DeviceProfile {
         nameHints: ["b7x", "flydigi b7x", "feizhi b7x"],
         serviceUUID: CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB"),
         driverFactory: { FlydigiDriver(profile: $0) }
+    )
+
+    // ── iQOO Lineup ──────────────────────────────────────────────────────────
+
+    /// iQOO Cooling Back Clip 2 Pro (advertises as `iQOO 2 Pro` / `iQOO Clip 2 Pro`) — 27W TEC (30W Peak)
+    static let iqooCoolingBackClip2Pro = DeviceProfile(
+        id: "iqoo-clip-2pro",
+        brand: "iQOO",
+        modelName: "iQOO Cooling Back Clip 2 Pro (27W)",
+        ratedWatts: 27,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: true,
+        nameHints: ["iqoo", "ira2", "iqoo cooler", "clip 2 pro"],
+        serviceUUID: CBUUID(string: "0000FFF0-0000-1000-8000-00805F9B34FB"),
+        driverFactory: { IQOODriver(profile: $0) }
+    )
+
+    // ── OnePlus / OPPO Lineup ────────────────────────────────────────────────
+
+    /// OnePlus 45W Liquid Cooler (advertises as `OnePlus 45W Cooler` / `OPPO Liquid Cooler`) — 45W TEC Liquid
+    static let onePlus45WLiquidCooler = DeviceProfile(
+        id: "op-liquid-45w",
+        brand: "OnePlus",
+        modelName: "OnePlus 45W Liquid Cooler (45W)",
+        ratedWatts: 45,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: true,
+        nameHints: ["oneplus 45w", "oneplus liquid", "oppo liquid", "45w liquid"],
+        serviceUUID: CBUUID(string: "0000FEE7-0000-1000-8000-00805F9B34FB"),
+        driverFactory: { OnePlusDriver(profile: $0) }
+    )
+
+    /// OnePlus 27W Freezing Point Clip (advertises as `OnePlus 27W Cooler`) — 27W TEC SuperVOOC
+    static let onePlus27WCooler = DeviceProfile(
+        id: "op-freezing-27w",
+        brand: "OnePlus",
+        modelName: "OnePlus 27W Freezing Point Clip (27W)",
+        ratedWatts: 27,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: true,
+        nameHints: ["oneplus 27w", "oneplus cooler", "oppo cooler"],
+        serviceUUID: CBUUID(string: "0000FEE7-0000-1000-8000-00805F9B34FB"),
+        driverFactory: { OnePlusDriver(profile: $0) }
+    )
+
+    // ── MEMO Lineup ──────────────────────────────────────────────────────────
+
+    /// MEMO CX08 Magnetic Cooler (advertises as `MEMO CX08` / `CX08 Cooler`) — 36W TEC
+    static let memoCX08 = DeviceProfile(
+        id: "memo-cx08",
+        brand: "MEMO",
+        modelName: "MEMO CX08 Magnetic Cooler (36W)",
+        ratedWatts: 36,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: true,
+        nameHints: ["cx08", "memo cx08"],
+        serviceUUID: CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB"),
+        driverFactory: { MemoDriver(profile: $0) }
+    )
+
+    /// MEMO CX07 Magnetic Cooler (advertises as `MEMO CX07` / `CX07 Cooler`) — 30W TEC
+    static let memoCX07 = DeviceProfile(
+        id: "memo-cx07",
+        brand: "MEMO",
+        modelName: "MEMO CX07 Magnetic Cooler (30W)",
+        ratedWatts: 30,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: true,
+        nameHints: ["cx07", "memo cx07"],
+        serviceUUID: CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB"),
+        driverFactory: { MemoDriver(profile: $0) }
     )
 }

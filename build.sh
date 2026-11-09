@@ -94,14 +94,16 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Smart Cooler Control needs Bluetooth to connect to and control supported high-power coolers.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Smart Cooler Control needs Bluetooth to connect to and control supported high-power coolers.</string>
 </dict>
 </plist>
 PLIST
 
 # ── 3. Sign ───────────────────────────────────────────────────────────────────
-# Ad-hoc signature; keeps the Bluetooth permission grant stable across rebuilds.
+# Ad-hoc signature with stable designated requirement; keeps the Bluetooth permission grant stable across rebuilds.
 echo "==> Signing"
-codesign --force --deep --sign - "$APP" 2>/dev/null
+codesign --force --deep --sign - --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP" 2>/dev/null
 
 echo "==> Installing to /Applications/$APP"
 rm -rf "/Applications/$APP"
@@ -116,5 +118,5 @@ echo "==> Built and installed /Applications/$APP ($VERSION build $BUILD)"
 
 if [[ "$RUN_AFTER_BUILD" == true ]]; then
     echo "==> Relaunching"
-    open "/Applications/$APP"
+    nohup "/Applications/$APP/Contents/MacOS/applet" >/dev/null 2>&1 &
 fi

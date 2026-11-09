@@ -67,7 +67,7 @@ final class AutoOptionsView: PanelRowView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func configure(engageC: Double, profile: AutoProfile) {
-        let isInteracting = slider.cell?.isHighlighted == true
+        let isInteracting = slider.cell?.isHighlighted == true || NSEvent.pressedMouseButtons != 0
         if !isInteracting && abs(slider.doubleValue - engageC) >= 0.5 {
             slider.doubleValue = engageC
             updateValueLabel()
@@ -77,14 +77,20 @@ final class AutoOptionsView: PanelRowView {
     }
 
     func setEnabled(_ enabled: Bool) {
-        if slider.cell?.isHighlighted != true {
+        let isInteracting = slider.cell?.isHighlighted == true || NSEvent.pressedMouseButtons != 0
+        if !isInteracting {
             slider.isEnabled = enabled
         }
         profileControl.isEnabled = enabled
     }
 
     private func updateValueLabel() {
-        valueLabel.stringValue = "≥ " + SystemInfo.formatTemp(slider.doubleValue)
+        let val = Int(round(slider.doubleValue))
+        if val <= 38 {
+            valueLabel.stringValue = "≥ 38°C (Min)"
+        } else {
+            valueLabel.stringValue = "≥ \(val)°C"
+        }
     }
 
     @objc private func profileChanged() {

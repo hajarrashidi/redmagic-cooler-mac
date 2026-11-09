@@ -5,9 +5,9 @@ enum AutoProfile: String, CaseIterable {
     var caption: String {
         switch self {
         case .balanced:
-            return "Smooth ramp: scales cooling power up as temperature rises."
+            return "Smooth ramp: starts at engage threshold, cools down to 38°C."
         case .smartMax:
-            return "Full power at ≥ threshold. Safely ramps down when cooled."
+            return "Full power at ≥ threshold. Safely eases down until < 38°C."
         }
     }
 }
@@ -68,6 +68,7 @@ final class AutopilotPolicy {
 
     private let dwell: TimeInterval
     private let hysteresisC: Double
+    private let shutoffFloorC: Double
 
     /// Engage temperature for each tier index ≥ 1, ascending.
     private var engagePoints: [(temperatureC: Double, tierIndex: Int)] = []
@@ -86,9 +87,11 @@ final class AutopilotPolicy {
 
     init(engageC: Double = Config.Autopilot.engageDefaultC,
          dwell: TimeInterval = Config.Autopilot.cooldownDwell,
-         hysteresisC: Double = Config.Autopilot.hysteresisC) {
+         hysteresisC: Double = Config.Autopilot.hysteresisC,
+         shutoffFloorC: Double = Config.Autopilot.shutoffFloorC) {
         self.dwell = dwell
         self.hysteresisC = hysteresisC
+        self.shutoffFloorC = shutoffFloorC
         self.engageC = engageC
         configure(engageC: engageC)
     }
@@ -149,10 +152,15 @@ final class AutopilotPolicy {
             tierIndex = target
             coolingSince = nil
         } else if target < tierIndex {
-            // If target is off (below engage threshold and hysteresis), cut cooling immediately
+            // If target is off (below shutoff threshold), cut cooling immediately
             // so cooler doesn't run needlessly while the Mac is already cold.
-            if target == 0 && (dieC == nil || dieC! < (engageC - hysteresisC)) {
+            let cutoff = min(engageC, shutoffFloorC)
+            if target == 0 && (dieC == nil || dieC! < cutoff) {
                 tierIndex = 0
+                coolingSince = nil
+            } else if profile == .smartMax && target == 1 {
+                // Smart Max eases down directly to Low tier without stepped dwell delay
+                tierIndex = 1
                 coolingSince = nil
             } else if let since = coolingSince {
                 // Stepped cool-down for hot Mac transitioning between active tiers
@@ -176,12 +184,14 @@ final class AutopilotPolicy {
     /// The tier the current conditions call for, before dwell/hysteresis smoothing.
     private func targetTierIndex(thermalState: ThermalState, dieC: Double?) -> Int {
         if profile == .smartMax, let dieC {
+            let cutoff = min(engageC, shutoffFloorC)
             if dieC >= engageC {
                 return 4 // Max Tier (100% fan)
-            } else if dieC >= (engageC - hysteresisC) {
+            } else if tierIndex > 0 && dieC >= cutoff {
+                // When already cooling, hold low tier until Mac cools down to 38°C shutoff floor
                 return 1 // Low Tier (60% fan) - safely eases down
             } else {
-                return 0 // Off (cool, prevents condensation)
+                return 0 // Off (below 38°C or was not running)
             }
         }
 
@@ -196,6 +206,13 @@ final class AutopilotPolicy {
 
         let rising = engagePoints.last { dieC >= $0.temperatureC }?.tierIndex ?? 0
         guard rising < tierIndex else { return rising }
+
+        // When stepping down from an active tier:
+        // Tier 1 stays held until dieC drops below shutoffFloorC (38°C)!
+        if tierIndex == 1 {
+            let cutoff = min(engageC, shutoffFloorC)
+            return dieC >= cutoff ? 1 : 0
+        }
 
         guard let currentEngage = engagePoints.first(where: { $0.tierIndex == tierIndex })?.temperatureC
         else { return 0 }
