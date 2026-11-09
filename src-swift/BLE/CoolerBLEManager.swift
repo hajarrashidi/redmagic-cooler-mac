@@ -650,10 +650,19 @@ extension CoolerBLEManager: CBPeripheralDelegate {
         var mapped: [CBUUID: CBCharacteristic] = [:]
         for characteristic in discovered {
             let uuid = characteristic.uuid
-            guard notifying.contains(uuid) || writable.contains(uuid) else { continue }
+            let uuidStr = uuid.uuidString.lowercased()
+            let isNotifying = notifying.contains(uuid)
+                || uuidStr.contains("1015") || uuidStr.contains("1016")
+                || uuidStr.contains("a002") || uuidStr.contains("ffe4")
+            let isWritable = writable.contains(uuid)
+                || uuidStr.contains("1011") || uuidStr.contains("1012") || uuidStr.contains("1013")
+                || uuidStr.contains("a001") || uuidStr.contains("ffe1")
+
+            guard isNotifying || isWritable else { continue }
             mapped[uuid] = characteristic
 
-            if notifying.contains(uuid) {
+            if isNotifying {
+                EventLogger.record("BLE — subscribing to notification on \(uuid.uuidString)")
                 peripheral.setNotifyValue(true, for: characteristic)
             }
         }
@@ -663,6 +672,16 @@ extension CoolerBLEManager: CBPeripheralDelegate {
         connectTimeoutTimer?.invalidate()
         connectTimeoutTimer = nil
         setPhase(.ready)
+    }
+
+    func peripheral(_ peripheral: CBPeripheral,
+                    didWriteValueFor characteristic: CBCharacteristic,
+                    error: Error?) {
+        if let error {
+            EventLogger.record("BLE — write error on \(characteristic.uuid.uuidString): \(error.localizedDescription)")
+        } else {
+            EventLogger.record("BLE — write confirmed on \(characteristic.uuid.uuidString)")
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral,

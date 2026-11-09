@@ -36,7 +36,7 @@ final class CoolerPanelView: PanelRowView {
             switch self {
             case .switching:          return "Switching… please wait"
             case .manualStaysOn:      return "Manual stays on until you turn it off"
-            case .powerSwitchOff:     return "Cooler's power switch is off"
+            case .powerSwitchOff:     return "Cooler is idle, unmounted, or switch is off"
             case .autoWaiting(let c): return "Waiting for the Mac to reach \(c)°C"
             case .manualTimedOut:     return "Auto-off timer ended Manual cooling"
             }
