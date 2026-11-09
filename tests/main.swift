@@ -76,7 +76,7 @@ func runTests() {
 
     // 5. AutopilotPolicy Smart Max Baseline & Configurable Shutoff
     print("\n🧠 Testing Autopilot Smart Max Baseline & Shutoff Cutoff...")
-    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 30)
+    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
     policy.setProfile(.smartMax)
 
     // A. Mac is hot (50°C >= engage 50°C): MUST ENGAGE MAX (100% fan)
@@ -84,26 +84,26 @@ func runTests() {
     assert(dec.tier.mode == .max && dec.tier.fanPercent == 100, "Expected cooler max at 50°C")
     print("  ✅ Smart Max High Heat: 50°C -> Cooler engages at MAX (100% fan)")
 
-    // B. Mac at 41°C (normal operational range): MUST HOLD 30% MIN POWER!
+    // B. Mac at 41°C (normal operational range): MUST HOLD 40% MIN POWER!
     dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1001)
-    assert(dec.tier.fanPercent == 30, "Expected Smart Max to hold configured min power (30%) at 41°C, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Baseline: 41°C -> Holds quiet configured min power (30% fan)")
+    assert(dec.tier.fanPercent == 40, "Expected Smart Max to hold configured min power (40%) at 41°C, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Baseline: 41°C -> Holds quiet configured min power (40% fan)")
 
     // C. Mac at 49°C (< 50°C engage threshold): STILL holds min power until threshold is reached!
     dec = policy.evaluate(thermalState: .nominal, dieC: 49.0, now: 1002)
-    assert(dec.tier.fanPercent == 30, "Expected Smart Max to hold min power below engage threshold, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Pre-Engage: 49°C (< 50°C) -> Faithfully holds min power (30% fan)")
+    assert(dec.tier.fanPercent == 40, "Expected Smart Max to hold min power below engage threshold, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Pre-Engage: 49°C (< 50°C) -> Faithfully holds min power (40% fan)")
 
     // D. Mac cools all the way down to 37°C (< 38°C shutoff threshold): MUST SHUT OFF COMPLETELY
     dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1003)
     assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off when Mac drops below 38°C shutoff threshold")
     print("  ✅ Smart Max Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // E. Test user-customized min fan percent to 45%:
-    policy.setMinFanPercent(45)
+    // E. Test user-customized min fan percent to 50%:
+    policy.setMinFanPercent(50)
     dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1004)
-    assert(dec.tier.fanPercent == 45, "Expected cooler at 45% fan with 45% min power, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Custom Min Power: 41°C -> Cooler holds configured 45% fan")
+    assert(dec.tier.fanPercent == 50, "Expected cooler at 50% fan with 50% min power, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Custom Min Power: 41°C -> Cooler holds configured 50% fan")
 
     // At 37°C (< 38°C), it still safely shuts off:
     dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1005)
@@ -112,7 +112,7 @@ func runTests() {
 
     // 6. Test Balanced Dynamic Acoustic Ramp & Shutoff
     print("\n🧠 Testing Autopilot Balanced Dynamic Acoustic Ramp & Shutoff...")
-    let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 30)
+    let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
     balanced.setProfile(.balanced)
 
     // A. Cold Mac (37°C < shutoff 38°C): MUST SHUT OFF COMPLETELY (0% fan)
@@ -120,33 +120,39 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off below shutoff threshold")
     print("  ✅ Balanced Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // B. At shutoff boundary (38°C): starts at 30% fan (user-chosen min power)
+    // B. At shutoff boundary (38°C): starts at 40% fan (user-chosen min power)
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 38.0)
-    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 30, "Expected Balanced at 30% at 38°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 30% fan")
+    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 40, "Expected Balanced at 40% at 38°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 40% fan")
 
-    // C. At 41°C (below engage 50°C): MUST FAITHFULLY HOLD 30% MIN POWER!
+    // C. At 41°C (below engage 50°C): MUST FAITHFULLY HOLD 40% MIN POWER!
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(bDec.tier.fanPercent == 30, "Expected Balanced to hold 30% min power below engage 50°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Min Power Hold: 41°C (< 50°C) -> Faithfully holds 30% fan")
+    assert(bDec.tier.fanPercent == 40, "Expected Balanced to hold 40% min power below engage 50°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Min Power Hold: 41°C (< 50°C) -> Faithfully holds 40% fan")
 
-    // D. User Case Replication: Engage 52°C, Shutoff 41°C, Min Power 20%, Die 48°C
-    // In previous buggy version, this produced 65% fan! In fixed version, it MUST BE EXACTLY 20%!
-    let userCase = AutopilotPolicy(engageC: 52.0, shutoffC: 41.0, minFanPercent: 20)
+    // D. User Case Replication: Engage 52°C, Shutoff 41°C, Min Power 40%, Die 48°C
+    // In previous buggy version, this produced 65% fan! In fixed version, it MUST BE EXACTLY 40%!
+    let userCase = AutopilotPolicy(engageC: 52.0, shutoffC: 41.0, minFanPercent: 40)
     userCase.setProfile(.balanced)
     let userDec = userCase.evaluate(thermalState: .nominal, dieC: 48.0)
-    assert(userDec.tier.fanPercent == 20, "User Case: 48°C (< 52°C engage) MUST hold 20% min power, got \(userDec.tier.fanPercent)%")
-    print("  ✅ User Case Verified: Mac at 48°C with Engage 52°C and Min Power 20% -> EXACTLY 20% fan (not 65%!)")
+    assert(userDec.tier.fanPercent == 40, "User Case: 48°C (< 52°C engage) MUST hold 40% min power, got \(userDec.tier.fanPercent)%")
+    print("  ✅ User Case Verified: Mac at 48°C with Engage 52°C and Min Power 40% -> EXACTLY 40% fan (not 65%!)")
 
-    // E. Progressive Acoustic Ramp above Engage (e.g. at 57.5°C with Engage 50°C, halfway across 15°C span):
+    // E. Progressive Acoustic Ramp above Engage (e.g. at 57.5°C with Engage 50°C and 40% min power):
+    // excess = 7.5°C, span = 15°C, progress = 0.5. raw = 40 + 0.5 * 60 = 70% fan!
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 57.5)
-    assert(bDec.tier.fanPercent == 65, "Expected Balanced ramp at 65% at 57.5°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Post-Engage Ramp: 57.5°C (> 50°C) -> Smoothly ramping at 65% fan")
+    assert(bDec.tier.fanPercent == 70, "Expected Balanced ramp at 70% at 57.5°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Post-Engage Ramp: 57.5°C (> 50°C) -> Smoothly ramping at 70% fan")
 
     // F. At 65°C (15°C above engage 50°C): 100% max fan
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 65.0)
     assert(bDec.tier.mode == .max && bDec.tier.fanPercent == 100, "Expected Balanced 100% at 15°C above engage")
     print("  ✅ Balanced Full Power: 65°C (engage + 15°C) -> 100% MAX fan")
+
+    // G. Test Hardware Floor Clamping: legacy 20% or 30% safely clamps to real 40% physical floor
+    let legacyClamp = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 20)
+    assert(legacyClamp.minFanPercent == 40, "Expected minFanPercent to clamp to 40% hardware floor")
+    print("  ✅ Hardware Floor Clamping: Legacy 20%/30% safely clamped to 40% real floor")
 
     // E. Change shutoff threshold in Balanced to 42°C: at 41°C it MUST now be OFF!
     balanced.setShutoff(42.0)

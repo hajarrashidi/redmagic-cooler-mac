@@ -80,7 +80,7 @@ final class AutopilotPolicy {
          shutoffFloorC: Double? = nil) {
         let effectiveShutoff = shutoffFloorC ?? shutoffC
         self.shutoffC = effectiveShutoff.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
-        self.minFanPercent = minFanPercent.clamped(to: 20...100)
+        self.minFanPercent = minFanPercent.clamped(to: 40...100)
         self.engageC = max(engageC, self.shutoffC + 2.0).clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
     }
 
@@ -105,7 +105,7 @@ final class AutopilotPolicy {
     }
 
     func setMinFanPercent(_ percent: UInt8) {
-        self.minFanPercent = percent.clamped(to: 20...100)
+        self.minFanPercent = percent.clamped(to: 40...100)
     }
 
     // ── Evaluation ───────────────────────────────────────────────────────────

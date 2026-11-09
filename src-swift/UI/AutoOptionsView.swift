@@ -27,7 +27,7 @@ final class AutoOptionsView: PanelRowView {
 
     // ── Base Minimum Power ──
     private let minPowerTitle = UIStyle.sectionLabel("MIN POWER")
-    private let minPowerControl = NSSegmentedControl(labels: ["20%", "30%", "45%", "60%"],
+    private let minPowerControl = NSSegmentedControl(labels: ["40%", "50%", "60%", "75%"],
                                                      trackingMode: .selectOne,
                                                      target: nil, action: nil)
 
@@ -44,7 +44,7 @@ final class AutoOptionsView: PanelRowView {
         static let height: CGFloat = 236
     }
 
-    private static let minFanOptions: [UInt8] = [20, 30, 45, 60]
+    private static let minFanOptions: [UInt8] = [40, 50, 60, 75]
 
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Layout.height))
@@ -109,7 +109,7 @@ final class AutoOptionsView: PanelRowView {
         addSubview(minPowerTitle)
 
         minPowerControl.segmentStyle = .rounded
-        minPowerControl.selectedSegment = 1 // 30% default
+        minPowerControl.selectedSegment = 0 // 40% default (quiet hardware floor)
         minPowerControl.target = self
         minPowerControl.action = #selector(minPowerChanged)
         minPowerControl.frame = NSRect(x: hPad, y: Layout.minPowerControlY, width: contentWidth, height: 24)
