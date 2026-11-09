@@ -31,9 +31,6 @@ final class AutoOptionsView: PanelRowView {
                                                      trackingMode: .selectOne,
                                                      target: nil, action: nil)
 
-    private var engageDebounceTimer: Timer?
-    private var shutoffDebounceTimer: Timer?
-
     private enum Layout {
         static let minPowerControlY: CGFloat = 10
         static let minPowerTitleY: CGFloat = 38
@@ -82,6 +79,7 @@ final class AutoOptionsView: PanelRowView {
 
         engageSlider.minValue = Config.Autopilot.engageMinC
         engageSlider.maxValue = Config.Autopilot.engageMaxC
+        engageSlider.isContinuous = true
         engageSlider.target = self
         engageSlider.action = #selector(engageSliderMoved)
         engageSlider.frame = NSRect(x: hPad, y: Layout.engageSliderY, width: contentWidth, height: 20)
@@ -99,6 +97,7 @@ final class AutoOptionsView: PanelRowView {
 
         shutoffSlider.minValue = Config.Autopilot.shutoffMinC
         shutoffSlider.maxValue = Config.Autopilot.shutoffMaxC
+        shutoffSlider.isContinuous = true
         shutoffSlider.target = self
         shutoffSlider.action = #selector(shutoffSliderMoved)
         shutoffSlider.frame = NSRect(x: hPad, y: Layout.shutoffSliderY, width: contentWidth, height: 20)
@@ -145,7 +144,7 @@ final class AutoOptionsView: PanelRowView {
         })?.offset ?? 1
         minPowerControl.selectedSegment = targetIndex
 
-        // Visual dimming when Balanced (min power only used in Smart Max)
+        // In Balanced mode, min power control is dimmed (Balanced uses the dynamic curve)
         let isSmartMax = (profile == .smartMax)
         minPowerControl.isEnabled = isSmartMax
         minPowerTitle.alphaValue = isSmartMax ? 1.0 : 0.45
@@ -186,32 +185,19 @@ final class AutoOptionsView: PanelRowView {
     }
 
     @objc private func engageSliderMoved() {
+        let rawVal = round(engageSlider.doubleValue)
+        let safeEngage = max(rawVal, round(shutoffSlider.doubleValue) + 2.0)
+        engageSlider.doubleValue = safeEngage
         updateEngageLabel()
-        // Responsive live update without stutter:
-        let isTracking = (NSEvent.pressedMouseButtons != 0)
-        if !isTracking {
-            onEngageChange?(engageSlider.doubleValue)
-        } else {
-            engageDebounceTimer?.invalidate()
-            engageDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
-                guard let self else { return }
-                self.onEngageChange?(self.engageSlider.doubleValue)
-            }
-        }
+        onEngageChange?(safeEngage)
     }
 
     @objc private func shutoffSliderMoved() {
+        let rawVal = round(shutoffSlider.doubleValue)
+        let safeShutoff = min(rawVal, round(engageSlider.doubleValue) - 2.0)
+        shutoffSlider.doubleValue = safeShutoff
         updateShutoffLabel()
-        let isTracking = (NSEvent.pressedMouseButtons != 0)
-        if !isTracking {
-            onShutoffChange?(shutoffSlider.doubleValue)
-        } else {
-            shutoffDebounceTimer?.invalidate()
-            shutoffDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
-                guard let self else { return }
-                self.onShutoffChange?(self.shutoffSlider.doubleValue)
-            }
-        }
+        onShutoffChange?(safeShutoff)
     }
 
     @objc private func minPowerChanged() {

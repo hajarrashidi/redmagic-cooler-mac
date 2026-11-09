@@ -28,17 +28,17 @@ final class CoolerPanelView: PanelRowView {
         /// Linked and commanded on, but the hardware's own switch looks off.
         case powerSwitchOff
         /// Auto is armed and deliberately idle below its threshold.
-        case autoWaiting(engageC: Int)
+        case autoWaiting(shutoffC: Int)
         /// The manual auto-off timer ran down and switched the cooler off.
         case manualTimedOut
 
         var text: String {
             switch self {
-            case .switching:          return "Switching… please wait"
-            case .manualStaysOn:      return "Manual stays on until you turn it off"
-            case .powerSwitchOff:     return "Cooler is idle, unmounted, or switch is off"
-            case .autoWaiting(let c): return "Waiting for the Mac to reach \(c)°C"
-            case .manualTimedOut:     return "Auto-off timer ended Manual cooling"
+            case .switching:             return "Switching… please wait"
+            case .manualStaysOn:         return "Manual stays on until you turn it off"
+            case .powerSwitchOff:        return "Cooler is idle, unmounted, or switch is off"
+            case .autoWaiting(let shut): return "Standby: Mac below \(shut)°C shutoff threshold"
+            case .manualTimedOut:        return "Auto-off timer ended Manual cooling"
             }
         }
 
@@ -78,6 +78,7 @@ final class CoolerPanelView: PanelRowView {
         var deviceModelName: String?
         var telemetry: CoolerTelemetry?
         var mode: CoolingMode = .off
+        var fanPercent: UInt8 = 0
         /// The cooler is linked and commanded on, but its physical switch looks
         /// to be off. The fan is then drawn still: showing it spinning while the
         /// hardware sits idle is the single most misleading thing this panel can
@@ -329,7 +330,12 @@ final class CoolerPanelView: PanelRowView {
 
         let cells = telemetryCells()
         guard !cells.isEmpty else {
-            let label = model.mode.isOn ? "Active Cooling" : "Standby"
+            let label: String
+            if model.mode.isOn {
+                label = "Active Cooling (\(model.fanPercent)%)"
+            } else {
+                label = "Standby"
+            }
             UIStyle.text(label, Self.cellLabelFont, .secondaryLabelColor)
                 .draw(at: NSPoint(x: pad, y: y))
             return

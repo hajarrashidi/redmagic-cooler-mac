@@ -49,20 +49,34 @@ extension AppDelegate {
         refresh()
     }
 
+    private static var settingsSaveTimer: Timer?
+
     func setEngage(_ celsius: Double) {
         autopilot.setEngage(celsius)
-        UserDefaults.standard.set(autopilot.engageC, forKey: Config.Key.engageC)
+        EventLogger.record("autopilot engage → \(Int(round(autopilot.engageC)))°C")
         if appMode == .auto { runAutopilot() }
         refreshCards(connected: ble.isConnected)
         refreshStatusItemButton()
+        debounceSettingsSave()
     }
 
     func setShutoff(_ celsius: Double) {
         autopilot.setShutoff(celsius)
-        UserDefaults.standard.set(autopilot.shutoffC, forKey: Config.Key.shutoffC)
-        EventLogger.record("autopilot shutoff → \(autopilot.shutoffC)°C")
+        EventLogger.record("autopilot shutoff → \(Int(round(autopilot.shutoffC)))°C")
         if appMode == .auto { runAutopilot() }
         refreshCards(connected: ble.isConnected)
+        debounceSettingsSave()
+    }
+
+    private func debounceSettingsSave() {
+        Self.settingsSaveTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.5, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            UserDefaults.standard.set(self.autopilot.engageC, forKey: Config.Key.engageC)
+            UserDefaults.standard.set(self.autopilot.shutoffC, forKey: Config.Key.shutoffC)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        Self.settingsSaveTimer = timer
     }
 
     func setSmartMaxMinFan(_ percent: UInt8) {

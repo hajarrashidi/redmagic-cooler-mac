@@ -241,6 +241,7 @@ extension AppDelegate {
             deviceModelName: ble.profile?.modelName,
             telemetry: telemetry,
             mode: ble.mode,
+            fanPercent: ble.fanPercent,
             deviceLooksPoweredOff: switchMonitor.looksPoweredOff,
             note: coolerNote(connected: connected),
             actionsEnabled: !isInstallingUpdate))
@@ -270,7 +271,7 @@ extension AppDelegate {
             return manualTimer.deadline == nil ? .manualStaysOn : nil
         }
         // Auto below its threshold: doing nothing, on purpose.
-        return ble.mode.isOn ? nil : .autoWaiting(engageC: Int(autopilot.engageC))
+        return ble.mode.isOn ? nil : .autoWaiting(shutoffC: Int(round(autopilot.shutoffC)))
     }
 
 }
