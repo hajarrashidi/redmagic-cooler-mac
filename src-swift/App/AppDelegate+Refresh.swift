@@ -235,6 +235,26 @@ extension AppDelegate {
             dieTempC: thermal.dieTemperatureC,
             thermalState: thermal.thermalState))
 
+        let statusDetail: String?
+        if connected {
+            if appMode == .manual {
+                statusDetail = ble.mode.isOn ? "Manual Cooling (\(ble.fanPercent)%)" : "Standby"
+            } else {
+                let dieC = thermal.dieTemperatureC ?? 0.0
+                if dieC < autopilot.shutoffC {
+                    statusDetail = "Standby (< \(Int(round(autopilot.shutoffC)))°C Off)"
+                } else if dieC < autopilot.engageC {
+                    statusDetail = "Min Power (\(ble.fanPercent)%) — Mac below engage"
+                } else if autopilot.profile == .smartMax {
+                    statusDetail = "Smart Max Boost (100%) [≥ \(Int(round(autopilot.engageC)))°C]"
+                } else {
+                    statusDetail = "Balanced Ramp (\(ble.fanPercent)%) [≥ \(Int(round(autopilot.engageC)))°C]"
+                }
+            }
+        } else {
+            statusDetail = nil
+        }
+
         coolerPanel.update(CoolerPanelView.ViewModel(
             isConnected: connected,
             phase: ble.phase,
@@ -242,6 +262,7 @@ extension AppDelegate {
             telemetry: telemetry,
             mode: ble.mode,
             fanPercent: ble.fanPercent,
+            statusDetail: statusDetail,
             deviceLooksPoweredOff: switchMonitor.looksPoweredOff,
             note: coolerNote(connected: connected),
             actionsEnabled: !isInstallingUpdate))

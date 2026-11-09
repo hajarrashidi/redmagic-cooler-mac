@@ -101,13 +101,8 @@ final class RedMagicDriver: CoolerDriver {
     func apply(mode: CoolingMode, fanPercent: UInt8, peripheral: CBPeripheral) {
         pendingFanWorkItem?.cancel()
 
-        // 1. Hardware mode write
-        let rawByte: UInt8
-        if is5Pro {
-            rawByte = (mode == .off) ? 0x03 : 0x02
-        } else {
-            rawByte = mode.rawValue
-        }
+        // 1. Hardware mode write (0x03=off, 0x01=low, 0x02=medium, 0x08=max overclock)
+        let rawByte: UInt8 = (mode == .off) ? 0x03 : mode.rawValue
 
         if let modeChar {
             EventLogger.record("REDMAGIC — writing mode 0x\(String(format: "%02X", rawByte)) to 1011")
@@ -143,6 +138,9 @@ final class RedMagicDriver: CoolerDriver {
 
         // 1. Telemetry notification (0x1016)
         if uuidStr.contains("1016") {
+            let hexStr = data.map { String(format: "%02X", $0) }.joined(separator: " ")
+            EventLogger.record("REDMAGIC — telemetry raw [\(data.count)B]: \(hexStr)")
+
             // Ignore unpopulated / all-zero dummy BLE frames
             guard data.count >= 8, !data.allSatisfy({ $0 == 0 }) else {
                 return .none
@@ -152,9 +150,6 @@ final class RedMagicDriver: CoolerDriver {
             guard data[0] == 0xAA else {
                 return .none
             }
-
-            let hexStr = data.map { String(format: "%02X", $0) }.joined(separator: " ")
-            EventLogger.record("REDMAGIC — telemetry raw [\(data.count)B]: \(hexStr)")
 
             let coldC = Int(data[2])
             let hotC = Int(data[3])
@@ -173,10 +168,9 @@ final class RedMagicDriver: CoolerDriver {
         // 2. Cooling Mode readback (0x1011)
         if uuidStr.contains("1011") {
             let raw = data[0]
+            EventLogger.record("REDMAGIC — mode readback on 1011: 0x\(String(format: "%02X", raw))")
             if raw == 0x03 {
                 return .mode(.off)
-            } else if raw == 0x02 && is5Pro {
-                return .mode(.medium)
             } else {
                 return .mode(CoolingMode(rawValue: raw))
             }
@@ -184,6 +178,7 @@ final class RedMagicDriver: CoolerDriver {
 
         // 3. Fan speed readback (0x1012)
         if uuidStr.contains("1012") {
+            EventLogger.record("REDMAGIC — fan readback on 1012: \(data[0])%")
             return .fan(data[0])
         }
 

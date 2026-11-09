@@ -681,6 +681,9 @@ extension CoolerBLEManager: CBPeripheralDelegate {
             EventLogger.record("BLE — write error on \(characteristic.uuid.uuidString): \(error.localizedDescription)")
         } else {
             EventLogger.record("BLE — write confirmed on \(characteristic.uuid.uuidString)")
+            if characteristic.uuid.uuidString.lowercased().contains("1012") {
+                peripheral.readValue(for: characteristic)
+            }
         }
     }
 

@@ -79,6 +79,7 @@ final class CoolerPanelView: PanelRowView {
         var telemetry: CoolerTelemetry?
         var mode: CoolingMode = .off
         var fanPercent: UInt8 = 0
+        var statusDetail: String? = nil
         /// The cooler is linked and commanded on, but its physical switch looks
         /// to be off. The fan is then drawn still: showing it spinning while the
         /// hardware sits idle is the single most misleading thing this panel can
@@ -331,7 +332,9 @@ final class CoolerPanelView: PanelRowView {
         let cells = telemetryCells()
         guard !cells.isEmpty else {
             let label: String
-            if model.mode.isOn {
+            if let detail = model.statusDetail {
+                label = detail
+            } else if model.mode.isOn {
                 label = "Active Cooling (\(model.fanPercent)%)"
             } else {
                 label = "Standby"
