@@ -67,14 +67,19 @@ final class AutoOptionsView: PanelRowView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func configure(engageC: Double, profile: AutoProfile) {
-        slider.doubleValue = engageC
-        updateValueLabel()
+        let isInteracting = slider.cell?.isHighlighted == true
+        if !isInteracting && abs(slider.doubleValue - engageC) >= 0.5 {
+            slider.doubleValue = engageC
+            updateValueLabel()
+        }
         profileControl.selectedSegment = (profile == .balanced) ? 0 : 1
         captionLabel.stringValue = profile.caption
     }
 
     func setEnabled(_ enabled: Bool) {
-        slider.isEnabled = enabled
+        if slider.cell?.isHighlighted != true {
+            slider.isEnabled = enabled
+        }
         profileControl.isEnabled = enabled
     }
 

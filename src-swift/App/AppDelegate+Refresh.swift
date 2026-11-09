@@ -199,7 +199,7 @@ extension AppDelegate {
 
     // ── Menu-bar button ──────────────────────────────────────────────────────
 
-    private func refreshStatusItemButton() {
+    func refreshStatusItemButton() {
         guard let button = statusItem.button else { return }
         let temperature = ble.isConnected
             ? SystemInfo.formatTemp(thermal.dieTemperatureC, degreeOnly: true)
@@ -227,7 +227,7 @@ extension AppDelegate {
 
     // ── Status card and cooler panel ─────────────────────────────────────────
 
-    private func refreshCards(connected: Bool) {
+    func refreshCards(connected: Bool) {
         statusCard.update(StatusCardView.ViewModel(
             dieTempC: thermal.dieTemperatureC,
             thermalState: thermal.thermalState))

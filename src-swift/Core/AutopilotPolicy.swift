@@ -149,8 +149,13 @@ final class AutopilotPolicy {
             tierIndex = target
             coolingSince = nil
         } else if target < tierIndex {
-            // Cooling off — hold, then release one tier at a time.
-            if let since = coolingSince {
+            // If target is off (below engage threshold and hysteresis), cut cooling immediately
+            // so cooler doesn't run needlessly while the Mac is already cold.
+            if target == 0 && (dieC == nil || dieC! < (engageC - hysteresisC)) {
+                tierIndex = 0
+                coolingSince = nil
+            } else if let since = coolingSince {
+                // Stepped cool-down for hot Mac transitioning between active tiers
                 if now - since >= dwell {
                     tierIndex -= 1
                     coolingSince = (tierIndex > target) ? now : nil

@@ -53,7 +53,8 @@ extension AppDelegate {
         autopilot.setEngage(celsius)
         UserDefaults.standard.set(autopilot.engageC, forKey: Config.Key.engageC)
         if appMode == .auto { runAutopilot() }
-        refresh()
+        refreshCards(connected: ble.isConnected)
+        refreshStatusItemButton()
     }
 
     /// Applies a manual slider position.
