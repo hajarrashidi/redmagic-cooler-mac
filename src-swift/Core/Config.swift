@@ -141,7 +141,7 @@ enum Config {
         static let shutoffMaxC: Double = 50.0
 
         /// User-configurable minimum fan speed in Smart Max when below engage threshold:
-        static let smartMaxMinFanDefault: UInt8 = 30 // 30% fan power
+        static let smartMaxMinFanDefault: UInt8 = 40 // 40% fan power (distinct physical hardware RPM threshold)
         static let shutoffFloorC: Double = 38.0
     }
 

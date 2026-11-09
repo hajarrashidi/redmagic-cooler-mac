@@ -74,9 +74,9 @@ func runTests() {
         print("  ✅ Driver: \(profile.id) -> \(type(of: driver)) with Service \(driver.serviceUUID.uuidString)")
     }
 
-    // 5. AutopilotPolicy Smart Max, 30% Active Floor & Configurable Shutoff
-    print("\n🧠 Testing Autopilot Smart Max 30% Active Floor & Shutoff Cutoff...")
-    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 30)
+    // 5. AutopilotPolicy Smart Max Fast-Attack Boost & Configurable Shutoff
+    print("\n🧠 Testing Autopilot Smart Max Fast-Attack Boost & Shutoff Cutoff...")
+    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
     policy.setProfile(.smartMax)
 
     // A. Mac is hot (50°C >= engage 50°C): MUST ENGAGE MAX (100% fan)
@@ -84,33 +84,32 @@ func runTests() {
     assert(dec.tier.mode == .max && dec.tier.fanPercent == 100, "Expected cooler max at 50°C")
     print("  ✅ Smart Max High Heat: 50°C -> Cooler engages at MAX (100% fan)")
 
-    // B. Mac cools down to 42°C (between shutoff 38°C and engage 50°C): MUST RUN AT 30% MIN POWER
-    dec = policy.evaluate(thermalState: .nominal, dieC: 42.0, now: 1001)
-    assert(dec.tier.mode == .low && dec.tier.fanPercent == 30, "Expected cooler active at min 30% fan at 42°C, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Active Floor: 42°C -> Cooler stays active at MINIMUM POWER (30% fan)")
+    // B. Mac at 41°C (progress = (41-38)/(50-38) = 0.25, sqrt(0.25)=0.5, 40 + 0.5*60 = 70%):
+    dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1001)
+    assert(dec.tier.fanPercent == 70, "Expected Smart Max fast-attack at 70% fan at 41°C, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Fast-Attack: 41°C -> Fast-attack delivers 70% fan")
 
     // C. Mac cools all the way down to 37°C (< 38°C shutoff threshold): MUST SHUT OFF COMPLETELY
     dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1002)
     assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off when Mac drops below 38°C shutoff threshold")
     print("  ✅ Smart Max Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // D. Test user-customized shutoff and min fan percent:
-    policy.setShutoff(40.0)
-    policy.setMinFanPercent(40)
-    print("  ✅ Configured custom shutoff to 40°C and min fan to 40%")
+    // D. Test user-customized base fan percent to 55%:
+    policy.setMinFanPercent(55)
+    print("  ✅ Configured custom base fan to 55%")
 
-    // At 42°C, it should run at 40% fan:
-    dec = policy.evaluate(thermalState: .nominal, dieC: 42.0, now: 1003)
-    assert(dec.tier.mode == .low && dec.tier.fanPercent == 40, "Expected cooler at 40% fan")
-    print("  ✅ Smart Max Custom Min Fan: 42°C -> Cooler runs at configured 40% fan")
+    // At 41°C with base 55% (55 + 0.5*45 = 77.5 -> 80%):
+    dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1003)
+    assert(dec.tier.fanPercent == 80, "Expected cooler at 80% fan with 55% base, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Custom Base: 41°C -> Cooler runs at configured 80% fan")
 
-    // At 39°C (< 40°C), it should shut off:
-    dec = policy.evaluate(thermalState: .nominal, dieC: 39.0, now: 1004)
-    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off below custom 40°C shutoff")
-    print("  ✅ Smart Max Custom Shutoff: 39°C (< 40°C) -> Cooler shuts OFF completely (0% fan)")
+    // At 37°C (< 38°C), it should shut off:
+    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1004)
+    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off below 38°C shutoff")
+    print("  ✅ Smart Max Shutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan)")
 
-    // 6. Test Balanced Dynamic Fan Curve & Shutoff
-    print("\n🧠 Testing Autopilot Balanced Dynamic Curve & Shutoff Cutoff...")
+    // 6. Test Balanced Dynamic Acoustic Ramp & Shutoff
+    print("\n🧠 Testing Autopilot Balanced Dynamic Acoustic Ramp & Shutoff...")
     let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0)
     balanced.setProfile(.balanced)
 
@@ -119,33 +118,33 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off below shutoff threshold")
     print("  ✅ Balanced Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // B. At shutoff boundary (38°C): starts at 25% fan (gentle whisper-quiet cooling)
+    // B. At shutoff boundary (38°C): starts at 35% fan (hardware acoustic floor)
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 38.0)
-    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 25, "Expected Balanced at 25% at 38°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Lower Boundary: 38°C -> Starts gently at 25% fan")
+    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 35, "Expected Balanced at 35% at 38°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 35% fan")
 
-    // C. At 41°C (quarter curve): dynamic interpolation ~45% fan
+    // C. At 41°C (progress = 0.25, 35 + 0.25*65 = 51.25 -> 50%):
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(bDec.tier.fanPercent >= 40 && bDec.tier.fanPercent <= 45, "Expected Balanced curve ~45% at 41°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Dynamic Curve: 41°C -> Precisely 45% fan")
+    assert(bDec.tier.fanPercent == 50, "Expected Balanced linear ramp at 50% at 41°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Ramp: 41°C -> Precisely 50% fan")
 
-    // D. At 44°C (mid curve): dynamic interpolation ~65% fan
-    bDec = balanced.evaluate(thermalState: .nominal, dieC: 44.0)
-    assert(bDec.tier.fanPercent >= 60 && bDec.tier.fanPercent <= 65, "Expected Balanced curve ~65% at 44°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Dynamic Curve: 44°C -> Precisely 65% fan")
+    // Verify Smart Max delivers MORE cooling than Balanced at same 41°C temperature:
+    let smDec = policy.evaluate(thermalState: .nominal, dieC: 41.0)
+    assert(smDec.tier.fanPercent > bDec.tier.fanPercent, "Smart Max (\(smDec.tier.fanPercent)%) must deliver higher cooling than Balanced (\(bDec.tier.fanPercent)%) at same temp")
+    print("  ✅ Multi-Tier Verification: Smart Max (\(smDec.tier.fanPercent)%) > Balanced (\(bDec.tier.fanPercent)%) at 41°C")
 
-    // E. At 50°C (engage threshold): 100% max fan
+    // D. At 50°C (engage threshold): 100% max fan
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 50.0)
     assert(bDec.tier.mode == .max && bDec.tier.fanPercent == 100, "Expected Balanced 100% at engage threshold")
     print("  ✅ Balanced Full Power: 50°C (engage) -> 100% MAX fan")
 
-    // F. Change shutoff threshold in Balanced to 42°C: at 41°C it MUST now be OFF!
+    // E. Change shutoff threshold in Balanced to 42°C: at 41°C it MUST now be OFF!
     balanced.setShutoff(42.0)
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off at 41°C when shutoff is 42°C")
     print("  ✅ Balanced Custom Shutoff: 41°C (< custom 42°C) -> Cooler immediately shuts OFF")
 
-    print("\n🎉 ALL TESTS PASSED! Multi-brand catalog, driver isolation, Smart Max floor & Balanced curve verified.")
+    print("\n🎉 ALL TESTS PASSED! Multi-brand catalog, driver isolation, Smart Max fast-attack & Balanced acoustic curve verified.")
 }
 
 runTests()

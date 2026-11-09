@@ -7,18 +7,18 @@ enum AutoProfile: String, CaseIterable {
     var caption: String {
         switch self {
         case .balanced:
-            return "Dynamic curve: smooth 25%–100% cooling. Safely shuts off below threshold."
+            return "Smooth acoustic curve: scales gently from 35% to 100%. Shuts off below threshold."
         case .smartMax:
-            return "Full 100% power at ≥ engage. Minimum quiet power until < shutoff."
+            return "Aggressive cooling ramp: fast-attack boost from base power to 100%. Shuts off below threshold."
         }
     }
 }
 
-/// Decides how hard to cool from Mac die temperature and macOS thermal pressure.
+/// Decides cooling intensity from Mac die temperature and macOS thermal pressure.
 ///
 /// Supports two auto profiles:
-///  * Balanced: Dynamic proportional fan curve (25% to 100%) between shutoff and engage thresholds.
-///  * Smart Max: Full 100% power at/above engage threshold, quiet minimum power between shutoff and engage.
+///  * Balanced: Gentle linear acoustic ramp (35% to 100%) between shutoff and engage.
+///  * Smart Max: Fast-attack aggressive curve (base power to 100%) between shutoff and engage.
 ///
 /// Both profiles safely shut off completely (0% / Standby) when the Mac drops below the shutoff threshold.
 final class AutopilotPolicy {
@@ -31,9 +31,8 @@ final class AutopilotPolicy {
 
     static let tiers: [Tier] = [
         Tier(mode: .off,    fanPercent: 0,   label: "off"),
-        Tier(mode: .low,    fanPercent: 60,  label: "low"),
-        Tier(mode: .medLow, fanPercent: 80,  label: "med-low"),
-        Tier(mode: .medium, fanPercent: 95,  label: "medium"),
+        Tier(mode: .low,    fanPercent: 40,  label: "low"),
+        Tier(mode: .medium, fanPercent: 70,  label: "medium"),
         Tier(mode: .max,    fanPercent: 100, label: "max"),
     ]
 
@@ -49,6 +48,9 @@ final class AutopilotPolicy {
     private(set) var minFanPercent: UInt8
     private(set) var profile: AutoProfile = .balanced
 
+    /// Physical PWM floor of high-power Peltier coolers (where fan starts distinct acoustic modulation)
+    static let hardwareFloorPercent: Double = 35.0
+
     init(engageC: Double = Config.Autopilot.engageDefaultC,
          shutoffC: Double = Config.Autopilot.shutoffDefaultC,
          minFanPercent: UInt8 = Config.Autopilot.smartMaxMinFanDefault,
@@ -57,7 +59,7 @@ final class AutopilotPolicy {
          shutoffFloorC: Double? = nil) {
         let effectiveShutoff = shutoffFloorC ?? shutoffC
         self.shutoffC = effectiveShutoff.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
-        self.minFanPercent = minFanPercent.clamped(to: 10...100)
+        self.minFanPercent = max(35, minFanPercent).clamped(to: 35...100)
         self.engageC = max(engageC, self.shutoffC + 2.0).clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
     }
 
@@ -74,7 +76,7 @@ final class AutopilotPolicy {
     }
 
     func setMinFanPercent(_ percent: UInt8) {
-        self.minFanPercent = percent.clamped(to: 10...100)
+        self.minFanPercent = max(35, percent).clamped(to: 35...100)
     }
 
     // ── Evaluation ───────────────────────────────────────────────────────────
@@ -97,43 +99,43 @@ final class AutopilotPolicy {
         let targetFan: UInt8
         let label: String
 
-        // 1. Shutoff condition applies to BOTH Balanced and Smart Max!
+        // 1. Cutoff: Below shutoff threshold, cooler turns completely off to prevent condensation
         if dieC < shutoffC {
             targetMode = .off
             targetFan = 0
-            label = "off (< \(Int(round(shutoffC)))°C)"
-        } else if profile == .smartMax {
-            // Smart Max profile
-            if dieC >= engageC {
+            label = "Standby (< \(Int(round(shutoffC)))°C)"
+        } else if dieC >= engageC {
+            // 2. Engage threshold reached or exceeded: Full boost 100%
+            targetMode = .max
+            targetFan = 100
+            label = "\(profile == .smartMax ? "Smart Max" : "Balanced") (100%)"
+        } else {
+            // 3. Active thermal control zone: shutoffC <= dieC < engageC
+            let span = max(1.0, engageC - shutoffC)
+            let progress = ((dieC - shutoffC) / span).clamped(to: 0.0...1.0)
+
+            if profile == .smartMax {
+                // Smart Max: Fast-attack aggressive curve from base power to 100%
+                // Uses sqrt(progress) convex attack so it delivers aggressive cooling immediately
+                let base = Double(max(Int(Self.hardwareFloorPercent), Int(minFanPercent)))
+                let aggressiveProgress = sqrt(progress)
+                let rawFan = base + aggressiveProgress * (100.0 - base)
+                targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
+                label = "Smart Max (\(targetFan)%)"
+            } else {
+                // Balanced: Gentle linear acoustic ramp from hardware floor (35%) to 100%
+                let floor = Self.hardwareFloorPercent
+                let rawFan = floor + progress * (100.0 - floor)
+                targetFan = UInt8(min(100, max(floor, round(rawFan / 5.0) * 5.0)))
+                label = "Balanced (\(targetFan)%)"
+            }
+
+            if targetFan >= 85 {
                 targetMode = .max
-                targetFan = 100
-                label = "max (100%)"
+            } else if targetFan >= 60 {
+                targetMode = .medium
             } else {
                 targetMode = .low
-                targetFan = minFanPercent
-                label = "min (\(minFanPercent)%)"
-            }
-        } else {
-            // Balanced profile: Dynamic proportional curve
-            if dieC >= engageC {
-                targetMode = .max
-                targetFan = 100
-                label = "max (100%)"
-            } else {
-                let span = max(1.0, engageC - shutoffC)
-                let t = ((dieC - shutoffC) / span).clamped(to: 0.0...1.0)
-                // Linear interpolation from 25% to 100%, rounded to nearest 5%
-                let rawFan = 25.0 + t * 75.0
-                let quantizedFan = UInt8(min(100, max(20, round(rawFan / 5.0) * 5.0)))
-                targetFan = quantizedFan
-                if targetFan >= 85 {
-                    targetMode = .max
-                } else if targetFan >= 65 {
-                    targetMode = .medium
-                } else {
-                    targetMode = .low
-                }
-                label = "curve (\(targetFan)%)"
             }
         }
 

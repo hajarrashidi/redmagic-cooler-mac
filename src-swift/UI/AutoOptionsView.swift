@@ -1,6 +1,6 @@
 import AppKit
 
-/// Auto-mode profile, engage threshold, shutoff cutoff, and Smart Max minimum power controls.
+/// Auto-mode profile, engage threshold, shutoff cutoff, and Smart Max base power controls.
 final class AutoOptionsView: PanelRowView {
 
     var onEngageChange: ((Double) -> Void)?
@@ -25,9 +25,9 @@ final class AutoOptionsView: PanelRowView {
     private let shutoffSlider = NSSlider()
     private let shutoffValueLabel = NSTextField(labelWithString: "")
 
-    // ── Smart Max Minimum Power ──
-    private let minPowerTitle = UIStyle.sectionLabel("MIN POWER (SMART MAX)")
-    private let minPowerControl = NSSegmentedControl(labels: ["20%", "30%", "40%", "50%"],
+    // ── Smart Max Base Power ──
+    private let minPowerTitle = UIStyle.sectionLabel("BASE POWER (SMART MAX)")
+    private let minPowerControl = NSSegmentedControl(labels: ["40%", "55%", "70%", "85%"],
                                                      trackingMode: .selectOne,
                                                      target: nil, action: nil)
 
@@ -44,7 +44,7 @@ final class AutoOptionsView: PanelRowView {
         static let height: CGFloat = 236
     }
 
-    private static let minFanOptions: [UInt8] = [20, 30, 40, 50]
+    private static let minFanOptions: [UInt8] = [40, 55, 70, 85]
 
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Layout.height))
@@ -104,12 +104,12 @@ final class AutoOptionsView: PanelRowView {
         shutoffSlider.autoresizingMask = .width
         addSubview(shutoffSlider)
 
-        // Min Power Selector
+        // Base Power Selector
         minPowerTitle.frame = NSRect(x: hPad, y: Layout.minPowerTitleY, width: contentWidth, height: 14)
         addSubview(minPowerTitle)
 
         minPowerControl.segmentStyle = .rounded
-        minPowerControl.selectedSegment = 1 // 30% default
+        minPowerControl.selectedSegment = 0 // 40% default
         minPowerControl.target = self
         minPowerControl.action = #selector(minPowerChanged)
         minPowerControl.frame = NSRect(x: hPad, y: Layout.minPowerControlY, width: contentWidth, height: 24)
@@ -141,10 +141,10 @@ final class AutoOptionsView: PanelRowView {
         // Match closest minFanPercent in segmented control
         let targetIndex = Self.minFanOptions.enumerated().min(by: {
             abs(Int($0.element) - Int(minFanPercent)) < abs(Int($1.element) - Int(minFanPercent))
-        })?.offset ?? 1
+        })?.offset ?? 0
         minPowerControl.selectedSegment = targetIndex
 
-        // In Balanced mode, min power control is dimmed (Balanced uses the dynamic curve)
+        // In Balanced mode, base power control is dimmed (Balanced uses the dynamic acoustic curve)
         let isSmartMax = (profile == .smartMax)
         minPowerControl.isEnabled = isSmartMax
         minPowerTitle.alphaValue = isSmartMax ? 1.0 : 0.45
