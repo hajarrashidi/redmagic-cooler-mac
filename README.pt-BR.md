@@ -137,6 +137,49 @@ O script compila o executável nativo em Swift, assina o pacote localmente e ins
 
 ---
 
+## 🤖 Seu Cooler Não Funcionou? Correção Assistida por IA e Envio de Relatório
+
+Como os fabricantes de coolers Bluetooth lançam novas revisões de firmware ou mudam os UUIDs das características GATT entre lotes, pode acontecer de algum modelo conectar sem responder aos comandos ou ainda não ser reconhecido.
+
+Você pode usar qualquer modelo de IA (**Claude, ChatGPT, Gemini, Cursor ou Antigravity**) para diagnosticar, extrair a correção na hora e nos enviar as informações necessárias:
+
+### 1. Extraia o log de comunicação do seu cooler
+Abra o app, tente escanear ou conectar ao cooler e rode este comando no Terminal do Mac para copiar as últimas 50 linhas do log:
+```bash
+tail -n 50 ~/.cooler.log
+```
+
+### 2. Copie e cole este Prompt no seu modelo de IA
+```text
+Estou usando o projeto open-source para macOS "Smart Cooler Control" (https://github.com/Despensativo/redmagic-cooler-mac).
+Meu cooler Bluetooth não está funcionando como esperado ou ainda não é reconhecido.
+
+Contexto da arquitetura do projeto:
+- Os perfis de dispositivos e regras de identificação BLE ficam em `src-swift/BLE/DeviceProfile.swift`.
+- Os drivers GATT isolados por marca ficam em `src-swift/BLE/Drivers/` (`RedMagicDriver.swift`, `BlackSharkDriver.swift`, `FlydigiDriver.swift`, `MemoDriver.swift`, `OnePlusDriver.swift`, `IQOODriver.swift`).
+- Para compilar e testar localmente após editar, basta rodar `./build.sh --run`.
+
+Aqui estão os dados do meu cooler e a saída do arquivo `~/.cooler.log`:
+- Marca e Modelo do Cooler: [INSIRA O MODELO E POTÊNCIA EM WATTS]
+- Sintoma observado: [Ex: Não aparece no Scan / Conecta mas a ventoinha não muda / LED não responde]
+- Saída do log (`~/.cooler.log`):
+[COLE AQUI O RESULTADO DO COMANDO tail -n 50 ~/.cooler.log]
+
+Por favor:
+1. Analise o nome anunciado via BLE, os Service UUIDs, Characteristic UUIDs e os bytes hexadecimais no log.
+2. Identifique a causa raiz e gere o ajuste exato em Swift (`DeviceProfile.swift` e no driver correspondente) para que eu possa testar a correção localmente com `./build.sh --run`.
+3. Gere um Resumo Técnico estruturado (Nome BLE, UUIDs de Serviço/Característica, Formato dos Bytes e Diff da Correção) pronto para eu enviar ao mantenedor do projeto.
+```
+
+### 3. Envie o resultado para atualizarmos o app oficial!
+Assim que a IA gerar a correção (ou mesmo se você quiser enviar apenas o diagnóstico e o log para analisarmos), basta mandar para:
+- 📧 **E-mail direto:** [despensativo@gmail.com](mailto:despensativo@gmail.com?subject=Smart%20Cooler%20Control%20-%20Relatorio%20ou%20Correcao%20de%20Cooler)
+- 🐛 **GitHub Issues / PR:** [Abrir uma Issue ou Pull Request](https://github.com/Despensativo/redmagic-cooler-mac/issues)
+
+Com essas informações, homologamos e incluímos o suporte nativo na próxima atualização para toda a comunidade!
+
+---
+
 ## 🙏 Créditos e Agradecimentos
 
 O **Smart Cooler Control** é um novo projeto independente e multimarca de gerenciamento térmico ativo (≥ 30W) para Apple Silicon. Agradecimentos especiais a [@hajarrashidi](https://github.com/hajarrashidi/redmagic-cooler-mac) pela base inicial focada no REDMAGIC 6 Pro a partir da qual esta plataforma evoluiu.

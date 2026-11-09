@@ -137,6 +137,49 @@ cd redmagic-cooler-mac
 
 ---
 
+## 🤖 散热器未响应或暂未支持？AI 辅助修复与问题反馈
+
+由于各品牌蓝牙散热器在不同批次或固件版本中可能会更改广播名称或 GATT 特征 UUID，您的散热器可能会出现连接后不响应或暂未被识别的情况。
+
+您可以直接使用任意 AI 模型（**Claude、ChatGPT、Gemini、Cursor 或 Antigravity**）快速分析日志并提取修复方案：
+
+### 1. 获取本地蓝牙诊断日志
+在软件中扫描或连接您的散热器后，打开终端（Terminal）运行以下命令获取最近 50 行日志：
+```bash
+tail -n 50 ~/.cooler.log
+```
+
+### 2. 复制以下提示词（Prompt）发送给 AI 助手
+```text
+我正在使用 macOS 开源项目 "Smart Cooler Control" (https://github.com/Despensativo/redmagic-cooler-mac)。
+我的蓝牙散热器目前无法正常响应或尚未被识别。
+
+项目架构背景：
+- 设备配置与蓝牙匹配规则位于 `src-swift/BLE/DeviceProfile.swift`。
+- 各品牌独立 GATT 驱动位于 `src-swift/BLE/Drivers/`（`RedMagicDriver.swift`、`BlackSharkDriver.swift`、`FlydigiDriver.swift`、`MemoDriver.swift`、`OnePlusDriver.swift`、`IQOODriver.swift`）。
+- 修改代码后可通过 `./build.sh --run` 直接编译并运行测试。
+
+以下是我的散热器型号与 `~/.cooler.log` 日志内容：
+- 散热器品牌与型号：[填写品牌、型号及功率]
+- 遇到的现象：[例如：扫描不到 / 连接成功但风扇不转 / 灯光无法调节]
+- 日志输出 (`~/.cooler.log`)：
+[在此粘贴 tail -n 50 ~/.cooler.log 的输出内容]
+
+请你：
+1. 分析日志中的 BLE 广播名称、Service UUID、Characteristic UUID 以及原始十六进制数据包。
+2. 找出原因并给出 `DeviceProfile.swift` 及对应驱动的具体 Swift 修改代码，方便我通过 `./build.sh --run` 本地验证。
+3. 生成一份结构化的【技术诊断摘要】（包含广播名、UUID 列表、指令格式与代码 Diff），以便我发送给项目维护者合并更新。
+```
+
+### 3. 提交报告或发送邮件，帮助我们更新官方版本！
+无论您通过 AI 成功验证了修复方案，还是仅希望提交诊断日志由我们协助适配，欢迎通过以下方式联系：
+- 📧 **发送邮件：** [despensativo@gmail.com](mailto:despensativo@gmail.com?subject=Smart%20Cooler%20Control%20-%20Device%20Report%20%2F%20Fix)
+- 🐛 **GitHub Issues / PR：** [提交 Issue 或 Pull Request](https://github.com/Despensativo/redmagic-cooler-mac/issues)
+
+收到您的反馈后，我们将第一时间完成适配并合并至下一版官方更新中！
+
+---
+
 ## 🙏 致谢与声明
 
 **Smart Cooler Control** 是一个全新的独立多品牌大功率（≥ 30W）半导体制冷管理平台。特别感谢 [@hajarrashidi](https://github.com/hajarrashidi/redmagic-cooler-mac) 早期针对单款红魔 6 Pro 散热器提供的基础项目启发。

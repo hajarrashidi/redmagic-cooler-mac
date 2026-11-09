@@ -147,6 +147,49 @@ Smart Cooler Control is built strictly with Apple-native technologies (**Swift, 
 
 ---
 
+## 🤖 Cooler Not Working? AI-Assisted Fix & Diagnostic Report
+
+Because Bluetooth cooler manufacturers frequently release new hardware revisions or change GATT characteristic UUIDs across firmware updates, your cooler might connect without responding or might not be recognized yet.
+
+You can use any AI assistant (**Claude, ChatGPT, Gemini, Cursor, or Antigravity**) to diagnose and fix your cooler locally in minutes:
+
+### 1. Collect your device log
+Connect or scan for your cooler in the app, then run this command in Terminal to inspect the last 50 log lines:
+```bash
+tail -n 50 ~/.cooler.log
+```
+
+### 2. Copy & paste this prompt into your AI assistant
+```text
+I am using the open-source macOS app "Smart Cooler Control" (https://github.com/Despensativo/redmagic-cooler-mac).
+My cooler is not responding properly or is not yet supported.
+
+Architecture context:
+- Device profiles and BLE matching rules live in `src-swift/BLE/DeviceProfile.swift`.
+- Brand-isolated GATT drivers live in `src-swift/BLE/Drivers/` (`RedMagicDriver.swift`, `BlackSharkDriver.swift`, `FlydigiDriver.swift`, `MemoDriver.swift`, `OnePlusDriver.swift`, `IQOODriver.swift`).
+- After editing, the app compiles and runs via `./build.sh --run`.
+
+Here is my cooler model and the output from `~/.cooler.log`:
+- Cooler Brand & Model: [INSERT MODEL NAME & WATTAGE]
+- What happens: [e.g., Not found in scan / Connects but fan doesn't spin / LED doesn't change]
+- Log output (`~/.cooler.log`):
+[PASTE OUTPUT OF tail -n 50 ~/.cooler.log HERE]
+
+Please:
+1. Analyze the advertised BLE name, Service UUIDs, Characteristic UUIDs, and raw hex payloads in the log.
+2. Identify the root cause and provide the exact Swift code changes in `DeviceProfile.swift` and the corresponding driver so I can test the fix locally with `./build.sh --run`.
+3. Generate a concise Technical Summary (Advertised Name, Service/Char UUIDs, Command Hex Format, and Patch Diff) that I can email to the maintainer.
+```
+
+### 3. Send us the report so we can update the official app!
+Whether the AI helped you find the working fix or you just have the diagnostic log, please send the summary to:
+- 📧 **Email:** [despensativo@gmail.com](mailto:despensativo@gmail.com?subject=Smart%20Cooler%20Control%20-%20Device%20Report%20%2F%20Fix)
+- 🐛 **GitHub Issues / PR:** [Open an Issue or Pull Request](https://github.com/Despensativo/redmagic-cooler-mac/issues)
+
+We will review your report and include official native support for your cooler in the next release!
+
+---
+
 ## 🙏 Credits & Acknowledgments
 
 **Smart Cooler Control** is an independent multi-brand thermal management platform engineered for high-power (≥ 30W) thermoelectric coolers on Apple Silicon. Special thanks to [@hajarrashidi](https://github.com/hajarrashidi/redmagic-cooler-mac) for the initial single-device REDMAGIC 6 Pro macOS foundation from which this project evolved.
