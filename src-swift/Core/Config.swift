@@ -64,7 +64,7 @@ enum Config {
     /// Where `UpdateChecker` looks, and how often.
     enum Updates {
         /// The repository releases are published from.
-        static let repository = "hajarrashidi/redmagic-cooler-mac"
+        static let repository = "Despensativo/redmagic-cooler-mac"
 
         /// `/releases/latest` already excludes drafts and prereleases, so
         /// nothing needs filtering on our side.

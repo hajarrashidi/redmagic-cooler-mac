@@ -36,20 +36,25 @@ Coolers comuns de celular de **10W a 15W** não têm potência de bombeamento de
 <div align="center">
 <table>
   <tr>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_auto_smartmax.png" alt="Perfil Smart Max" width="100%"/>
       <br/><b>Perfil Smart Max</b><br/>
       <sub>Salto imediato para 100% no limiar de engate</sub>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_auto_balanced.png" alt="Perfil Balanced" width="100%"/>
       <br/><b>Perfil Balanced</b><br/>
       <sub>Rampa acústica suave e progressiva</sub>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_manual.png" alt="Modo Manual" width="100%"/>
       <br/><b>Modo Manual de Precisão</b><br/>
-      <sub>Controle deslizante e temporizador automático</sub>
+      <sub>Slider, timer e espectro RGB</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="docs/images/screenshot_device_picker.png" alt="Seletor Multimarca" width="100%"/>
+      <br/><b>Descoberta Multimarca</b><br/>
+      <sub>Catálogo BLE isolado ≥ 30W</sub>
     </td>
   </tr>
 </table>
@@ -129,6 +134,12 @@ O script compila o executável nativo em Swift, assina o pacote localmente e ins
 ## 🏷️ Palavras-Chave para Indexação (SEO)
 
 `cooler-macbook` • `apple-silicon-cooling` • `macbook-pro-m3` • `macbook-air-m2` • `resfriamento-ativo-mac` • `thermal-throttling-mac` • `cooler-redmagic-mac` • `redmagic-5-pro` • `vc-cooler-6-pro` • `black-shark-cooler` • `flydigi-b8x` • `cooler-peltier-mac` • `swift-macos` • `appkit` • `corebluetooth` • `menu-bar-mac` • `controle-ventoinha-mac`
+
+---
+
+## 🙏 Créditos e Agradecimentos
+
+O **Smart Cooler Control** é um novo projeto independente e multimarca de gerenciamento térmico ativo (≥ 30W) para Apple Silicon. Agradecimentos especiais a [@hajarrashidi](https://github.com/hajarrashidi/redmagic-cooler-mac) pela base inicial focada no REDMAGIC 6 Pro a partir da qual esta plataforma evoluiu.
 
 ---
 

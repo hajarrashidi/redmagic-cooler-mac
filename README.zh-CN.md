@@ -36,20 +36,25 @@
 <div align="center">
 <table>
   <tr>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_auto_smartmax.png" alt="Smart Max 极速制冷模式" width="100%"/>
       <br/><b>Smart Max 极速模式</b><br/>
       <sub>达到阈值瞬时爆发 100% 制冷</sub>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_auto_balanced.png" alt="Balanced 均衡温控模式" width="100%"/>
       <br/><b>Balanced 均衡模式</b><br/>
       <sub>随核心温度平滑声学曲线升降速</sub>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_manual.png" alt="Manual 手动精准模式" width="100%"/>
       <br/><b>Manual 手动档位模式</b><br/>
-      <sub>无级滑块与自动关机定时器</sub>
+      <sub>滑块、定时器与全彩灯效控制</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="docs/images/screenshot_device_picker.png" alt="多品牌设备发现" width="100%"/>
+      <br/><b>多品牌设备发现</b><br/>
+      <sub>≥ 30W 专属蓝牙驱动隔离名录</sub>
     </td>
   </tr>
 </table>
@@ -129,6 +134,12 @@ cd redmagic-cooler-mac
 ## 🏷️ 关键词与索引标签 (SEO)
 
 `mac-cooler` • `macbook-cooling` • `apple-silicon` • `macbook-pro-m3` • `macbook-air-m2` • `thermal-throttling` • `redmagic-mac` • `redmagic-cooler-5pro` • `vc-cooler-6-pro` • `black-shark-cooler` • `flydigi-b8x` • `peltier-cooling` • `半导体制冷` • `红魔散热器mac` • `黑鲨散热器mac` • `飞智b8x` • `mac状态栏应用` • `swift-macos`
+
+---
+
+## 🙏 致谢与声明
+
+**Smart Cooler Control** 是一个全新的独立多品牌大功率（≥ 30W）半导体制冷管理平台。特别感谢 [@hajarrashidi](https://github.com/hajarrashidi/redmagic-cooler-mac) 早期针对单款红魔 6 Pro 散热器提供的基础项目启发。
 
 ---
 

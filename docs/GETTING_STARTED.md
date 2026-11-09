@@ -1,6 +1,6 @@
 # Getting started
 
-This guide covers installing RedMagic Cooler for macOS, connecting a cooler,
+This guide covers installing Smart Cooler Control for macOS, connecting a cooler,
 and using the menu-bar controls. For supported hardware, see
 [`COMPATIBILITY.md`](COMPATIBILITY.md).
 
@@ -18,8 +18,8 @@ Access**, not at launch.
 ## Install a release
 
 Download the DMG from the
-[latest GitHub release](https://github.com/hajarrashidi/redmagic-cooler-mac/releases/latest),
-open it, and drag **RedMagic Cooler** to Applications.
+[latest GitHub release](https://github.com/Despensativo/redmagic-cooler-mac/releases/latest),
+open it, and drag **Smart Cooler Control** to Applications.
 
 Releases are signed with a Developer ID certificate and notarized by Apple.
 The app checks GitHub for updates at launch and once per day while running. If
@@ -33,7 +33,7 @@ and if the install cannot finish the banner opens the release page instead.
 Install Apple's Xcode command-line tools with `xcode-select --install`, then:
 
 ```bash
-git clone https://github.com/hajarrashidi/redmagic-cooler-mac.git
+git clone https://github.com/Despensativo/redmagic-cooler-mac.git
 cd redmagic-cooler-mac
 ./build.sh --run
 ```

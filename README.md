@@ -36,20 +36,25 @@ Generic 10W–15W smartphone coolers lack the thermal pump capacity to penetrate
 <div align="center">
 <table>
   <tr>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_auto_smartmax.png" alt="Smart Max Profile" width="100%"/>
       <br/><b>Smart Max Profile</b><br/>
       <sub>Immediate 100% boost at engage threshold</sub>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_auto_balanced.png" alt="Balanced Profile" width="100%"/>
       <br/><b>Balanced Profile</b><br/>
       <sub>Smooth acoustic ramp from min power</sub>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <img src="docs/images/screenshot_manual.png" alt="Manual Mode" width="100%"/>
       <br/><b>Manual Precision Mode</b><br/>
-      <sub>Step slider with auto-off timers</sub>
+      <sub>Step slider, timers & RGB spectrum</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="docs/images/screenshot_device_picker.png" alt="Multi-Brand Device Picker" width="100%"/>
+      <br/><b>Multi-Brand Discovery</b><br/>
+      <sub>Isolated ≥ 30W BLE driver catalog</sub>
     </td>
   </tr>
 </table>
@@ -139,6 +144,12 @@ Smart Cooler Control is built strictly with Apple-native technologies (**Swift, 
 ## 🏷️ Keywords & Indexing Tags
 
 `macos` • `apple-silicon` • `macbook-pro` • `macbook-air` • `m1` • `m2` • `m3` • `m4` • `thermal-throttling` • `active-cooling` • `peltier-cooler` • `thermoelectric-cooling` • `redmagic-cooler` • `redmagic-5-pro` • `vc-cooler-6-pro` • `black-shark-cooler` • `flydigi-b8x` • `corebluetooth` • `swift` • `appkit` • `menu-bar-app` • `hardware-monitor` • `fan-control`
+
+---
+
+## 🙏 Credits & Acknowledgments
+
+**Smart Cooler Control** is an independent multi-brand thermal management platform engineered for high-power (≥ 30W) thermoelectric coolers on Apple Silicon. Special thanks to [@hajarrashidi](https://github.com/hajarrashidi/redmagic-cooler-mac) for the initial single-device REDMAGIC 6 Pro macOS foundation from which this project evolved.
 
 ---
 
