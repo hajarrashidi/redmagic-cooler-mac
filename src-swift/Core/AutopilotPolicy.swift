@@ -7,9 +7,9 @@ enum AutoProfile: String, CaseIterable {
     var caption: String {
         switch self {
         case .balanced:
-            return "Smooth acoustic curve: scales gently from 35% to 100%. Shuts off below threshold."
+            return "Smooth acoustic curve: scales gently from min power to 100%. Shuts off below threshold."
         case .smartMax:
-            return "Aggressive cooling ramp: fast-attack boost from base power to 100%. Shuts off below threshold."
+            return "Aggressive cooling ramp: fast-attack boost from min power to 100%. Shuts off below threshold."
         }
     }
 }
@@ -17,8 +17,8 @@ enum AutoProfile: String, CaseIterable {
 /// Decides cooling intensity from Mac die temperature and macOS thermal pressure.
 ///
 /// Supports two auto profiles:
-///  * Balanced: Gentle linear acoustic ramp (35% to 100%) between shutoff and engage.
-///  * Smart Max: Fast-attack aggressive curve (base power to 100%) between shutoff and engage.
+///  * Balanced: Gentle linear acoustic ramp (min power to 100%) between shutoff and engage.
+///  * Smart Max: Fast-attack aggressive curve (min power to 100%) between shutoff and engage.
 ///
 /// Both profiles safely shut off completely (0% / Standby) when the Mac drops below the shutoff threshold.
 final class AutopilotPolicy {
@@ -113,20 +113,18 @@ final class AutopilotPolicy {
             // 3. Active thermal control zone: shutoffC <= dieC < engageC
             let span = max(1.0, engageC - shutoffC)
             let progress = ((dieC - shutoffC) / span).clamped(to: 0.0...1.0)
+            let base = Double(max(Int(Self.hardwareFloorPercent), Int(minFanPercent)))
 
             if profile == .smartMax {
-                // Smart Max: Fast-attack aggressive curve from base power to 100%
-                // Uses sqrt(progress) convex attack so it delivers aggressive cooling immediately
-                let base = Double(max(Int(Self.hardwareFloorPercent), Int(minFanPercent)))
+                // Smart Max: Fast-attack aggressive curve from user base power to 100%
                 let aggressiveProgress = sqrt(progress)
                 let rawFan = base + aggressiveProgress * (100.0 - base)
                 targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
                 label = "Smart Max (\(targetFan)%)"
             } else {
-                // Balanced: Gentle linear acoustic ramp from hardware floor (35%) to 100%
-                let floor = Self.hardwareFloorPercent
-                let rawFan = floor + progress * (100.0 - floor)
-                targetFan = UInt8(min(100, max(floor, round(rawFan / 5.0) * 5.0)))
+                // Balanced: Gentle linear acoustic ramp from user base power to 100%
+                let rawFan = base + progress * (100.0 - base)
+                targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
                 label = "Balanced (\(targetFan)%)"
             }
 

@@ -132,20 +132,32 @@ final class LedEffectPickerView: SegmentedRowView {
 
     var onSelect: ((LedEffect) -> Void)?
 
+    private static let captions: [String] = [
+        "Light is turned off.",
+        "Smooth multi-colour rainbow cycle.",
+        "Pulsing breathing light pattern.",
+        "Steady single-colour accent light.",
+        "Auto: LED colour shifts from green (cool) to red (hot) tracking Mac temperature."
+    ]
+
     init(width: CGFloat) {
         // Titled from outside the panel, like the cooling section.
         super.init(width: width, title: nil,
-                   labels: LedEffect.allCases.map(\.title))
+                   labels: LedEffect.allCases.map(\.title),
+                   captions: Self.captions)
         control.selectedSegment = LedEffect.auto.rawValue
+        setCaption(Self.captions[LedEffect.auto.rawValue])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func setSelected(_ effect: LedEffect) {
         control.selectedSegment = effect.rawValue
+        setCaption(Self.captions[effect.rawValue])
     }
 
     override func segmentChanged() {
         guard let effect = LedEffect(rawValue: control.selectedSegment) else { return }
+        setCaption(Self.captions[effect.rawValue])
         onSelect?(effect)
     }
 }

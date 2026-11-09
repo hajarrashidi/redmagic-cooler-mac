@@ -110,7 +110,7 @@ func runTests() {
 
     // 6. Test Balanced Dynamic Acoustic Ramp & Shutoff
     print("\n🧠 Testing Autopilot Balanced Dynamic Acoustic Ramp & Shutoff...")
-    let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0)
+    let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
     balanced.setProfile(.balanced)
 
     // A. Cold Mac (37°C < shutoff 38°C): MUST SHUT OFF COMPLETELY (0% fan)
@@ -118,15 +118,15 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off below shutoff threshold")
     print("  ✅ Balanced Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // B. At shutoff boundary (38°C): starts at 35% fan (hardware acoustic floor)
+    // B. At shutoff boundary (38°C): starts at 40% fan (user-chosen min power)
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 38.0)
-    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 35, "Expected Balanced at 35% at 38°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 35% fan")
+    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 40, "Expected Balanced at 40% at 38°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 40% fan")
 
-    // C. At 41°C (progress = 0.25, 35 + 0.25*65 = 51.25 -> 50%):
+    // C. At 41°C (progress = 0.25, 40 + 0.25*60 = 55%):
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(bDec.tier.fanPercent == 50, "Expected Balanced linear ramp at 50% at 41°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Acoustic Ramp: 41°C -> Precisely 50% fan")
+    assert(bDec.tier.fanPercent == 55, "Expected Balanced linear ramp at 55% at 41°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Ramp: 41°C -> Precisely 55% fan")
 
     // Verify Smart Max delivers MORE cooling than Balanced at same 41°C temperature:
     let smDec = policy.evaluate(thermalState: .nominal, dieC: 41.0)

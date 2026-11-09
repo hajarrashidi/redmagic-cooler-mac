@@ -1,6 +1,6 @@
 import AppKit
 
-/// Auto-mode profile, engage threshold, shutoff cutoff, and Smart Max base power controls.
+/// Auto-mode profile, engage threshold, shutoff cutoff, and base minimum power controls.
 final class AutoOptionsView: PanelRowView {
 
     var onEngageChange: ((Double) -> Void)?
@@ -25,8 +25,8 @@ final class AutoOptionsView: PanelRowView {
     private let shutoffSlider = NSSlider()
     private let shutoffValueLabel = NSTextField(labelWithString: "")
 
-    // ── Smart Max Base Power ──
-    private let minPowerTitle = UIStyle.sectionLabel("BASE POWER (SMART MAX)")
+    // ── Base Minimum Power ──
+    private let minPowerTitle = UIStyle.sectionLabel("MIN POWER")
     private let minPowerControl = NSSegmentedControl(labels: ["40%", "55%", "70%", "85%"],
                                                      trackingMode: .selectOne,
                                                      target: nil, action: nil)
@@ -104,7 +104,7 @@ final class AutoOptionsView: PanelRowView {
         shutoffSlider.autoresizingMask = .width
         addSubview(shutoffSlider)
 
-        // Base Power Selector
+        // Min Power Selector (Available for both Balanced and Smart Max)
         minPowerTitle.frame = NSRect(x: hPad, y: Layout.minPowerTitleY, width: contentWidth, height: 14)
         addSubview(minPowerTitle)
 
@@ -144,10 +144,9 @@ final class AutoOptionsView: PanelRowView {
         })?.offset ?? 0
         minPowerControl.selectedSegment = targetIndex
 
-        // In Balanced mode, base power control is dimmed (Balanced uses the dynamic acoustic curve)
-        let isSmartMax = (profile == .smartMax)
-        minPowerControl.isEnabled = isSmartMax
-        minPowerTitle.alphaValue = isSmartMax ? 1.0 : 0.45
+        // Min power is fully active and enabled for both Balanced and Smart Max!
+        minPowerControl.isEnabled = true
+        minPowerTitle.alphaValue = 1.0
     }
 
     func setEnabled(_ enabled: Bool) {
@@ -160,9 +159,7 @@ final class AutoOptionsView: PanelRowView {
             shutoffSlider.isEnabled = enabled
         }
         profileControl.isEnabled = enabled
-        if profileControl.selectedSegment == 1 {
-            minPowerControl.isEnabled = enabled
-        }
+        minPowerControl.isEnabled = enabled
     }
 
     private func updateEngageLabel() {
@@ -178,9 +175,6 @@ final class AutoOptionsView: PanelRowView {
     @objc private func profileChanged() {
         let selected: AutoProfile = profileControl.selectedSegment == 0 ? .balanced : .smartMax
         captionLabel.stringValue = selected.caption
-        let isSmartMax = (selected == .smartMax)
-        minPowerControl.isEnabled = isSmartMax
-        minPowerTitle.alphaValue = isSmartMax ? 1.0 : 0.45
         onProfileChange?(selected)
     }
 
