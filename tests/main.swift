@@ -74,9 +74,9 @@ func runTests() {
         print("  ✅ Driver: \(profile.id) -> \(type(of: driver)) with Service \(driver.serviceUUID.uuidString)")
     }
 
-    // 5. AutopilotPolicy Smart Max Fast-Attack Boost & Configurable Shutoff
-    print("\n🧠 Testing Autopilot Smart Max Fast-Attack Boost & Shutoff Cutoff...")
-    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
+    // 5. AutopilotPolicy Smart Max Baseline & Configurable Shutoff
+    print("\n🧠 Testing Autopilot Smart Max Baseline & Shutoff Cutoff...")
+    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 30)
     policy.setProfile(.smartMax)
 
     // A. Mac is hot (50°C >= engage 50°C): MUST ENGAGE MAX (100% fan)
@@ -84,33 +84,35 @@ func runTests() {
     assert(dec.tier.mode == .max && dec.tier.fanPercent == 100, "Expected cooler max at 50°C")
     print("  ✅ Smart Max High Heat: 50°C -> Cooler engages at MAX (100% fan)")
 
-    // B. Mac at 41°C (progress = (41-38)/(50-38) = 0.25, sqrt(0.25)=0.5, 40 + 0.5*60 = 70%):
+    // B. Mac at 41°C (normal operational range): MUST HOLD 30% MIN POWER!
     dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1001)
-    assert(dec.tier.fanPercent == 70, "Expected Smart Max fast-attack at 70% fan at 41°C, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Fast-Attack: 41°C -> Fast-attack delivers 70% fan")
+    assert(dec.tier.fanPercent == 30, "Expected Smart Max to hold configured min power (30%) at 41°C, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Baseline: 41°C -> Holds quiet configured min power (30% fan)")
 
-    // C. Mac cools all the way down to 37°C (< 38°C shutoff threshold): MUST SHUT OFF COMPLETELY
-    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1002)
+    // C. Mac at 49°C (within final 2°C ramp approach to 50°C):
+    dec = policy.evaluate(thermalState: .nominal, dieC: 49.0, now: 1002)
+    assert(dec.tier.fanPercent >= 65, "Expected Smart Max ramp approach near engage, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Ramp Approach: 49°C -> Smoothly ramping (\(dec.tier.fanPercent)% fan) to 100%")
+
+    // D. Mac cools all the way down to 37°C (< 38°C shutoff threshold): MUST SHUT OFF COMPLETELY
+    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1003)
     assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off when Mac drops below 38°C shutoff threshold")
     print("  ✅ Smart Max Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // D. Test user-customized base fan percent to 55%:
-    policy.setMinFanPercent(55)
-    print("  ✅ Configured custom base fan to 55%")
+    // E. Test user-customized min fan percent to 45%:
+    policy.setMinFanPercent(45)
+    dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1004)
+    assert(dec.tier.fanPercent == 45, "Expected cooler at 45% fan with 45% min power, got \(dec.tier.fanPercent)%")
+    print("  ✅ Smart Max Custom Min Power: 41°C -> Cooler holds configured 45% fan")
 
-    // At 41°C with base 55% (55 + 0.5*45 = 77.5 -> 80%):
-    dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1003)
-    assert(dec.tier.fanPercent == 80, "Expected cooler at 80% fan with 55% base, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Custom Base: 41°C -> Cooler runs at configured 80% fan")
-
-    // At 37°C (< 38°C), it should shut off:
-    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1004)
+    // At 37°C (< 38°C), it still safely shuts off:
+    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1005)
     assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off below 38°C shutoff")
     print("  ✅ Smart Max Shutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan)")
 
     // 6. Test Balanced Dynamic Acoustic Ramp & Shutoff
     print("\n🧠 Testing Autopilot Balanced Dynamic Acoustic Ramp & Shutoff...")
-    let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
+    let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 30)
     balanced.setProfile(.balanced)
 
     // A. Cold Mac (37°C < shutoff 38°C): MUST SHUT OFF COMPLETELY (0% fan)
@@ -118,20 +120,15 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off below shutoff threshold")
     print("  ✅ Balanced Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // B. At shutoff boundary (38°C): starts at 40% fan (user-chosen min power)
+    // B. At shutoff boundary (38°C): starts at 30% fan (user-chosen min power)
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 38.0)
-    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 40, "Expected Balanced at 40% at 38°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 40% fan")
+    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 30, "Expected Balanced at 30% at 38°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 30% fan")
 
-    // C. At 41°C (progress = 0.25, 40 + 0.25*60 = 55%):
+    // C. At 41°C (ramp window 12°C from 38°C to 50°C, progress = (41-38)/12 = 0.25, 30 + 0.25*70 = 47.5 -> 50%):
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(bDec.tier.fanPercent == 55, "Expected Balanced linear ramp at 55% at 41°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Acoustic Ramp: 41°C -> Precisely 55% fan")
-
-    // Verify Smart Max delivers MORE cooling than Balanced at same 41°C temperature:
-    let smDec = policy.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(smDec.tier.fanPercent > bDec.tier.fanPercent, "Smart Max (\(smDec.tier.fanPercent)%) must deliver higher cooling than Balanced (\(bDec.tier.fanPercent)%) at same temp")
-    print("  ✅ Multi-Tier Verification: Smart Max (\(smDec.tier.fanPercent)%) > Balanced (\(bDec.tier.fanPercent)%) at 41°C")
+    assert(bDec.tier.fanPercent == 50, "Expected Balanced linear ramp at 50% at 41°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Ramp: 41°C -> Precisely 50% fan")
 
     // D. At 50°C (engage threshold): 100% max fan
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 50.0)
@@ -144,7 +141,34 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off at 41°C when shutoff is 42°C")
     print("  ✅ Balanced Custom Shutoff: 41°C (< custom 42°C) -> Cooler immediately shuts OFF")
 
-    print("\n🎉 ALL TESTS PASSED! Multi-brand catalog, driver isolation, Smart Max fast-attack & Balanced acoustic curve verified.")
+    // 7. Test Mac Family-Aware LED Thermal Color Calibration
+    print("\n🌈 Testing Mac Family-Aware LED Thermal Color Calibration...")
+    // A. MacBook Air:
+    let airCold = policy.heatColor(for: 41.0, macModel: "MacBook Air")
+    assert(airCold.r == 0 && airCold.g == 255 && airCold.b == 0, "Expected pure green for MacBook Air at 41°C")
+    print("  ✅ MacBook Air: 41°C (nominal) -> Pure Green LED (R: \(airCold.r), G: \(airCold.g), B: \(airCold.b))")
+
+    let airWarm = policy.heatColor(for: 65.0, macModel: "MacBook Air")
+    assert(airWarm.r > 150 && airWarm.g > 150, "Expected warm yellow for MacBook Air at 65°C")
+    print("  ✅ MacBook Air: 65°C (moderate) -> Yellow/Amber LED (R: \(airWarm.r), G: \(airWarm.g), B: \(airWarm.b))")
+
+    let airHot = policy.heatColor(for: 82.0, macModel: "MacBook Air")
+    assert(airHot.r == 255 && airHot.g == 0, "Expected alert red for MacBook Air at 82°C")
+    print("  ✅ MacBook Air: 82°C (hot/throttling) -> Pure Red LED (R: \(airHot.r), G: \(airHot.g), B: \(airHot.b))")
+
+    // B. Mac Studio (tighter thermal threshold):
+    let studioCold = policy.heatColor(for: 41.0, macModel: "Mac Studio")
+    assert(studioCold.r == 0 && studioCold.g == 255, "Expected green for Mac Studio at 41°C")
+    let studioHot = policy.heatColor(for: 74.0, macModel: "Mac Studio")
+    assert(studioHot.r == 255 && studioHot.g == 0, "Expected red for Mac Studio at 74°C")
+    print("  ✅ Mac Studio: 41°C -> Green, 74°C -> Pure Red LED")
+
+    print("\n🎉 ALL TESTS PASSED! Multi-brand catalog, driver isolation, Smart Max baseline, Balanced acoustic ramp & Mac family thermal LED verified.")
 }
 
-runTests()
+@main
+struct TestRunner {
+    static func main() {
+        runTests()
+    }
+}

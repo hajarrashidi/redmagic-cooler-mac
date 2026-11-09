@@ -14,11 +14,35 @@ enum AutoProfile: String, CaseIterable {
     }
 }
 
+/// Thermal calibration thresholds for Mac families based on Apple Silicon thermal envelopes.
+struct MacThermalThresholds {
+    let greenMaxC: Double
+    let redMinC: Double
+}
+
+enum MacThermalProfile {
+    static func thresholds(for model: String) -> MacThermalThresholds {
+        let lower = model.lowercased()
+        if lower.contains("studio") || lower.contains("mini") || (lower.contains("pro") && !lower.contains("macbook")) {
+            // Mac Studio / Mac mini / Mac Pro: massive active heatsinks, lower normal temp band
+            return MacThermalThresholds(greenMaxC: 50.0, redMinC: 72.0)
+        } else if lower.contains("air") {
+            // MacBook Air: fanless passive chassis dissipation; 35-55°C is nominal idle/light work, >78°C is hot
+            return MacThermalThresholds(greenMaxC: 55.0, redMinC: 80.0)
+        } else if lower.contains("macbook") {
+            // MacBook Pro: internal fans idle/off until ~75°C; 38-58°C nominal, >82°C hot
+            return MacThermalThresholds(greenMaxC: 58.0, redMinC: 82.0)
+        } else {
+            return MacThermalThresholds(greenMaxC: 55.0, redMinC: 80.0)
+        }
+    }
+}
+
 /// Decides cooling intensity from Mac die temperature and macOS thermal pressure.
 ///
 /// Supports two auto profiles:
-///  * Balanced: Gentle linear acoustic ramp (min power to 100%) between shutoff and engage.
-///  * Smart Max: Fast-attack aggressive curve (min power to 100%) between shutoff and engage.
+///  * Balanced: Gentle acoustic ramp (min power to 100%) as temperature approaches engage threshold.
+///  * Smart Max: Holds quiet min power across normal temperatures, delivering 100% full boost at engage.
 ///
 /// Both profiles safely shut off completely (0% / Standby) when the Mac drops below the shutoff threshold.
 final class AutopilotPolicy {
@@ -48,9 +72,6 @@ final class AutopilotPolicy {
     private(set) var minFanPercent: UInt8
     private(set) var profile: AutoProfile = .balanced
 
-    /// Physical PWM floor of high-power Peltier coolers (where fan starts distinct acoustic modulation)
-    static let hardwareFloorPercent: Double = 35.0
-
     init(engageC: Double = Config.Autopilot.engageDefaultC,
          shutoffC: Double = Config.Autopilot.shutoffDefaultC,
          minFanPercent: UInt8 = Config.Autopilot.smartMaxMinFanDefault,
@@ -59,7 +80,7 @@ final class AutopilotPolicy {
          shutoffFloorC: Double? = nil) {
         let effectiveShutoff = shutoffFloorC ?? shutoffC
         self.shutoffC = effectiveShutoff.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
-        self.minFanPercent = max(35, minFanPercent).clamped(to: 35...100)
+        self.minFanPercent = minFanPercent.clamped(to: 20...100)
         self.engageC = max(engageC, self.shutoffC + 2.0).clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
     }
 
@@ -76,7 +97,7 @@ final class AutopilotPolicy {
     }
 
     func setMinFanPercent(_ percent: UInt8) {
-        self.minFanPercent = max(35, percent).clamped(to: 35...100)
+        self.minFanPercent = percent.clamped(to: 20...100)
     }
 
     // ── Evaluation ───────────────────────────────────────────────────────────
@@ -111,20 +132,33 @@ final class AutopilotPolicy {
             label = "\(profile == .smartMax ? "Smart Max" : "Balanced") (100%)"
         } else {
             // 3. Active thermal control zone: shutoffC <= dieC < engageC
-            let span = max(1.0, engageC - shutoffC)
-            let progress = ((dieC - shutoffC) / span).clamped(to: 0.0...1.0)
-            let base = Double(max(Int(Self.hardwareFloorPercent), Int(minFanPercent)))
+            let base = Double(minFanPercent)
 
             if profile == .smartMax {
-                // Smart Max: Fast-attack aggressive curve from user base power to 100%
-                let aggressiveProgress = sqrt(progress)
-                let rawFan = base + aggressiveProgress * (100.0 - base)
-                targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
+                // Smart Max: Holds configured quiet min power across normal temperatures.
+                // Smoothly ramps in the final 2°C buffer zone before engage threshold.
+                let rampWindow = 2.0
+                let rampStart = max(shutoffC, engageC - rampWindow)
+                if dieC <= rampStart {
+                    targetFan = minFanPercent
+                } else {
+                    let progress = ((dieC - rampStart) / rampWindow).clamped(to: 0.0...1.0)
+                    let rawFan = base + progress * (100.0 - base)
+                    targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
+                }
                 label = "Smart Max (\(targetFan)%)"
             } else {
-                // Balanced: Gentle linear acoustic ramp from user base power to 100%
-                let rawFan = base + progress * (100.0 - base)
-                targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
+                // Balanced: Gentle acoustic ramp.
+                // Holds min power while cool; ramps smoothly up to 100% over the active approach zone.
+                let rampWindow = min(12.0, max(4.0, engageC - shutoffC))
+                let rampStart = max(shutoffC, engageC - rampWindow)
+                if dieC <= rampStart {
+                    targetFan = minFanPercent
+                } else {
+                    let progress = ((dieC - rampStart) / rampWindow).clamped(to: 0.0...1.0)
+                    let rawFan = base + progress * (100.0 - base)
+                    targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
+                }
                 label = "Balanced (\(targetFan)%)"
             }
 
@@ -142,10 +176,19 @@ final class AutopilotPolicy {
                         reason: "Mac \(tempStr) (\(thermalState.rawValue))")
     }
 
-    func heatColor(for dieC: Double?) -> RGB {
-        let temp = dieC ?? shutoffC
-        let span = max(1.0, engageC - shutoffC)
-        let fraction = ((temp - shutoffC) / span).clamped(to: 0.0...1.0)
-        return RGB(hue: (1.0 - fraction) * (120.0 / 360.0))
+    /// Calculates realistic thermal LED colour based on host Mac hardware family.
+    /// Green: cool / nominal idle; Yellow: moderate active load; Red: high heat / throttling.
+    func heatColor(for dieC: Double?, macModel: String = SystemInfo.macModel) -> RGB {
+        guard let dieC else { return RGB(r: 0, g: 255, b: 0) }
+        let t = MacThermalProfile.thresholds(for: macModel)
+        if dieC <= t.greenMaxC {
+            return RGB(r: 0, g: 255, b: 0)
+        } else if dieC >= t.redMinC {
+            return RGB(r: 255, g: 0, b: 0)
+        } else {
+            let fraction = (dieC - t.greenMaxC) / (t.redMinC - t.greenMaxC)
+            let hue = (1.0 - fraction) * (120.0 / 360.0)
+            return RGB(hue: hue)
+        }
     }
 }
