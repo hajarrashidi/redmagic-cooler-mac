@@ -101,6 +101,8 @@ extension AppDelegate: NSMenuDelegate {
 
         autoOptions = AutoOptionsView(width: width)
         autoOptions.onEngageChange = { [weak self] in self?.setEngage($0) }
+        autoOptions.onShutoffChange = { [weak self] in self?.setShutoff($0) }
+        autoOptions.onMinFanChange = { [weak self] in self?.setSmartMaxMinFan($0) }
         autoOptions.onProfileChange = { [weak self] in self?.setAutoProfile($0) }
         autoOptions.panelSegment = .bottom
         let autoOptionsItem = wrap(autoOptions)

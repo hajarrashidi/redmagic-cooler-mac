@@ -57,6 +57,22 @@ extension AppDelegate {
         refreshStatusItemButton()
     }
 
+    func setShutoff(_ celsius: Double) {
+        autopilot.setShutoff(celsius)
+        UserDefaults.standard.set(autopilot.shutoffC, forKey: Config.Key.shutoffC)
+        EventLogger.record("autopilot shutoff → \(autopilot.shutoffC)°C")
+        if appMode == .auto { runAutopilot() }
+        refreshCards(connected: ble.isConnected)
+    }
+
+    func setSmartMaxMinFan(_ percent: UInt8) {
+        autopilot.setMinFanPercent(percent)
+        UserDefaults.standard.set(Int(autopilot.minFanPercent), forKey: Config.Key.smartMaxMinFan)
+        EventLogger.record("smart max min fan → \(autopilot.minFanPercent)%")
+        if appMode == .auto { runAutopilot() }
+        refresh()
+    }
+
     /// Applies a manual slider position.
     ///
     /// - Parameter alreadySwitching: set when called from `selectMode`, which

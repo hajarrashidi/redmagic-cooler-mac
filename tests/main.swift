@@ -74,37 +74,42 @@ func runTests() {
         print("  ✅ Driver: \(profile.id) -> \(type(of: driver)) with Service \(driver.serviceUUID.uuidString)")
     }
 
-    // 5. AutopilotPolicy 38°C Shutoff & Zero-Oscillation Verification
-    print("\n🧠 Testing Autopilot 38°C Shutoff & Oscillation Prevention...")
-    let policy = AutopilotPolicy(engageC: 50.0, dwell: 0, hysteresisC: 5.0, shutoffFloorC: 38.0)
+    // 5. AutopilotPolicy Smart Max, 30% Active Floor & Configurable Shutoff
+    print("\n🧠 Testing Autopilot Smart Max 30% Active Floor & Shutoff Cutoff...")
+    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 30, dwell: 0, hysteresisC: 5.0)
     policy.setProfile(.smartMax)
 
-    // A. Initial state when cold (42°C, below engage threshold 50°C): MUST BE OFF
-    var dec = policy.evaluate(thermalState: .nominal, dieC: 42.0, now: 1000)
-    assert(dec.tier.mode == .off, "Expected cooler off when Mac is cold (42°C) and engage threshold is 50°C")
-    print("  ✅ Cold State: 42°C with engage 50°C -> Cooler is OFF (Standby)")
-
-    // B. Mac warms up to 50°C: MUST ENGAGE MAX
-    dec = policy.evaluate(thermalState: .nominal, dieC: 50.0, now: 1001)
-    assert(dec.tier.mode == .max, "Expected cooler max at 50°C")
+    // A. Mac is hot (50°C >= engage 50°C): MUST ENGAGE MAX (100% fan)
+    var dec = policy.evaluate(thermalState: .nominal, dieC: 50.0, now: 1000)
+    assert(dec.tier.mode == .max && dec.tier.fanPercent == 100, "Expected cooler max at 50°C")
     print("  ✅ High Heat: 50°C -> Cooler engages at MAX (100% fan)")
 
-    // C. Mac cools down to 43°C (between engage and 38°C): MUST STAY ACTIVE EASING DOWN
-    dec = policy.evaluate(thermalState: .nominal, dieC: 43.0, now: 1002)
-    assert(dec.tier.mode == .low, "Expected cooler low (easing down) while Mac is cooling at 43°C")
-    print("  ✅ Easing Down: 43°C -> Cooler stays active at LOW (60% fan)")
+    // B. Mac cools down to 42°C (between shutoff 38°C and engage 50°C): MUST RUN AT 30% MIN POWER
+    dec = policy.evaluate(thermalState: .nominal, dieC: 42.0, now: 1001)
+    assert(dec.tier.mode == .low && dec.tier.fanPercent == 30, "Expected cooler active at min 30% fan at 42°C, got \(dec.tier.fanPercent)%")
+    print("  ✅ Active Floor: 42°C -> Cooler stays active at MINIMUM POWER (30% fan)")
 
-    // D. Mac cools all the way down to 37°C (< 38°C shutoff floor): MUST SHUT OFF
-    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1003)
-    assert(dec.tier.mode == .off, "Expected cooler off when Mac drops below 38°C shutoff floor")
-    print("  ✅ Cold Cutoff: 37°C (< 38°C floor) -> Cooler shuts OFF completely (0% fan)")
+    // C. Mac cools all the way down to 37°C (< 38°C shutoff threshold): MUST SHUT OFF COMPLETELY
+    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1002)
+    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off when Mac drops below 38°C shutoff threshold")
+    print("  ✅ Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // E. Mac warms slightly to 40°C while idle: MUST REMAIN OFF (no re-triggering below 50°C)
-    dec = policy.evaluate(thermalState: .nominal, dieC: 40.0, now: 1004)
-    assert(dec.tier.mode == .off, "Expected cooler to remain off at 40°C until 50°C threshold is reached")
-    print("  ✅ Zero-Oscillation: 40°C while idle -> Cooler stays OFF until 50°C reached")
+    // D. Test user-customized shutoff and min fan percent:
+    policy.setShutoff(40.0)
+    policy.setMinFanPercent(40)
+    print("  ✅ Configured custom shutoff to 40°C and min fan to 40%")
 
-    print("\n🎉 ALL TESTS PASSED! Multi-brand catalog, driver isolation & 38°C shutoff verified.")
+    // At 42°C, it should run at 40% fan:
+    dec = policy.evaluate(thermalState: .nominal, dieC: 42.0, now: 1003)
+    assert(dec.tier.mode == .low && dec.tier.fanPercent == 40, "Expected cooler at 40% fan")
+    print("  ✅ Custom Min Fan: 42°C -> Cooler runs at configured 40% fan")
+
+    // At 39°C (< 40°C), it should shut off:
+    dec = policy.evaluate(thermalState: .nominal, dieC: 39.0, now: 1004)
+    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off below custom 40°C shutoff")
+    print("  ✅ Custom Shutoff: 39°C (< 40°C) -> Cooler shuts OFF completely (0% fan)")
+
+    print("\n🎉 ALL TESTS PASSED! Multi-brand catalog, driver isolation & Smart Max active floor verified.")
 }
 
 runTests()

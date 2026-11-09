@@ -91,7 +91,10 @@ extension AppDelegate {
         modeSwitch.setMode(appMode)
         modeSwitch.setEnabled(enabled)
 
-        autoOptions.configure(engageC: autopilot.engageC, profile: autopilot.profile)
+        autoOptions.configure(engageC: autopilot.engageC,
+                              shutoffC: autopilot.shutoffC,
+                              minFanPercent: autopilot.minFanPercent,
+                              profile: autopilot.profile)
         autoOptions.setEnabled(enabled)
 
         // While a switch is in flight the fan write hasn't landed yet, so

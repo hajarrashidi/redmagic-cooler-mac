@@ -44,6 +44,8 @@ enum Config {
         static let preferredDeviceProfileId = "PreferredDeviceProfileId"
         static let appMode         = "AppMode"             // AppMode.rawValue
         static let engageC         = "AutopilotEngageTempC" // Double, °C
+        static let shutoffC        = "AutopilotShutoffTempC" // Double, °C
+        static let smartMaxMinFan  = "SmartMaxMinFanPercent" // Int, 0…100
         // Read only when migrating settings from builds with Standard/Custom.
         static let legacyAutoProfile = "AutoProfile"
         static let legacyCustomEngageC = "CustomEngageTempC"
@@ -130,11 +132,16 @@ enum Config {
         /// Slider defaults and range:
         /// Lowered to 38 °C so the user can configure aggressive cooling down to 38 °C.
         static let engageDefaultC: Double = 45.0
-        static let engageMinC: Double = 38.0
+        static let engageMinC: Double = 35.0
         static let engageMaxC: Double = 85.0
 
-        /// Minimum floor below which cooling turns off completely (Tier 0 / Standby)
-        /// to avoid condensation when the Mac is cold.
+        /// User-configurable shutoff temperature: below this, cooling safely shuts off completely (0%)
+        static let shutoffDefaultC: Double = 38.0
+        static let shutoffMinC: Double = 30.0
+        static let shutoffMaxC: Double = 50.0
+
+        /// User-configurable minimum fan speed in Smart Max when below engage threshold:
+        static let smartMaxMinFanDefault: UInt8 = 30 // 30% fan power
         static let shutoffFloorC: Double = 38.0
     }
 

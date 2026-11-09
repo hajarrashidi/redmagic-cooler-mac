@@ -1,9 +1,11 @@
 import AppKit
 
-/// Auto-mode profile and engage threshold view.
+/// Auto-mode profile, engage threshold, shutoff cutoff, and Smart Max minimum power controls.
 final class AutoOptionsView: PanelRowView {
 
     var onEngageChange: ((Double) -> Void)?
+    var onShutoffChange: ((Double) -> Void)?
+    var onMinFanChange: ((UInt8) -> Void)?
     var onProfileChange: ((AutoProfile) -> Void)?
 
     private let hPad = UIStyle.panelContentX
@@ -12,30 +14,46 @@ final class AutoOptionsView: PanelRowView {
                                                     trackingMode: .selectOne,
                                                     target: nil, action: nil)
     private let captionLabel = NSTextField(wrappingLabelWithString: "")
-    private let thresholdTitle = UIStyle.sectionLabel("ENGAGE THRESHOLD")
-    private let slider = NSSlider()
-    private let valueLabel = NSTextField(labelWithString: "")
+
+    // ── Engage Threshold ──
+    private let engageTitle = UIStyle.sectionLabel("ENGAGE THRESHOLD")
+    private let engageSlider = NSSlider()
+    private let engageValueLabel = NSTextField(labelWithString: "")
+
+    // ── Shutoff Threshold ──
+    private let shutoffTitle = UIStyle.sectionLabel("SHUTOFF THRESHOLD")
+    private let shutoffSlider = NSSlider()
+    private let shutoffValueLabel = NSTextField(labelWithString: "")
+
+    // ── Smart Max Minimum Power ──
+    private let minPowerTitle = UIStyle.sectionLabel("MIN POWER (SMART MAX)")
+    private let minPowerControl = NSSegmentedControl(labels: ["20%", "30%", "40%", "50%"],
+                                                     trackingMode: .selectOne,
+                                                     target: nil, action: nil)
+
+    private var engageDebounceTimer: Timer?
+    private var shutoffDebounceTimer: Timer?
 
     private enum Layout {
-        static let sliderY: CGFloat = UIStyle.panelPad
-        static let thresholdY: CGFloat = 34
-        static let captionY: CGFloat = 58
-        static let profileControlY: CGFloat = 90
-        static let profileTitleY: CGFloat = 122
-        static let height: CGFloat = 146
+        static let minPowerControlY: CGFloat = 10
+        static let minPowerTitleY: CGFloat = 38
+        static let shutoffSliderY: CGFloat = 58
+        static let shutoffTitleY: CGFloat = 82
+        static let engageSliderY: CGFloat = 104
+        static let engageTitleY: CGFloat = 128
+        static let captionY: CGFloat = 150
+        static let profileControlY: CGFloat = 182
+        static let profileTitleY: CGFloat = 212
+        static let height: CGFloat = 236
     }
+
+    private static let minFanOptions: [UInt8] = [20, 30, 40, 50]
 
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Layout.height))
         let contentWidth = width - hPad * 2
 
-        captionLabel.font = UIStyle.captionFont
-        captionLabel.textColor = .secondaryLabelColor
-        captionLabel.preferredMaxLayoutWidth = contentWidth
-        captionLabel.translatesAutoresizingMaskIntoConstraints = true
-        captionLabel.frame = NSRect(x: hPad, y: Layout.captionY, width: contentWidth, height: 28)
-        addSubview(captionLabel)
-
+        // Profile Title & Control
         profileTitle.frame = NSRect(x: hPad, y: Layout.profileTitleY, width: contentWidth, height: 14)
         addSubview(profileTitle)
 
@@ -47,60 +65,159 @@ final class AutoOptionsView: PanelRowView {
         profileControl.autoresizingMask = .width
         addSubview(profileControl)
 
-        thresholdTitle.frame = NSRect(x: hPad, y: Layout.thresholdY, width: 160, height: 14)
-        addSubview(thresholdTitle)
+        captionLabel.font = UIStyle.captionFont
+        captionLabel.textColor = .secondaryLabelColor
+        captionLabel.preferredMaxLayoutWidth = contentWidth
+        captionLabel.frame = NSRect(x: hPad, y: Layout.captionY, width: contentWidth, height: 26)
+        addSubview(captionLabel)
 
-        valueLabel.font = UIStyle.valueFont
-        valueLabel.alignment = .right
-        valueLabel.frame = NSRect(x: width - hPad - 80, y: Layout.thresholdY - 1, width: 80, height: 16)
-        addSubview(valueLabel)
+        // Engage Threshold
+        engageTitle.frame = NSRect(x: hPad, y: Layout.engageTitleY, width: 160, height: 14)
+        addSubview(engageTitle)
 
-        slider.minValue = Config.Autopilot.engageMinC
-        slider.maxValue = Config.Autopilot.engageMaxC
-        slider.target = self
-        slider.action = #selector(sliderMoved)
-        slider.frame = NSRect(x: hPad, y: Layout.sliderY, width: contentWidth, height: 20)
-        slider.autoresizingMask = .width
-        addSubview(slider)
+        engageValueLabel.font = UIStyle.valueFont
+        engageValueLabel.alignment = .right
+        engageValueLabel.frame = NSRect(x: width - hPad - 90, y: Layout.engageTitleY - 1, width: 90, height: 16)
+        addSubview(engageValueLabel)
+
+        engageSlider.minValue = Config.Autopilot.engageMinC
+        engageSlider.maxValue = Config.Autopilot.engageMaxC
+        engageSlider.target = self
+        engageSlider.action = #selector(engageSliderMoved)
+        engageSlider.frame = NSRect(x: hPad, y: Layout.engageSliderY, width: contentWidth, height: 20)
+        engageSlider.autoresizingMask = .width
+        addSubview(engageSlider)
+
+        // Shutoff Threshold
+        shutoffTitle.frame = NSRect(x: hPad, y: Layout.shutoffTitleY, width: 160, height: 14)
+        addSubview(shutoffTitle)
+
+        shutoffValueLabel.font = UIStyle.valueFont
+        shutoffValueLabel.alignment = .right
+        shutoffValueLabel.frame = NSRect(x: width - hPad - 110, y: Layout.shutoffTitleY - 1, width: 110, height: 16)
+        addSubview(shutoffValueLabel)
+
+        shutoffSlider.minValue = Config.Autopilot.shutoffMinC
+        shutoffSlider.maxValue = Config.Autopilot.shutoffMaxC
+        shutoffSlider.target = self
+        shutoffSlider.action = #selector(shutoffSliderMoved)
+        shutoffSlider.frame = NSRect(x: hPad, y: Layout.shutoffSliderY, width: contentWidth, height: 20)
+        shutoffSlider.autoresizingMask = .width
+        addSubview(shutoffSlider)
+
+        // Min Power Selector
+        minPowerTitle.frame = NSRect(x: hPad, y: Layout.minPowerTitleY, width: contentWidth, height: 14)
+        addSubview(minPowerTitle)
+
+        minPowerControl.segmentStyle = .rounded
+        minPowerControl.selectedSegment = 1 // 30% default
+        minPowerControl.target = self
+        minPowerControl.action = #selector(minPowerChanged)
+        minPowerControl.frame = NSRect(x: hPad, y: Layout.minPowerControlY, width: contentWidth, height: 24)
+        minPowerControl.autoresizingMask = .width
+        addSubview(minPowerControl)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func configure(engageC: Double, profile: AutoProfile) {
-        let isInteracting = slider.cell?.isHighlighted == true || NSEvent.pressedMouseButtons != 0
-        if !isInteracting && abs(slider.doubleValue - engageC) >= 0.5 {
-            slider.doubleValue = engageC
-            updateValueLabel()
+    func configure(engageC: Double, shutoffC: Double, minFanPercent: UInt8, profile: AutoProfile) {
+        let isUserInteracting = NSEvent.pressedMouseButtons != 0
+                             || engageSlider.cell?.isHighlighted == true
+                             || shutoffSlider.cell?.isHighlighted == true
+
+        if !isUserInteracting {
+            if abs(engageSlider.doubleValue - engageC) >= 0.5 {
+                engageSlider.doubleValue = engageC
+                updateEngageLabel()
+            }
+            if abs(shutoffSlider.doubleValue - shutoffC) >= 0.5 {
+                shutoffSlider.doubleValue = shutoffC
+                updateShutoffLabel()
+            }
         }
+
         profileControl.selectedSegment = (profile == .balanced) ? 0 : 1
         captionLabel.stringValue = profile.caption
+
+        // Match closest minFanPercent in segmented control
+        let targetIndex = Self.minFanOptions.enumerated().min(by: {
+            abs(Int($0.element) - Int(minFanPercent)) < abs(Int($1.element) - Int(minFanPercent))
+        })?.offset ?? 1
+        minPowerControl.selectedSegment = targetIndex
+
+        // Visual dimming when Balanced (min power only used in Smart Max)
+        let isSmartMax = (profile == .smartMax)
+        minPowerControl.isEnabled = isSmartMax
+        minPowerTitle.alphaValue = isSmartMax ? 1.0 : 0.45
     }
 
     func setEnabled(_ enabled: Bool) {
-        let isInteracting = slider.cell?.isHighlighted == true || NSEvent.pressedMouseButtons != 0
-        if !isInteracting {
-            slider.isEnabled = enabled
+        let isUserInteracting = NSEvent.pressedMouseButtons != 0
+                             || engageSlider.cell?.isHighlighted == true
+                             || shutoffSlider.cell?.isHighlighted == true
+
+        if !isUserInteracting {
+            engageSlider.isEnabled = enabled
+            shutoffSlider.isEnabled = enabled
         }
         profileControl.isEnabled = enabled
+        if profileControl.selectedSegment == 1 {
+            minPowerControl.isEnabled = enabled
+        }
     }
 
-    private func updateValueLabel() {
-        let val = Int(round(slider.doubleValue))
-        if val <= 38 {
-            valueLabel.stringValue = "≥ 38°C (Min)"
-        } else {
-            valueLabel.stringValue = "≥ \(val)°C"
-        }
+    private func updateEngageLabel() {
+        let val = Int(round(engageSlider.doubleValue))
+        engageValueLabel.stringValue = "≥ \(val)°C"
+    }
+
+    private func updateShutoffLabel() {
+        let val = Int(round(shutoffSlider.doubleValue))
+        shutoffValueLabel.stringValue = "< \(val)°C (Off)"
     }
 
     @objc private func profileChanged() {
         let selected: AutoProfile = profileControl.selectedSegment == 0 ? .balanced : .smartMax
         captionLabel.stringValue = selected.caption
+        let isSmartMax = (selected == .smartMax)
+        minPowerControl.isEnabled = isSmartMax
+        minPowerTitle.alphaValue = isSmartMax ? 1.0 : 0.45
         onProfileChange?(selected)
     }
 
-    @objc private func sliderMoved() {
-        updateValueLabel()
-        onEngageChange?(slider.doubleValue)
+    @objc private func engageSliderMoved() {
+        updateEngageLabel()
+        // Responsive live update without stutter:
+        let isTracking = (NSEvent.pressedMouseButtons != 0)
+        if !isTracking {
+            onEngageChange?(engageSlider.doubleValue)
+        } else {
+            engageDebounceTimer?.invalidate()
+            engageDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+                guard let self else { return }
+                self.onEngageChange?(self.engageSlider.doubleValue)
+            }
+        }
+    }
+
+    @objc private func shutoffSliderMoved() {
+        updateShutoffLabel()
+        let isTracking = (NSEvent.pressedMouseButtons != 0)
+        if !isTracking {
+            onShutoffChange?(shutoffSlider.doubleValue)
+        } else {
+            shutoffDebounceTimer?.invalidate()
+            shutoffDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+                guard let self else { return }
+                self.onShutoffChange?(self.shutoffSlider.doubleValue)
+            }
+        }
+    }
+
+    @objc private func minPowerChanged() {
+        let idx = minPowerControl.selectedSegment
+        guard idx >= 0 && idx < Self.minFanOptions.count else { return }
+        let selectedPercent = Self.minFanOptions[idx]
+        onMinFanChange?(selectedPercent)
     }
 }

@@ -210,7 +210,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             engageC = Config.Autopilot.engageDefaultC
         }
-        autopilot = AutopilotPolicy(engageC: engageC)
+
+        let shutoffC: Double
+        if let saved = defaults.object(forKey: Config.Key.shutoffC) as? Double {
+            shutoffC = saved
+        } else {
+            shutoffC = Config.Autopilot.shutoffDefaultC
+        }
+
+        let minFan: UInt8
+        if let saved = defaults.object(forKey: Config.Key.smartMaxMinFan) as? Int {
+            minFan = UInt8(clamping: saved)
+        } else {
+            minFan = Config.Autopilot.smartMaxMinFanDefault
+        }
+
+        autopilot = AutopilotPolicy(engageC: engageC, shutoffC: shutoffC, minFanPercent: minFan)
         if let savedProfile = defaults.string(forKey: "AutoProfile") {
             if let p = AutoProfile(rawValue: savedProfile) {
                 autopilot.setProfile(p)
@@ -221,6 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         defaults.set(autopilot.engageC, forKey: Config.Key.engageC)
+        defaults.set(autopilot.shutoffC, forKey: Config.Key.shutoffC)
+        defaults.set(Int(autopilot.minFanPercent), forKey: Config.Key.smartMaxMinFan)
     }
 
     private func buildStatusItem() {

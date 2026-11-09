@@ -1,3 +1,5 @@
+import Foundation
+
 enum AutoProfile: String, CaseIterable {
     case balanced = "Balanced"
     case smartMax = "Smart Max"
@@ -5,14 +7,12 @@ enum AutoProfile: String, CaseIterable {
     var caption: String {
         switch self {
         case .balanced:
-            return "Smooth ramp: starts at engage threshold, cools down to 38°C."
+            return "Smooth ramp: starts at engage threshold, cools down to shutoff."
         case .smartMax:
-            return "Full power at ≥ threshold. Safely eases down until < 38°C."
+            return "100% at ≥ engage point. Holds minimum power until < shutoff."
         }
     }
 }
-
-import Foundation
 
 /// Decides how hard to cool, from Mac die temperature and macOS thermal
 /// pressure.
@@ -60,15 +60,19 @@ final class AutopilotPolicy {
 
     // ── Configuration ────────────────────────────────────────────────────────
 
-    /// Temperature at which the first cooling step engages (°C). The whole
-    /// ladder is derived from this one number — it is the single knob the
-    /// menu's threshold slider drives.
+    /// Temperature at which the maximum or ramping cooling step engages (°C).
     private(set) var engageC: Double
+
+    /// Temperature below which cooling turns off completely (0% fan / Standby).
+    private(set) var shutoffC: Double
+
+    /// Minimum fan speed in Smart Max when below engage threshold (default 30%).
+    private(set) var minFanPercent: UInt8
+
     private(set) var profile: AutoProfile = .balanced
 
     private let dwell: TimeInterval
     private let hysteresisC: Double
-    private let shutoffFloorC: Double
 
     /// Engage temperature for each tier index ≥ 1, ascending.
     private var engagePoints: [(temperatureC: Double, tierIndex: Int)] = []
@@ -86,12 +90,16 @@ final class AutopilotPolicy {
     private var coolingSince: TimeInterval?
 
     init(engageC: Double = Config.Autopilot.engageDefaultC,
+         shutoffC: Double = Config.Autopilot.shutoffDefaultC,
+         minFanPercent: UInt8 = Config.Autopilot.smartMaxMinFanDefault,
          dwell: TimeInterval = Config.Autopilot.cooldownDwell,
          hysteresisC: Double = Config.Autopilot.hysteresisC,
-         shutoffFloorC: Double = Config.Autopilot.shutoffFloorC) {
+         shutoffFloorC: Double? = nil) {
         self.dwell = dwell
         self.hysteresisC = hysteresisC
-        self.shutoffFloorC = shutoffFloorC
+        let effectiveShutoff = shutoffFloorC ?? shutoffC
+        self.shutoffC = effectiveShutoff.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
+        self.minFanPercent = minFanPercent.clamped(to: 10...100)
         self.engageC = engageC
         configure(engageC: engageC)
     }
@@ -106,6 +114,17 @@ final class AutopilotPolicy {
     /// Moves the engage point and rebuilds the ladder around it.
     func setEngage(_ celsius: Double) {
         configure(engageC: celsius)
+    }
+
+    /// Sets the shutoff cutoff temperature below which cooling is 0% / off.
+    func setShutoff(_ celsius: Double) {
+        self.shutoffC = celsius.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
+        coolingSince = nil
+    }
+
+    /// Sets the minimum active fan speed in Smart Max (e.g. 30%).
+    func setMinFanPercent(_ percent: UInt8) {
+        self.minFanPercent = percent.clamped(to: 10...100)
     }
 
     private func configure(engageC: Double) {
@@ -154,12 +173,12 @@ final class AutopilotPolicy {
         } else if target < tierIndex {
             // If target is off (below shutoff threshold), cut cooling immediately
             // so cooler doesn't run needlessly while the Mac is already cold.
-            let cutoff = min(engageC, shutoffFloorC)
+            let cutoff = min(engageC, shutoffC)
             if target == 0 && (dieC == nil || dieC! < cutoff) {
                 tierIndex = 0
                 coolingSince = nil
             } else if profile == .smartMax && target == 1 {
-                // Smart Max eases down directly to Low tier without stepped dwell delay
+                // Smart Max eases down directly to min tier without dwell delay
                 tierIndex = 1
                 coolingSince = nil
             } else if let since = coolingSince {
@@ -175,23 +194,30 @@ final class AutopilotPolicy {
             coolingSince = nil
         }
 
+        let appliedTier: Tier
+        if profile == .smartMax && tierIndex == 1 {
+            // In Smart Max, below engage threshold runs at user-configured minimum fan speed
+            appliedTier = Tier(mode: .low, fanPercent: minFanPercent, label: "min (\(minFanPercent)%)")
+        } else {
+            appliedTier = Self.tiers[tierIndex]
+        }
+
         let temperature = dieC.map { String(format: "%.0f°C", $0) } ?? "temp ?"
         let easing = (target < tierIndex && coolingSince != nil) ? " — easing down soon" : ""
-        return Decision(tier: Self.tiers[tierIndex],
+        return Decision(tier: appliedTier,
                         reason: "Mac \(temperature) (\(thermalState.rawValue))\(easing)")
     }
 
     /// The tier the current conditions call for, before dwell/hysteresis smoothing.
     private func targetTierIndex(thermalState: ThermalState, dieC: Double?) -> Int {
         if profile == .smartMax, let dieC {
-            let cutoff = min(engageC, shutoffFloorC)
             if dieC >= engageC {
                 return 4 // Max Tier (100% fan)
-            } else if tierIndex > 0 && dieC >= cutoff {
-                // When already cooling, hold low tier until Mac cools down to 38°C shutoff floor
-                return 1 // Low Tier (60% fan) - safely eases down
+            } else if dieC >= shutoffC {
+                // In Smart Max: between shutoff and engage, stay active at minimum power!
+                return 1 // Min Tier (runs at minFanPercent)
             } else {
-                return 0 // Off (below 38°C or was not running)
+                return 0 // Off (below shutoff threshold)
             }
         }
 
@@ -208,9 +234,9 @@ final class AutopilotPolicy {
         guard rising < tierIndex else { return rising }
 
         // When stepping down from an active tier:
-        // Tier 1 stays held until dieC drops below shutoffFloorC (38°C)!
+        // Tier 1 stays held until dieC drops below shutoffC!
         if tierIndex == 1 {
-            let cutoff = min(engageC, shutoffFloorC)
+            let cutoff = min(engageC, shutoffC)
             return dieC >= cutoff ? 1 : 0
         }
 
