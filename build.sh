@@ -103,9 +103,18 @@ PLIST
 echo "==> Signing"
 codesign --force --deep --sign - "$APP" 2>/dev/null
 
-echo "==> Built $APP ($VERSION build $BUILD)"
+echo "==> Installing to /Applications/$APP"
+rm -rf "/Applications/$APP"
+cp -R "$APP" "/Applications/$APP"
+# Remove duplicate in source folder so Spotlight / App Switcher only see the canonical app
+rm -rf "$APP"
+
+# Update LaunchServices registration
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/$APP" 2>/dev/null || true
+
+echo "==> Built and installed /Applications/$APP ($VERSION build $BUILD)"
 
 if [[ "$RUN_AFTER_BUILD" == true ]]; then
     echo "==> Relaunching"
-    open "$APP"
+    open "/Applications/$APP"
 fi
