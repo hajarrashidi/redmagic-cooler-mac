@@ -40,14 +40,19 @@ Most generic phone coolers run at **10W to 15W**, which is physically insufficie
 
 | Manufacturer | Model | Peak Power | Architecture | Status |
 |---|---|---|---|---|
+| **REDMAGIC** | **Cooler 6 Pro+** | **40W** | Liquid VC + TEC | **Supported (Native Driver)** |
 | **REDMAGIC** | **Magnetic Cooler 5 Pro** | **36W** | Vapor Chamber + TEC | **Supported & Hardware-Verified** |
 | **REDMAGIC** | **VC Cooler 6 Pro** | **36W** | Vapor Chamber + TEC | **Supported & Hardware-Verified** |
-| **REDMAGIC** | **Cooler 6 Pro+** | **36W** | Liquid VC + TEC | **Profile Integrated** |
-| **REDMAGIC** | **Cryo Cooler 8 Pro** | **36W–40W** | 4th Gen Custom TEC | **Profile Integrated** |
-| **REDMAGIC** | **Magcooler 4 Pro** | **30W** | High-Power TEC | **Profile Integrated** |
-| **Black Shark** | **MagCooler 4 Pro** | **30W+** | High-Power TEC | *In Research (Roadmap)* |
-| **Flydigi** | **Flydigi B6X / B7X** | **27W–36W** | High-Power Magnetic | *In Research (Roadmap)* |
-| **OnePlus** | **45W Liquid Cooler** | **45W** | External Pump + TEC | *In Research (Roadmap)* |
+| **REDMAGIC** | **Cryo Cooler 8 Pro** | **36W** | 4th Gen Custom TEC | **Supported (Native Driver)** |
+| **REDMAGIC** | **Magcooler 4 Pro** | **27W** | High-Power TEC | **Supported (Native Driver)** |
+| **Black Shark** | **MagCooler 5 Pro** | **35W** | Custom 5-Step TEC (5100 RPM) | **Supported (Native Driver)** |
+| **Black Shark** | **MagCooler 4 Pro** | **27W** | Dual-Channel Power + Fan | **Supported (Native Driver)** |
+| **Flydigi** | **Flydigi B8X** | **30W** | Overclock Mode TEC | **Supported (Native Driver)** |
+| **Flydigi** | **Flydigi B7X** | **27W** | High-Power Magnetic TEC | **Supported (Native Driver)** |
+| **iQOO** | **Magnetic Cooler (iRA2571)** | **33W** | High-Power Dual-Clip | *In Protocol Extraction* |
+| **OnePlus** | **45W Liquid Cooler** | **45W** | External Pump + TEC | *In Protocol Extraction* |
+
+> *Strict Driver Isolation: Every supported device is uniquely identified via GATT services, manufacturer IDs and advertised packets. The app loads exclusively its compatible hardware driver, completely preventing cross-brand packet contamination.*
 
 > *Note: Low-power coolers (< 30W) are excluded by design.*
 

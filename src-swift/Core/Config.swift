@@ -41,6 +41,7 @@ enum Config {
     /// existing user, so treat these as a migration surface.
     enum Key {
         static let preferredDevice = "PreferredDeviceUUID"
+        static let preferredDeviceProfileId = "PreferredDeviceProfileId"
         static let appMode         = "AppMode"             // AppMode.rawValue
         static let engageC         = "AutopilotEngageTempC" // Double, °C
         // Read only when migrating settings from builds with Standard/Custom.
