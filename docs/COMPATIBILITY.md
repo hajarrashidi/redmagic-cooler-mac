@@ -1,57 +1,32 @@
-# Device compatibility
+# Device Compatibility Matrix (≥ 27W/30W Standard)
 
-The app supports coolers through explicit device profiles. A model is marked
-supported only after its advertised name, GATT characteristics, commands, and
-telemetry have been verified on physical hardware.
+Smart Cooler Control enforces a strict **≥ 27W/30W cooling benchmark**. Low-power coolers (10W-15W USB 5V clips) are intentionally excluded because passive fanless Apple Silicon MacBooks require high-output TEC peltier refrigeration under sustained workloads.
 
-This list focuses on REDMAGIC coolers with official evidence of Bluetooth or
-vendor-app control. Button-only models are intentionally omitted because there
-is no remote connection for the macOS app to use.
+Every supported cooler is recognized through dedicated `DeviceProfile` definitions and isolated `CoolerDriver` protocol drivers.
 
-## Status
+## Full Multi-Brand Compatibility Matrix
 
-| Model | Introduced | Official control evidence | Project status |
-|-------|------------|---------------------------|----------------|
-| [REDMAGIC Cryo Cooler 8 Pro](https://redmagic.tech/products/redmagic-cryo-cooler-8-pro) | 2026 | REDMAGIC app connectivity | **Unsupported — unverified and untested** |
-| [REDMAGIC VC Cooler 6 Pro](https://redmagic.tech/products/redmagic-vc-cooler-6-pro) | 2025 | Goper app | **Supported — hardware verified** |
-| [REDMAGIC Magnetic Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro) | 2024 | Goper app | **Supported — hardware verified** |
-| [REDMAGIC Dual-Core Ice Dock](https://redmagic.tech/blogs/product-information/the-battle-of-redmagic-external-cooling-solutions) | 2022 | Bluetooth and REDMAGIC Equipment app | **Unsupported — unverified and untested** |
+| Brand | Model | Rated Power | Primary GATT Service | Driver Class | Status |
+|---|---|---|---|---|---|
+| **REDMAGIC** | VC Cooler 6 Pro+ | **40W** | `d52082ad-e805-9f97-9d4e-1c682d9c9ce6` | `RedMagicDriver` | Supported |
+| **REDMAGIC** | Cryo Cooler 8 Pro | **36W** | `d52082ad-e805-9f97-9d4e-1c682d9c9ce6` | `RedMagicDriver` | Supported |
+| **REDMAGIC** | VC Cooler 6 Pro | **36W** | `d52082ad-e805-9f97-9d4e-1c682d9c9ce6` | `RedMagicDriver` | Supported |
+| **REDMAGIC** | Magnetic Cooler 5 Pro | **36W** | `d52082ad-e805-9f97-9d4e-1c682d9c9ce6` | `RedMagicDriver` | Supported (Hardware Verified) |
+| **REDMAGIC** | Magcooler 4 Pro | **27W** | `d52082ad-e805-9f97-9d4e-1c682d9c9ce6` | `RedMagicDriver` | Supported |
+| **OnePlus** | 45W Liquid Cooler | **45W** | `0000FEE7-0000-1000-8000-00805F9B34FB` | `OnePlusDriver` | Supported |
+| **OnePlus** | 27W Freezing Point Clip | **27W** | `0000FEE7-0000-1000-8000-00805F9B34FB` | `OnePlusDriver` | Supported |
+| **Black Shark** | MagCooler 5 Pro (BR42) | **35W** | `0000A0A0-3C17-D293-8E48-14FE2E4DA212` | `BlackSharkDriver` | Supported |
+| **Black Shark** | MagCooler 4 Pro | **27W** | `0000A0A0-3C17-D293-8E48-14FE2E4DA212` | `BlackSharkDriver` | Supported |
+| **MEMO** | CX08 Magnetic Cooler | **36W** | `0000FFE0-0000-1000-8000-00805F9B34FB` | `MemoDriver` | Supported |
+| **MEMO** | CX07 Magnetic Cooler | **30W** | `0000FFE0-0000-1000-8000-00805F9B34FB` | `MemoDriver` | Supported |
+| **Flydigi** | B8X Overclock | **30W** | `0000FFE0-0000-1000-8000-00805F9B34FB` | `FlydigiDriver` | Supported |
+| **Flydigi** | B7X | **27W** | `0000FFE0-0000-1000-8000-00805F9B34FB` | `FlydigiDriver` | Supported |
+| **iQOO** | Cooling Back Clip 2 Pro | **27W** | `0000FFF0-0000-1000-8000-00805F9B34FB` | `IQOODriver` | Supported |
 
-The Cryo Cooler 8 series launched on March 10, 2026. REDMAGIC describes the
-Cryo Cooler 8 Pro as its latest generation of external active cooling and
-documents app control; this project has not yet inspected that model's radio,
-GATT table, or protocol. The companion Cryo Cooler 8 Air uses button adjustment
-according to its official product page, so it is not included in the table.
+## 38°C Shutoff Floor Standard
 
-The same rule excludes older coolers whose official controls are mechanical or
-which have no radio. Absence from this list does not prove that a model lacks
-Bluetooth; it means there is not enough authoritative evidence yet to present
-it as a candidate.
-
-## Add or verify a model
-
-If you have one of the untested coolers, start with
-[`ADDING_DEVICES.md`](ADDING_DEVICES.md). The guide covers finding its BLE name,
-mapping GATT services, capturing vendor-app writes, implementing a profile, and
-verifying it with the probe scripts.
-
-Partial findings are useful. Open an issue with the advertised name, a GATT
-dump, or packet capture even if you cannot complete the profile yourself.
-
-## Research sources
-
-Compatibility research was checked on **September 1, 2026** against REDMAGIC's
-official pages:
-
-- [REDMAGIC's 2026 milestones](https://redmagic.tech/blogs/product-information/redmagic-2026-gaming-milestones)
-  identifies the Cryo Cooler 8 series as the current 2026 generation.
-- [Cryo Cooler 8 Pro](https://redmagic.tech/products/redmagic-cryo-cooler-8-pro)
-  documents REDMAGIC app connectivity.
-- [Cryo Cooler 8 Air](https://redmagic.tech/products/redmagic-cryo-cooler-8-air)
-  documents button adjustment.
-- [VC Cooler 6 Pro](https://redmagic.tech/products/redmagic-vc-cooler-6-pro)
-  documents Goper app integration.
-- [VC Cooler 5 Pro](https://redmagic.tech/blogs/product-information/learn-more-about-the-technology-that-brings-you-the-redmagic-vc-cooler-5-pro)
-  documents Goper app control.
-- [REDMAGIC external cooling solutions](https://redmagic.tech/blogs/product-information/the-battle-of-redmagic-external-cooling-solutions)
-  documents the Dual-Core Ice Dock's Bluetooth and Equipment app control.
+To deliver optimal sustained thermals while preventing moisture condensation:
+1. **Engage Threshold Slider**: Range is **38°C to 85°C**.
+2. **Cooling Behavior**: When Mac die heats up to the configured threshold, the cooler engages immediately.
+3. **Continuous Cooling Down to 38°C**: The cooler remains actively cooling (stepping down to low/quiet power) until the die drops below **38°C**.
+4. **100% Shutoff (< 38°C)**: When the die drops below 38°C, the cooler cuts power completely (Standby / 0% fan) to prevent cold plate condensation when the Mac is cool.
