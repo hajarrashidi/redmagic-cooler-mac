@@ -77,8 +77,8 @@ final class AutoOptionsView: PanelRowView {
         engageValueLabel.frame = NSRect(x: width - hPad - 90, y: Layout.engageTitleY - 1, width: 90, height: 16)
         addSubview(engageValueLabel)
 
-        engageSlider.minValue = Config.Autopilot.engageMinC
-        engageSlider.maxValue = Config.Autopilot.engageMaxC
+        engageSlider.minValue = Config.Autopilot.tempMinC
+        engageSlider.maxValue = Config.Autopilot.tempMaxC
         engageSlider.isContinuous = true
         engageSlider.target = self
         engageSlider.action = #selector(engageSliderMoved)
@@ -95,8 +95,8 @@ final class AutoOptionsView: PanelRowView {
         shutoffValueLabel.frame = NSRect(x: width - hPad - 110, y: Layout.shutoffTitleY - 1, width: 110, height: 16)
         addSubview(shutoffValueLabel)
 
-        shutoffSlider.minValue = Config.Autopilot.shutoffMinC
-        shutoffSlider.maxValue = Config.Autopilot.shutoffMaxC
+        shutoffSlider.minValue = Config.Autopilot.tempMinC
+        shutoffSlider.maxValue = Config.Autopilot.tempMaxC
         shutoffSlider.isContinuous = true
         shutoffSlider.target = self
         shutoffSlider.action = #selector(shutoffSliderMoved)

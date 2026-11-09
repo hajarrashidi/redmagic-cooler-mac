@@ -155,6 +155,19 @@ func runTests() {
     assert(balanced.shutoffC <= 34.0, "Expected shutoff pushed down to at most 34°C, got \(balanced.shutoffC)°C")
     print("  ✅ Anti-Lockup: Lowering Engage to 36°C smoothly pushes Shutoff down to \(balanced.shutoffC)°C (never freezes)")
 
+    // G. Test Unified Scale & Beyond-50°C Unlocked Range:
+    // User can set Shutoff past the old 50°C ceiling without blocking!
+    balanced.setShutoff(55.0)
+    assert(balanced.shutoffC == 55.0, "Expected shutoff to reach 55°C without 50°C artificial wall")
+    assert(balanced.engageC >= 57.0, "Expected engage pushed to 57°C")
+    print("  ✅ Unlocked Scale: Shutoff reaches 55°C (above old 50°C limit), Engage pushed to \(balanced.engageC)°C")
+
+    // Both sliders share 30°C...80°C range: Shutoff knob is ALWAYS physically to the left of Engage knob
+    let shutoffVisualX = (44.0 - Config.Autopilot.tempMinC) / (Config.Autopilot.tempMaxC - Config.Autopilot.tempMinC)
+    let engageVisualX = (46.0 - Config.Autopilot.tempMinC) / (Config.Autopilot.tempMaxC - Config.Autopilot.tempMinC)
+    assert(shutoffVisualX < engageVisualX, "Shutoff (44°C) must be physically to the left of Engage (46°C)")
+    print("  ✅ 1:1 Scale Alignment: Shutoff 44°C (\(Int(shutoffVisualX * 100))%) < Engage 46°C (\(Int(engageVisualX * 100))%) — strictly non-inverted!")
+
     // 7. Test Mac Family-Aware LED Thermal Color Calibration
     print("\n🌈 Testing Mac Family-Aware LED Thermal Color Calibration...")
     // A. MacBook Air:

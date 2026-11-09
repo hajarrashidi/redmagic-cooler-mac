@@ -129,16 +129,19 @@ enum Config {
         /// How long the temperature must stay low before stepping down a tier.
         static let cooldownDwell: TimeInterval = 15.0
 
-        /// Slider defaults and range:
-        /// Lowered to 38 °C so the user can configure aggressive cooling down to 38 °C.
+        /// Unified temperature scale shared by both Engage and Shutoff sliders (30°C to 80°C)
+        /// so both sliders have identical visual proportions and 1:1 physical alignment.
+        static let tempMinC: Double = 30.0
+        static let tempMaxC: Double = 80.0
+
         static let engageDefaultC: Double = 45.0
-        static let engageMinC: Double = 35.0
-        static let engageMaxC: Double = 85.0
+        static let engageMinC: Double = tempMinC + 2.0 // 32.0
+        static let engageMaxC: Double = tempMaxC       // 80.0
 
         /// User-configurable shutoff temperature: below this, cooling safely shuts off completely (0%)
         static let shutoffDefaultC: Double = 38.0
-        static let shutoffMinC: Double = 30.0
-        static let shutoffMaxC: Double = 50.0
+        static let shutoffMinC: Double = tempMinC       // 30.0
+        static let shutoffMaxC: Double = tempMaxC - 2.0 // 78.0
 
         /// User-configurable minimum fan speed in Smart Max and Balanced when below engage threshold:
         static let smartMaxMinFanDefault: UInt8 = 30 // 30% fan power (quiet, active Peltier baseline)
