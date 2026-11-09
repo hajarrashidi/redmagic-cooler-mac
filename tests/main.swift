@@ -160,26 +160,25 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off at 41°C when shutoff is 42°C")
     print("  ✅ Balanced Custom Shutoff: 41°C (< custom 42°C) -> Cooler immediately shuts OFF")
 
-    // F. Test Anti-Lockup Dynamic Push:
-    // When Shutoff is set to 48°C (above current engage), it must automatically push Engage to at least 50°C!
-    balanced.setEngage(44.0)
-    balanced.setShutoff(48.0)
-    assert(balanced.shutoffC == 48.0, "Expected shutoff 48°C")
-    assert(balanced.engageC >= 50.0, "Expected engage pushed to at least 50°C, got \(balanced.engageC)°C")
-    print("  ✅ Anti-Lockup: Raising Shutoff to 48°C smoothly pushes Engage to \(balanced.engageC)°C (never freezes)")
+    // F. Test Independent Clamping (No Unexpected Pushing):
+    // Setting Shutoff when Engage is 50°C clamps Shutoff to at most 48°C (Engage remains untouched at 50°C!)
+    balanced.setEngage(50.0)
+    balanced.setShutoff(55.0) // Attempts to push above engage - 2.0
+    assert(balanced.shutoffC == 48.0, "Expected shutoff clamped to engage - 2 (48°C), got \(balanced.shutoffC)°C")
+    assert(balanced.engageC == 50.0, "Expected engage to remain untouched at 50°C, got \(balanced.engageC)°C")
+    print("  ✅ Independent Clamping: Shutoff stops safely at 48°C (engage − 2°C) without altering Engage (50°C)")
 
-    // When Engage is lowered to 36°C, it must automatically push Shutoff down to at most 34°C!
-    balanced.setEngage(36.0)
-    assert(balanced.engageC == 36.0, "Expected engage 36°C")
-    assert(balanced.shutoffC <= 34.0, "Expected shutoff pushed down to at most 34°C, got \(balanced.shutoffC)°C")
-    print("  ✅ Anti-Lockup: Lowering Engage to 36°C smoothly pushes Shutoff down to \(balanced.shutoffC)°C (never freezes)")
+    // Setting Engage down towards Shutoff (48°C) clamps Engage to at least 50°C (Shutoff remains untouched at 48°C!)
+    balanced.setEngage(40.0) // Attempts to push below shutoff + 2.0
+    assert(balanced.engageC == 50.0, "Expected engage clamped to shutoff + 2 (50°C), got \(balanced.engageC)°C")
+    assert(balanced.shutoffC == 48.0, "Expected shutoff to remain untouched at 48°C, got \(balanced.shutoffC)°C")
+    print("  ✅ Independent Clamping: Engage stops safely at 50°C (shutoff + 2°C) without altering Shutoff (48°C)")
 
-    // G. Test Unified Scale & Beyond-50°C Unlocked Range:
-    // User can set Shutoff past the old 50°C ceiling without blocking!
-    balanced.setShutoff(55.0)
-    assert(balanced.shutoffC == 55.0, "Expected shutoff to reach 55°C without 50°C artificial wall")
-    assert(balanced.engageC >= 57.0, "Expected engage pushed to 57°C")
-    print("  ✅ Unlocked Scale: Shutoff reaches 55°C (above old 50°C limit), Engage pushed to \(balanced.engageC)°C")
+    // G. Test 100% Min Power Option:
+    policy.setMinFanPercent(100)
+    let fullMinDec = policy.evaluate(thermalState: .nominal, dieC: 41.0)
+    assert(fullMinDec.tier.fanPercent == 100 && fullMinDec.tier.mode == .max, "Expected full 100% max mode with 100% min power")
+    print("  ✅ 100% Min Power: Holds 100% max cooling throughout nominal zone")
 
     // Both sliders share 30°C...80°C range: Shutoff knob is ALWAYS physically to the left of Engage knob
     let shutoffVisualX = (44.0 - Config.Autopilot.tempMinC) / (Config.Autopilot.tempMaxC - Config.Autopilot.tempMinC)

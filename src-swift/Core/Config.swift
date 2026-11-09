@@ -141,7 +141,7 @@ enum Config {
         /// User-configurable shutoff temperature: below this, cooling safely shuts off completely (0%)
         static let shutoffDefaultC: Double = 38.0
         static let shutoffMinC: Double = tempMinC       // 30.0
-        static let shutoffMaxC: Double = tempMaxC - 2.0 // 78.0
+        static let shutoffMaxC: Double = engageMaxC - 2.0 // 78.0 (strictly at least 2°C below engageMaxC)
 
         /// User-configurable minimum fan speed in Smart Max and Balanced when below engage threshold:
         static let smartMaxMinFanDefault: UInt8 = 40 // 40% fan power (quietest physical hardware floor, ~6,000 RPM)

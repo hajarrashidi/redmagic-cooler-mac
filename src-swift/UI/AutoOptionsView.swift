@@ -27,7 +27,7 @@ final class AutoOptionsView: PanelRowView {
 
     // ── Base Minimum Power ──
     private let minPowerTitle = UIStyle.sectionLabel("MIN POWER")
-    private let minPowerControl = NSSegmentedControl(labels: ["40%", "50%", "60%", "75%"],
+    private let minPowerControl = NSSegmentedControl(labels: ["40%", "60%", "80%", "100%"],
                                                      trackingMode: .selectOne,
                                                      target: nil, action: nil)
 
@@ -44,7 +44,7 @@ final class AutoOptionsView: PanelRowView {
         static let height: CGFloat = 236
     }
 
-    private static let minFanOptions: [UInt8] = [40, 50, 60, 75]
+    private static let minFanOptions: [UInt8] = [40, 60, 80, 100]
 
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Layout.height))
@@ -180,35 +180,19 @@ final class AutoOptionsView: PanelRowView {
 
     @objc private func engageSliderMoved() {
         let rawVal = round(engageSlider.doubleValue)
-        let safeEngage = rawVal.clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
+        let minAllowed = max(Config.Autopilot.engageMinC, shutoffSlider.doubleValue + 2.0)
+        let safeEngage = rawVal.clamped(to: minAllowed...Config.Autopilot.engageMaxC)
         engageSlider.doubleValue = safeEngage
         updateEngageLabel()
-
-        // If engage is dragged down towards shutoff, push shutoff downward so it never blocks or locks up
-        if shutoffSlider.doubleValue > safeEngage - 2.0 {
-            let newShutoff = max(Config.Autopilot.shutoffMinC, safeEngage - 2.0)
-            shutoffSlider.doubleValue = newShutoff
-            updateShutoffLabel()
-            onShutoffChange?(newShutoff)
-        }
-
         onEngageChange?(safeEngage)
     }
 
     @objc private func shutoffSliderMoved() {
         let rawVal = round(shutoffSlider.doubleValue)
-        let safeShutoff = rawVal.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
+        let maxAllowed = min(Config.Autopilot.shutoffMaxC, engageSlider.doubleValue - 2.0)
+        let safeShutoff = rawVal.clamped(to: Config.Autopilot.shutoffMinC...maxAllowed)
         shutoffSlider.doubleValue = safeShutoff
         updateShutoffLabel()
-
-        // If shutoff is dragged up towards engage, push engage upward so it never blocks or locks up
-        if engageSlider.doubleValue < safeShutoff + 2.0 {
-            let newEngage = min(Config.Autopilot.engageMaxC, safeShutoff + 2.0)
-            engageSlider.doubleValue = newEngage
-            updateEngageLabel()
-            onEngageChange?(newEngage)
-        }
-
         onShutoffChange?(safeShutoff)
     }
 

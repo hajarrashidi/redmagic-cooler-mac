@@ -78,10 +78,12 @@ final class AutopilotPolicy {
          dwell: TimeInterval = Config.Autopilot.cooldownDwell,
          hysteresisC: Double = Config.Autopilot.hysteresisC,
          shutoffFloorC: Double? = nil) {
+        let safeEngage = engageC.clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
+        let maxAllowedShutoff = min(Config.Autopilot.shutoffMaxC, safeEngage - 2.0)
         let effectiveShutoff = shutoffFloorC ?? shutoffC
-        self.shutoffC = effectiveShutoff.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
+        self.shutoffC = effectiveShutoff.clamped(to: Config.Autopilot.shutoffMinC...maxAllowedShutoff)
+        self.engageC = safeEngage
         self.minFanPercent = minFanPercent.clamped(to: 40...100)
-        self.engageC = max(engageC, self.shutoffC + 2.0).clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
     }
 
     func setProfile(_ profile: AutoProfile) {
@@ -89,19 +91,13 @@ final class AutopilotPolicy {
     }
 
     func setEngage(_ celsius: Double) {
-        self.engageC = celsius.clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
-        // If engage is dragged down towards shutoff, push shutoff downward so they never collide or lock up
-        if self.shutoffC > self.engageC - 2.0 {
-            self.shutoffC = max(Config.Autopilot.shutoffMinC, self.engageC - 2.0)
-        }
+        let minAllowed = max(Config.Autopilot.engageMinC, self.shutoffC + 2.0)
+        self.engageC = celsius.clamped(to: minAllowed...Config.Autopilot.engageMaxC)
     }
 
     func setShutoff(_ celsius: Double) {
-        self.shutoffC = celsius.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
-        // If shutoff is dragged up towards engage, push engage upward so they never collide or lock up
-        if self.engageC < self.shutoffC + 2.0 {
-            self.engageC = min(Config.Autopilot.engageMaxC, self.shutoffC + 2.0)
-        }
+        let maxAllowed = min(Config.Autopilot.shutoffMaxC, self.engageC - 2.0)
+        self.shutoffC = celsius.clamped(to: Config.Autopilot.shutoffMinC...maxAllowed)
     }
 
     func setMinFanPercent(_ percent: UInt8) {
@@ -139,7 +135,13 @@ final class AutopilotPolicy {
             // When below engage threshold, the cooler stays quiet and steady at user-chosen minFanPercent.
             targetFan = minFanPercent
             label = "\(profile == .smartMax ? "Smart Max" : "Balanced") (\(targetFan)%)"
-            targetMode = (targetFan >= 60) ? .medium : .low
+            if targetFan >= 85 {
+                targetMode = .max
+            } else if targetFan >= 60 {
+                targetMode = .medium
+            } else {
+                targetMode = .low
+            }
         } else {
             // 3. Active Engage Zone: dieC >= engageC
             if profile == .smartMax {
