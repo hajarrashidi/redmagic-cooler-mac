@@ -88,7 +88,8 @@ final class RedMagicDriver: CoolerDriver {
         telemetryPollTimer?.invalidate()
         telemetryPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self, let peripheral = self.peripheral else { return }
-            if let telemetryChar = self.telemetryChar {
+            // Only poll telemetry if the profile officially provides a telemetry stream
+            if self.profile.hasTelemetryStream, let telemetryChar = self.telemetryChar {
                 peripheral.readValue(for: telemetryChar)
             }
             if let hallChar = self.hallChar {
@@ -142,33 +143,23 @@ final class RedMagicDriver: CoolerDriver {
 
         // 1. Telemetry notification (0x1016)
         if uuidStr.contains("1016") {
-            let hexStr = data.map { String(format: "%02X", $0) }.joined(separator: " ")
-            EventLogger.record("REDMAGIC — telemetry raw [\(data.count)B]: \(hexStr)")
-
-            // Check if frame has valid data
-            guard data.count >= 8 else {
-                EventLogger.record("REDMAGIC — telemetry rejected too short: len=\(data.count)")
+            // Ignore unpopulated / all-zero dummy BLE frames
+            guard data.count >= 8, !data.allSatisfy({ $0 == 0 }) else {
                 return .none
             }
 
-            // Older/different firmware might use 0xAA header or 0x00 header or direct offsets
-            let coldC: Int
-            let hotC: Int
-            let ambientC: Int
-            let rpm: Int?
-
-            if data[0] == 0xAA {
-                coldC = Int(data[2])
-                hotC = Int(data[3])
-                ambientC = Int(data[7])
-                rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
-            } else {
-                // Cooler 5 Pro raw frame format inspection
-                coldC = Int(data[1])
-                hotC = Int(data[2])
-                ambientC = data.count >= 6 ? Int(data[5]) : 0
-                rpm = data.count >= 14 ? Int(data[12]) | (Int(data[13]) << 8) : nil
+            // Valid telemetry frames must begin with 0xAA
+            guard data[0] == 0xAA else {
+                return .none
             }
+
+            let hexStr = data.map { String(format: "%02X", $0) }.joined(separator: " ")
+            EventLogger.record("REDMAGIC — telemetry raw [\(data.count)B]: \(hexStr)")
+
+            let coldC = Int(data[2])
+            let hotC = Int(data[3])
+            let ambientC = Int(data[7])
+            let rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
 
             let telemetry = CoolerTelemetry(
                 coldC: coldC,
@@ -200,7 +191,8 @@ final class RedMagicDriver: CoolerDriver {
         if uuidStr.contains("1015") {
             let hex = data.map { String(format: "%02X", $0) }.joined(separator: " ")
             EventLogger.record("REDMAGIC — hall sensor raw: \(hex)")
-            let attached = !data.isEmpty && data[0] == 4
+            // On Cooler 5 Pro, 0x05 indicates normal active operation; bringing a magnet triggers 0x04 / cutoff
+            let attached = is5Pro ? (data[0] == 0x05) : (data[0] == 0x04)
             return .mountAttached(attached)
         }
 

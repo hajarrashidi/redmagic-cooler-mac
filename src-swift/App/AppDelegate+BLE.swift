@@ -36,7 +36,7 @@ extension AppDelegate: CoolerBLEManagerDelegate {
     /// the tick rather than from telemetry, because *silence* is one of the
     /// tells and silence produces no callback to hang this off.
     func updateSwitchMonitor() {
-        guard ble.isConnected, let lastTelemetryAt else {
+        guard let profile = ble.profile, profile.hasPhysicalPowerSwitch, ble.isConnected, let lastTelemetryAt else {
             switchMonitor.reset()
             return
         }

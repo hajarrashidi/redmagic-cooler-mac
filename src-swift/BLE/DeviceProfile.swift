@@ -22,6 +22,12 @@ struct DeviceProfile: Equatable {
     /// Maximum rated cooling power in Watts (e.g. 36W, 35W, 30W, 40W, 27W).
     let ratedWatts: Int
 
+    /// Whether the hardware model contains a physical mechanical switch that cuts cooling while BLE remains alive.
+    let hasPhysicalPowerSwitch: Bool
+
+    /// Whether the hardware model broadcasts continuous live telemetry frames (temperatures/fan RPM).
+    let hasTelemetryStream: Bool
+
     /// Lowercased substrings that identify this model in a scan result.
     let nameHints: [String]
 
@@ -161,6 +167,8 @@ extension DeviceProfile {
         brand: "REDMAGIC",
         modelName: "REDMAGIC VC Cooler 6 Pro+ (40W)",
         ratedWatts: 40,
+        hasPhysicalPowerSwitch: true,
+        hasTelemetryStream: true,
         nameHints: ["6pro+", "6 pro+", "6pro plus"],
         serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
         driverFactory: { RedMagicDriver(profile: $0) }
@@ -172,6 +180,8 @@ extension DeviceProfile {
         brand: "REDMAGIC",
         modelName: "REDMAGIC Cryo Cooler 8 Pro (36W)",
         ratedWatts: 36,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: true,
         nameHints: ["8pro", "cooler 8", "magcooler 8"],
         serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
         driverFactory: { RedMagicDriver(profile: $0) }
@@ -183,6 +193,8 @@ extension DeviceProfile {
         brand: "REDMAGIC",
         modelName: "REDMAGIC VC Cooler 6 Pro (36W)",
         ratedWatts: 36,
+        hasPhysicalPowerSwitch: true,
+        hasTelemetryStream: true,
         nameHints: ["6pro", "cooler 6", "magcooler 6"],
         serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
         driverFactory: { RedMagicDriver(profile: $0) }
@@ -194,6 +206,8 @@ extension DeviceProfile {
         brand: "REDMAGIC",
         modelName: "REDMAGIC Magnetic Cooler 5 Pro (36W)",
         ratedWatts: 36,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: false,
         nameHints: ["5pro", "cooler 5", "magcooler 5"],
         serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
         driverFactory: { RedMagicDriver(profile: $0) }
@@ -205,6 +219,8 @@ extension DeviceProfile {
         brand: "REDMAGIC",
         modelName: "REDMAGIC Magcooler 4 Pro (27W)",
         ratedWatts: 27,
+        hasPhysicalPowerSwitch: true,
+        hasTelemetryStream: false,
         nameHints: ["4pro", "cooler 4", "magcooler 4"],
         serviceUUID: CBUUID(string: "d52082ad-e805-9f97-9d4e-1c682d9c9ce6"),
         driverFactory: { RedMagicDriver(profile: $0) }
@@ -218,6 +234,8 @@ extension DeviceProfile {
         brand: "Black Shark",
         modelName: "Black Shark MagCooler 5 Pro (35W)",
         ratedWatts: 35,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: false,
         nameHints: ["black shark 5", "blackshark 5", "magcooler 5 pro", "bs 5pro", "br42"],
         serviceUUID: CBUUID(string: "0000A0A0-3C17-D293-8E48-14FE2E4DA212"),
         driverFactory: { BlackSharkDriver(profile: $0) }
@@ -229,6 +247,8 @@ extension DeviceProfile {
         brand: "Black Shark",
         modelName: "Black Shark MagCooler 4 Pro (27W)",
         ratedWatts: 27,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: false,
         nameHints: ["black shark 4", "blackshark 4", "magcooler 4 pro", "bs 4pro"],
         serviceUUID: CBUUID(string: "0000A0A0-3C17-D293-8E48-14FE2E4DA212"),
         driverFactory: { BlackSharkDriver(profile: $0) }
@@ -242,6 +262,8 @@ extension DeviceProfile {
         brand: "Flydigi",
         modelName: "Flydigi B8X Overclock (30W)",
         ratedWatts: 30,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: false,
         nameHints: ["b8x", "flydigi b8x", "feizhi b8x"],
         serviceUUID: CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB"),
         driverFactory: { FlydigiDriver(profile: $0) }
@@ -253,6 +275,8 @@ extension DeviceProfile {
         brand: "Flydigi",
         modelName: "Flydigi B7X (27W)",
         ratedWatts: 27,
+        hasPhysicalPowerSwitch: false,
+        hasTelemetryStream: false,
         nameHints: ["b7x", "flydigi b7x", "feizhi b7x"],
         serviceUUID: CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB"),
         driverFactory: { FlydigiDriver(profile: $0) }

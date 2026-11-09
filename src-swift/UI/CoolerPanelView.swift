@@ -329,7 +329,8 @@ final class CoolerPanelView: PanelRowView {
 
         let cells = telemetryCells()
         guard !cells.isEmpty else {
-            UIStyle.text("—", Self.cellLabelFont, .tertiaryLabelColor)
+            let label = model.mode.isOn ? "Active Cooling" : "Standby"
+            UIStyle.text(label, Self.cellLabelFont, .secondaryLabelColor)
                 .draw(at: NSPoint(x: pad, y: y))
             return
         }
