@@ -180,17 +180,35 @@ final class AutoOptionsView: PanelRowView {
 
     @objc private func engageSliderMoved() {
         let rawVal = round(engageSlider.doubleValue)
-        let safeEngage = max(rawVal, round(shutoffSlider.doubleValue) + 2.0)
+        let safeEngage = rawVal.clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
         engageSlider.doubleValue = safeEngage
         updateEngageLabel()
+
+        // If engage is dragged down towards shutoff, push shutoff downward so it never blocks or locks up
+        if shutoffSlider.doubleValue > safeEngage - 2.0 {
+            let newShutoff = max(Config.Autopilot.shutoffMinC, safeEngage - 2.0)
+            shutoffSlider.doubleValue = newShutoff
+            updateShutoffLabel()
+            onShutoffChange?(newShutoff)
+        }
+
         onEngageChange?(safeEngage)
     }
 
     @objc private func shutoffSliderMoved() {
         let rawVal = round(shutoffSlider.doubleValue)
-        let safeShutoff = min(rawVal, round(engageSlider.doubleValue) - 2.0)
+        let safeShutoff = rawVal.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
         shutoffSlider.doubleValue = safeShutoff
         updateShutoffLabel()
+
+        // If shutoff is dragged up towards engage, push engage upward so it never blocks or locks up
+        if engageSlider.doubleValue < safeShutoff + 2.0 {
+            let newEngage = min(Config.Autopilot.engageMaxC, safeShutoff + 2.0)
+            engageSlider.doubleValue = newEngage
+            updateEngageLabel()
+            onEngageChange?(newEngage)
+        }
+
         onShutoffChange?(safeShutoff)
     }
 

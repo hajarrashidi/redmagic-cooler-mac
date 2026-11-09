@@ -141,6 +141,20 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off at 41°C when shutoff is 42°C")
     print("  ✅ Balanced Custom Shutoff: 41°C (< custom 42°C) -> Cooler immediately shuts OFF")
 
+    // F. Test Anti-Lockup Dynamic Push:
+    // When Shutoff is set to 48°C (above current engage), it must automatically push Engage to at least 50°C!
+    balanced.setEngage(44.0)
+    balanced.setShutoff(48.0)
+    assert(balanced.shutoffC == 48.0, "Expected shutoff 48°C")
+    assert(balanced.engageC >= 50.0, "Expected engage pushed to at least 50°C, got \(balanced.engageC)°C")
+    print("  ✅ Anti-Lockup: Raising Shutoff to 48°C smoothly pushes Engage to \(balanced.engageC)°C (never freezes)")
+
+    // When Engage is lowered to 36°C, it must automatically push Shutoff down to at most 34°C!
+    balanced.setEngage(36.0)
+    assert(balanced.engageC == 36.0, "Expected engage 36°C")
+    assert(balanced.shutoffC <= 34.0, "Expected shutoff pushed down to at most 34°C, got \(balanced.shutoffC)°C")
+    print("  ✅ Anti-Lockup: Lowering Engage to 36°C smoothly pushes Shutoff down to \(balanced.shutoffC)°C (never freezes)")
+
     // 7. Test Mac Family-Aware LED Thermal Color Calibration
     print("\n🌈 Testing Mac Family-Aware LED Thermal Color Calibration...")
     // A. MacBook Air:

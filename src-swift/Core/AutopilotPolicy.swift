@@ -89,11 +89,19 @@ final class AutopilotPolicy {
     }
 
     func setEngage(_ celsius: Double) {
-        self.engageC = max(celsius, shutoffC + 2.0).clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
+        self.engageC = celsius.clamped(to: Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC)
+        // If engage is dragged down towards shutoff, push shutoff downward so they never collide or lock up
+        if self.shutoffC > self.engageC - 2.0 {
+            self.shutoffC = max(Config.Autopilot.shutoffMinC, self.engageC - 2.0)
+        }
     }
 
     func setShutoff(_ celsius: Double) {
-        self.shutoffC = min(celsius, engageC - 2.0).clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
+        self.shutoffC = celsius.clamped(to: Config.Autopilot.shutoffMinC...Config.Autopilot.shutoffMaxC)
+        // If shutoff is dragged up towards engage, push engage upward so they never collide or lock up
+        if self.engageC < self.shutoffC + 2.0 {
+            self.engageC = min(Config.Autopilot.engageMaxC, self.shutoffC + 2.0)
+        }
     }
 
     func setMinFanPercent(_ percent: UInt8) {
