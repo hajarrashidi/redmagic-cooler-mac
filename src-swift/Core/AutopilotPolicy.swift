@@ -7,9 +7,9 @@ enum AutoProfile: String, CaseIterable {
     var caption: String {
         switch self {
         case .balanced:
-            return "Smooth acoustic curve: scales gently from min power to 100%. Shuts off below threshold."
+            return "Quiet min power below threshold. Smooth progressive ramp up to 100% when threshold is reached."
         case .smartMax:
-            return "Aggressive cooling ramp: fast-attack boost from min power to 100%. Shuts off below threshold."
+            return "Quiet min power below threshold. Immediate 100% max boost when threshold is reached."
         }
     }
 }
@@ -133,49 +133,36 @@ final class AutopilotPolicy {
             targetMode = .off
             targetFan = 0
             label = "Standby (< \(Int(round(shutoffC)))°C)"
-        } else if dieC >= engageC {
-            // 2. Engage threshold reached or exceeded: Full boost 100%
-            targetMode = .max
-            targetFan = 100
-            label = "\(profile == .smartMax ? "Smart Max" : "Balanced") (100%)"
+        } else if dieC < engageC {
+            // 2. Nominal Zone: shutoffC <= dieC < engageC
+            // RIGIDLY HONORS USER'S MIN POWER!
+            // When below engage threshold, the cooler stays quiet and steady at user-chosen minFanPercent.
+            targetFan = minFanPercent
+            label = "\(profile == .smartMax ? "Smart Max" : "Balanced") (\(targetFan)%)"
+            targetMode = (targetFan >= 60) ? .medium : .low
         } else {
-            // 3. Active thermal control zone: shutoffC <= dieC < engageC
-            let base = Double(minFanPercent)
-
+            // 3. Active Engage Zone: dieC >= engageC
             if profile == .smartMax {
-                // Smart Max: Holds configured quiet min power across normal temperatures.
-                // Smoothly ramps in the final 2°C buffer zone before engage threshold.
-                let rampWindow = 2.0
-                let rampStart = max(shutoffC, engageC - rampWindow)
-                if dieC <= rampStart {
-                    targetFan = minFanPercent
-                } else {
-                    let progress = ((dieC - rampStart) / rampWindow).clamped(to: 0.0...1.0)
-                    let rawFan = base + progress * (100.0 - base)
-                    targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
-                }
-                label = "Smart Max (\(targetFan)%)"
-            } else {
-                // Balanced: Gentle acoustic ramp.
-                // Holds min power while cool; ramps smoothly up to 100% over the active approach zone.
-                let rampWindow = min(12.0, max(4.0, engageC - shutoffC))
-                let rampStart = max(shutoffC, engageC - rampWindow)
-                if dieC <= rampStart {
-                    targetFan = minFanPercent
-                } else {
-                    let progress = ((dieC - rampStart) / rampWindow).clamped(to: 0.0...1.0)
-                    let rawFan = base + progress * (100.0 - base)
-                    targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
-                }
-                label = "Balanced (\(targetFan)%)"
-            }
-
-            if targetFan >= 85 {
+                // Smart Max: Immediate full 100% boost upon crossing engage threshold!
+                targetFan = 100
                 targetMode = .max
-            } else if targetFan >= 60 {
-                targetMode = .medium
+                label = "Smart Max (100%)"
             } else {
-                targetMode = .low
+                // Balanced: Smooth progressive ramp above Engage from minFanPercent to 100%
+                let span: Double = 15.0 // 15°C gentle ramp window above engage threshold
+                let excess = dieC - engageC
+                let progress = (excess / span).clamped(to: 0.0...1.0)
+                let base = Double(minFanPercent)
+                let rawFan = base + progress * (100.0 - base)
+                targetFan = UInt8(min(100, max(base, round(rawFan / 5.0) * 5.0)))
+                label = "Balanced (\(targetFan)%)"
+                if targetFan >= 85 {
+                    targetMode = .max
+                } else if targetFan >= 60 {
+                    targetMode = .medium
+                } else {
+                    targetMode = .low
+                }
             }
         }
 
