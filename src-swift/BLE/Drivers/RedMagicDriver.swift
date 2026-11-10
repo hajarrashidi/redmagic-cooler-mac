@@ -160,6 +160,8 @@ final class RedMagicDriver: CoolerDriver {
     func setLight(effect: UInt8, color: RGB, peripheral: CBPeripheral) {
         guard let lightChar else { return }
         let payload = [effect] + color.bytes
+        let hexStr = payload.map { String(format: "%02X", $0) }.joined(separator: " ")
+        EventLogger.record("REDMAGIC — setLight effect \(effect), RGB(\(color.r),\(color.g),\(color.b)) -> bytes: [\(hexStr)]")
         peripheral.writeValue(Data(payload), for: lightChar, type: .withResponse)
     }
 

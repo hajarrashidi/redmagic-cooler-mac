@@ -350,6 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         EventLogger.record("\(decision.reason)  → cooler \(tier.label), fan \(tier.fanPercent)%")
         ble.apply(mode: tier.mode, fanPercent: tier.fanPercent)
+        scheduleLedReassertion()
     }
 
     // ── Switching lockout ────────────────────────────────────────────────────

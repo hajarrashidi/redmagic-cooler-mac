@@ -86,19 +86,13 @@ final class LedController {
 
     /// Drives the `auto` effect's temperature colour. Called every tick; writes
     /// only when the colour actually changes unless `force` is true.
-    ///
-    /// While the cooler is off its LED can't show anything, so the remembered
-    /// colour is cleared to force a fresh write when it comes back on.
     func updateAutoColor(dieC: Double?, autopilot: AutopilotPolicy, force: Bool = false) {
         guard effect == .auto, ble.isConnected else { return }
-        guard ble.mode.isOn else {
-            lastWrittenColor = nil
-            return
-        }
         let color = autopilot.heatColor(for: dieC)
         if !force {
             guard color != lastWrittenColor else { return }
         }
+        EventLogger.record("LedController — updateAutoColor: die=\(dieC.map { String(format: "%.1f°C", $0) } ?? "nil"), color=RGB(\(color.r),\(color.g),\(color.b))")
         ble.setLight(effect: LedEffect.DeviceEffect.steady.rawValue, color: color)
         lastWrittenColor = color
     }
