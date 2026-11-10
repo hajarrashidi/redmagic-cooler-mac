@@ -173,7 +173,7 @@ enum UIStyle {
 
     // ── Fonts ────────────────────────────────────────────────────────────────
 
-    static let sectionFont = NSFont.systemFont(ofSize: 9,  weight: .semibold)
+    static let sectionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
     static let captionFont = NSFont.systemFont(ofSize: 10, weight: .regular)
     static let bodyFont    = NSFont.systemFont(ofSize: 11, weight: .regular)
     /// Monospaced digits stop telemetry values jittering as they update.
@@ -181,11 +181,7 @@ enum UIStyle {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    /// The small uppercase caption that titles a control row.
-    ///
-    /// Six rows built this same field by hand. Only the font and colour are
-    /// shared — each row still places its own header, because they sit at
-    /// different heights within their layouts.
+    /// The small title that heads a control row or section.
     static func sectionLabel(_ title: String) -> NSTextField {
         let label = NSTextField(labelWithString: title)
         label.font = sectionFont
@@ -193,11 +189,7 @@ enum UIStyle {
         return label
     }
 
-    /// Ink for a section title. `secondaryLabelColor` rather than tertiary:
-    /// these name the thing beneath them, and at 9pt uppercase the faintest
-    /// grey in the palette had them reading as disabled. Being a system colour
-    /// it resolves to near-black on a light menu and near-white on a dark one,
-    /// which is the whole reason the app no longer pins its appearance.
+    /// Ink for a section title.
     static var sectionInk: NSColor { .secondaryLabelColor }
 
     static func text(_ string: String,
@@ -207,12 +199,12 @@ enum UIStyle {
                            attributes: [.font: font, .foregroundColor: color])
     }
 
-    /// Draws a small kerned uppercase section label at `point` (flipped, y-down).
+    /// Draws a clean Title-Case section header at `point` (flipped, y-down).
     static func drawSectionHeader(_ title: String, at point: NSPoint) {
-        NSAttributedString(string: title.uppercased(), attributes: [
+        NSAttributedString(string: title, attributes: [
             .font: sectionFont,
             .foregroundColor: sectionInk,
-            .kern: 0.6,
+            .kern: 0.2,
         ]).draw(at: point)
     }
 
@@ -222,26 +214,18 @@ enum UIStyle {
     static func heatColor(_ celsius: Double?) -> NSColor {
         guard let celsius else { return .secondaryLabelColor }
         switch celsius {
+        case ..<50: return NSColor(srgbRed: 0.28, green: 0.72, blue: 0.95, alpha: 1.0)
         case ..<60: return .systemGreen
-        case ..<75: return .systemYellow
-        case ..<85: return .systemOrange
+        case ..<72: return .systemYellow
+        case ..<82: return .systemOrange
         default:    return .systemRed
         }
     }
 
-    /// Heat colour for *text*. Identical to `heatColor` except the cool range
-    /// reads as plain label ink — a big green number looked like a status
-    /// light, not a reading. The warning colours stay so heat still stands out.
-    ///
-    /// That ink is softened, because at 26pt full-strength `labelColor` is the
-    /// heaviest mark in the menu and pulls the eye to a number that, while the
-    /// Mac is cool, is the least interesting thing on the card. The warning
-    /// colours keep their full strength — when they appear, they *are* the
-    /// point.
+    /// Heat colour for *text*. Cool temps read as a fresh icy cyan, transitioning
+    /// smoothly to green, amber, orange and red as heat rises.
     static func textHeatColor(_ celsius: Double?) -> NSColor {
-        guard let celsius, celsius >= 60 else {
-            return NSColor.labelColor.withAlphaComponent(0.55)
-        }
+        guard let celsius else { return NSColor.labelColor.withAlphaComponent(0.65) }
         return heatColor(celsius)
     }
 }

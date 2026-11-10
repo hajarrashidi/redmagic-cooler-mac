@@ -14,10 +14,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-APP="RedMagic Cooler.app"
-BUNDLE_ID="com.redmagic.cooler"
-VERSION="3.0"
-BUILD="16"
+APP="Smart Cooler Control.app"
+BUNDLE_ID="com.smartcooler.mac"
+VERSION="3.1"
+BUILD="17"
 
 RUN_AFTER_BUILD=false
 WITH_PROBES=false
@@ -81,7 +81,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>RedMagic Cooler</string>
+	<string>Smart Cooler Control</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -93,19 +93,30 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>This app needs Bluetooth to connect to and control a supported REDMAGIC cooler.</string>
+	<string>Smart Cooler Control needs Bluetooth to connect to and control supported high-power coolers.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Smart Cooler Control needs Bluetooth to connect to and control supported high-power coolers.</string>
 </dict>
 </plist>
 PLIST
 
 # ── 3. Sign ───────────────────────────────────────────────────────────────────
-# Ad-hoc signature; keeps the Bluetooth permission grant stable across rebuilds.
+# Ad-hoc signature with stable designated requirement; keeps the Bluetooth permission grant stable across rebuilds.
 echo "==> Signing"
-codesign --force --deep --sign - "$APP" 2>/dev/null
+codesign --force --deep --sign - --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP" 2>/dev/null
 
-echo "==> Built $APP ($VERSION build $BUILD)"
+echo "==> Installing to /Applications/$APP"
+rm -rf "/Applications/$APP"
+cp -R "$APP" "/Applications/$APP"
+# Remove duplicate in source folder so Spotlight / App Switcher only see the canonical app
+rm -rf "$APP"
+
+# Update LaunchServices registration
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/$APP" 2>/dev/null || true
+
+echo "==> Built and installed /Applications/$APP ($VERSION build $BUILD)"
 
 if [[ "$RUN_AFTER_BUILD" == true ]]; then
     echo "==> Relaunching"
-    open "$APP"
+    nohup "/Applications/$APP/Contents/MacOS/applet" >/dev/null 2>&1 &
 fi

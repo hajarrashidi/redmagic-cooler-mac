@@ -1,182 +1,359 @@
 import Foundation
 
-/// Decides how hard to cool, from Mac die temperature and macOS thermal
-/// pressure.
+/// Discrete Cooling Tiers for the Deterministic Step-Ladder Engine.
+enum CoolingTier: Int, Comparable, CaseIterable {
+    case standby = 0
+    case tier1_low = 1
+    case tier2_med = 2
+    case tier3_high = 3
+    case tier4_turbo = 4
+
+    static func < (lhs: CoolingTier, rhs: CoolingTier) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    var fanPercent: UInt8 {
+        switch self {
+        case .standby:     return 0
+        case .tier1_low:   return 40
+        case .tier2_med:   return 60
+        case .tier3_high:  return 80
+        case .tier4_turbo: return 100
+        }
+    }
+
+    var mode: CoolingMode {
+        switch self {
+        case .standby:     return .off
+        case .tier1_low:   return .low
+        case .tier2_med:   return .medium
+        case .tier3_high:  return .medium
+        case .tier4_turbo: return .max
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .standby:     return "Standby (Off)"
+        case .tier1_low:   return "Tier 1 — Quiet (40%)"
+        case .tier2_med:   return "Tier 2 — Balanced (60%)"
+        case .tier3_high:  return "Tier 3 — High (80%)"
+        case .tier4_turbo: return "Tier 4 — Turbo (100%)"
+        }
+    }
+}
+
+enum AutoProfile: String, CaseIterable {
+    case stepLadder = "Step-Ladder"
+    case balanced = "Balanced"
+    case smartMax = "Smart Max"
+
+    var caption: String {
+        switch self {
+        case .stepLadder:
+            return "Deterministic 4-stage ladder (50°/60°/65°/70°C) with anti-chattering dwell and safety."
+        case .balanced:
+            return "Quiet min power below threshold. Progressive ramp up to 100% when threshold is reached."
+        case .smartMax:
+            return "Quiet min power below threshold. Immediate 100% max boost when threshold is reached."
+        }
+    }
+}
+
+/// Thermal calibration thresholds for Mac families based on Apple Silicon thermal envelopes.
+struct MacThermalThresholds {
+    let greenMaxC: Double
+    let redMinC: Double
+}
+
+enum MacThermalProfile {
+    static func thresholds(for model: String) -> MacThermalThresholds {
+        let lower = model.lowercased()
+        if lower.contains("studio") || lower.contains("mini") || (lower.contains("pro") && !lower.contains("macbook")) {
+            // Mac Studio / Mac mini / Mac Pro: massive active heatsinks, lower normal temp band
+            return MacThermalThresholds(greenMaxC: 50.0, redMinC: 72.0)
+        } else if lower.contains("air") {
+            // MacBook Air: fanless passive chassis dissipation; 35-55°C is nominal idle/light work, >78°C is hot
+            return MacThermalThresholds(greenMaxC: 55.0, redMinC: 80.0)
+        } else if lower.contains("macbook") {
+            // MacBook Pro: internal fans idle/off until ~75°C; 38-58°C nominal, >82°C hot
+            return MacThermalThresholds(greenMaxC: 58.0, redMinC: 82.0)
+        } else {
+            return MacThermalThresholds(greenMaxC: 55.0, redMinC: 80.0)
+        }
+    }
+}
+
+/// Decides cooling intensity from Mac die temperature and macOS thermal pressure.
 ///
-/// The policy is a five-step ladder (`Tier.off` … `Tier.max`). Two mechanisms
-/// keep it from oscillating around a threshold:
-///
-///  * **Hysteresis** — a tier only releases once the temperature falls
-///    `Config.Autopilot.hysteresisC` *below* the point that engaged it.
-///  * **Dwell** — after that, the temperature must stay low for
-///    `Config.Autopilot.cooldownDwell` before stepping down, and steps down one
-///    tier at a time rather than dropping straight to the target.
-///
-/// Ramping *up* is immediate: heat is the thing we're reacting to.
-///
-/// This type is pure decision logic — it performs no I/O and touches no
-/// hardware, which is what makes it straightforward to reason about and test.
+/// Implements the deterministic 4-stage Step-Ladder thermal engine with wide asymmetric
+/// anti-chattering release buffers (up to 8°C release buffer) and dynamic dwell timing
+/// with thermal velocity (dT/dt) fast bypass.
 final class AutopilotPolicy {
 
-    // ── Tier ladder ──────────────────────────────────────────────────────────
-
-    /// One rung of the ladder. Fan values are RPM-probe calibrated rather than
-    /// linear percentages — the firmware's response curve is U-shaped
-    /// (0 → off, 60 → ~6 600, 80 → ~8 200, 95 → ~8 600 RPM).
-    struct Tier {
+    struct Tier: Equatable {
         let mode: CoolingMode
         let fanPercent: UInt8
         let label: String
+        let coolingTier: CoolingTier?
+
+        init(mode: CoolingMode, fanPercent: UInt8, label: String, coolingTier: CoolingTier? = nil) {
+            self.mode = mode
+            self.fanPercent = fanPercent
+            self.label = label
+            self.coolingTier = coolingTier
+        }
     }
 
     static let tiers: [Tier] = [
-        Tier(mode: .off,    fanPercent: 0,   label: "off"),
-        Tier(mode: .low,    fanPercent: 60,  label: "low"),
-        Tier(mode: .medLow, fanPercent: 80,  label: "med-low"),
-        Tier(mode: .medium, fanPercent: 95,  label: "medium"),
-        Tier(mode: .max,    fanPercent: 100, label: "max"),
+        Tier(mode: .off,    fanPercent: 0,   label: "off",     coolingTier: .standby),
+        Tier(mode: .low,    fanPercent: 40,  label: "low",     coolingTier: .tier1_low),
+        Tier(mode: .medium, fanPercent: 60,  label: "medium",  coolingTier: .tier2_med),
+        Tier(mode: .medium, fanPercent: 80,  label: "high",    coolingTier: .tier3_high),
+        Tier(mode: .max,    fanPercent: 100, label: "turbo",   coolingTier: .tier4_turbo),
     ]
 
-    /// Result of one evaluation.
     struct Decision {
         let tier: Tier
-        /// Human-readable justification, written to the event log on a change.
         let reason: String
     }
 
-    // ── Configuration ────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────────────────────
 
-    /// Temperature at which the first cooling step engages (°C). The whole
-    /// ladder is derived from this one number — it is the single knob the
-    /// menu's threshold slider drives.
-    private(set) var engageC: Double
+    private(set) var currentTier: CoolingTier = .standby
+    private(set) var isStandby: Bool = true
+    private(set) var profile: AutoProfile = .stepLadder
 
-    private let dwell: TimeInterval
-    private let hysteresisC: Double
+    // Timing and Dwell state
+    private var pendingTier: CoolingTier? = nil
+    private var pendingTierStartTime: TimeInterval = 0
+    private var pendingIsFastDwell: Bool = false
+    private var lastTierChangeTime: TimeInterval = 0
+    private var lastEvaluatedTempC: Double? = nil
+    private var lastEvaluatedTime: TimeInterval = 0
 
-    /// Engage temperature for each tier index ≥ 1, ascending.
-    private var engagePoints: [(temperatureC: Double, tierIndex: Int)] = []
+    // Configuration / Compatibility
+    private(set) var engageC: Double = Config.Autopilot.tier1TriggerC
+    private(set) var shutoffC: Double = Config.Autopilot.tier1ReleaseC
+    private(set) var minFanPercent: UInt8 = 40
+    private(set) var hysteresisC: Double = Config.Autopilot.hysteresisC
 
-    /// Die temperatures mapped to the LED's green and red endpoints.
-    private var ledGreenC: Double = 0
-    private var ledRedC: Double = 0
+    /// The temperature the Mac must reach to exit Standby and resume active cooling.
+    var wakeThresholdC: Double {
+        return Config.Autopilot.tier1TriggerC
+    }
 
-    // ── Live state ───────────────────────────────────────────────────────────
-
-    /// Index into `tiers` currently being held.
-    private(set) var tierIndex = 0
-    /// When the temperature first dropped below the current tier; `nil` while
-    /// at or above it. Drives the dwell timer.
-    private var coolingSince: TimeInterval?
-
-    init(engageC: Double = Config.Autopilot.engageDefaultC,
-         dwell: TimeInterval = Config.Autopilot.cooldownDwell,
-         hysteresisC: Double = Config.Autopilot.hysteresisC) {
-        self.dwell = dwell
-        self.hysteresisC = hysteresisC
+    init(engageC: Double = Config.Autopilot.tier1TriggerC,
+         shutoffC: Double = Config.Autopilot.tier1ReleaseC,
+         minFanPercent: UInt8 = 40,
+         dwell: TimeInterval = Config.Autopilot.stepDownDwellSeconds,
+         hysteresisC: Double = Config.Autopilot.hysteresisC,
+         shutoffFloorC: Double? = nil) {
         self.engageC = engageC
-        configure(engageC: engageC)
+        self.shutoffC = shutoffC
+        self.minFanPercent = minFanPercent.clamped(to: 40...100)
+        self.hysteresisC = hysteresisC
     }
 
-    // ── Ladder configuration ─────────────────────────────────────────────────
+    func setProfile(_ profile: AutoProfile) {
+        self.profile = profile
+    }
 
-    /// Moves the engage point and rebuilds the ladder around it.
     func setEngage(_ celsius: Double) {
-        configure(engageC: celsius)
+        self.engageC = celsius
     }
 
-    private func configure(engageC: Double) {
-        self.engageC = Self.clampEngage(engageC)
-
-        // Steps sit 10 °C apart above the user's engage point, with every
-        // tier capped so a high engage point can't push it past 95 °C. The
-        // intermediate steps need the cap too, not just the top one: a
-        // 80 °C engage point would otherwise put tier 3 at 100 °C — *above*
-        // tier 4's capped 95 — and the ladder would engage out of order.
-        let engage = self.engageC
-        let ceiling = min(engage + 30, 95)
-        engagePoints = [(engage, 1),
-                        (min(engage + 10, ceiling), 2),
-                        (min(engage + 20, ceiling), 3),
-                        (ceiling, 4)]
-        ledGreenC = max(30, engage - 10)
-        ledRedC = ceiling
-
-        // The ladder moved underneath us; abandon any dwell in progress.
-        coolingSince = nil
+    func setShutoff(_ celsius: Double) {
+        self.shutoffC = celsius
     }
 
-    private static func clampEngage(_ celsius: Double) -> Double {
-        let bounds = Config.Autopilot.engageMinC...Config.Autopilot.engageMaxC
-        return celsius.clamped(to: bounds)
+    func setMinFanPercent(_ percent: UInt8) {
+        self.minFanPercent = percent.clamped(to: 40...100)
+    }
+
+    func setHysteresis(_ celsius: Double) {
+        self.hysteresisC = max(0.0, celsius)
+    }
+
+    func resetStandby(isStandby: Bool = false) {
+        self.isStandby = isStandby
+        self.currentTier = isStandby ? .standby : .tier1_low
+        self.pendingTier = nil
+        self.pendingTierStartTime = 0
+    }
+
+    func setTier(_ tier: CoolingTier) {
+        self.currentTier = tier
+        self.isStandby = (tier == .standby)
+        self.pendingTier = nil
+        self.pendingTierStartTime = 0
+    }
+
+    // ── Candidate Tier Calculation ───────────────────────────────────────────
+
+    /// Calculates which tier the temperature qualifies for, respecting asymmetric hysteresis.
+    func candidateTier(for dieC: Double, current: CoolingTier) -> CoolingTier {
+        // Step-Up Triggers: Any temperature crossing an upper threshold qualifies immediately
+        if dieC >= Config.Autopilot.tier4TriggerC {
+            return .tier4_turbo
+        }
+        if dieC >= Config.Autopilot.tier3TriggerC && current < .tier4_turbo {
+            return .tier3_high
+        }
+        if dieC >= Config.Autopilot.tier2TriggerC && current < .tier3_high {
+            return .tier2_med
+        }
+        if dieC >= Config.Autopilot.tier1TriggerC && current < .tier2_med {
+            return .tier1_low
+        }
+
+        // Asymmetric Step-Down Release Thresholds:
+        if current == .tier4_turbo {
+            if dieC >= Config.Autopilot.tier4ReleaseC { return .tier4_turbo }
+            if dieC >= Config.Autopilot.tier3ReleaseC { return .tier3_high }
+            if dieC >= Config.Autopilot.tier2ReleaseC { return .tier2_med }
+            if dieC >= Config.Autopilot.tier1ReleaseC { return .tier1_low }
+            return .standby
+        }
+
+        if current == .tier3_high {
+            if dieC >= Config.Autopilot.tier3ReleaseC { return .tier3_high }
+            if dieC >= Config.Autopilot.tier2ReleaseC { return .tier2_med }
+            if dieC >= Config.Autopilot.tier1ReleaseC { return .tier1_low }
+            return .standby
+        }
+
+        if current == .tier2_med {
+            if dieC >= Config.Autopilot.tier2ReleaseC { return .tier2_med }
+            if dieC >= Config.Autopilot.tier1ReleaseC { return .tier1_low }
+            return .standby
+        }
+
+        if current == .tier1_low {
+            if dieC >= Config.Autopilot.tier1ReleaseC { return .tier1_low }
+            return .standby
+        }
+
+        // Current is Standby: holds Standby until dieC >= tier1TriggerC (50°C)
+        return .standby
     }
 
     // ── Evaluation ───────────────────────────────────────────────────────────
 
-    /// Advances the policy one step and returns the tier to apply.
-    ///
-    /// - Parameters:
-    ///   - thermalState: macOS thermal pressure, used as a tier floor.
-    ///   - dieC: mean die temperature, or `nil` when unavailable (treated as cool).
-    ///   - now: current time; injected so the dwell logic is testable.
     func evaluate(thermalState: ThermalState,
                   dieC: Double?,
-                  now: TimeInterval) -> Decision {
-        let target = targetTierIndex(thermalState: thermalState, dieC: dieC)
+                  now: TimeInterval = 0) -> Decision {
+        let currentTime = (now > 0) ? now : Date().timeIntervalSince1970
 
-        if target > tierIndex {
-            // Heat rises — follow it immediately.
-            tierIndex = target
-            coolingSince = nil
-        } else if target < tierIndex {
-            // Cooling off — hold, then release one tier at a time.
-            if let since = coolingSince {
-                if now - since >= dwell {
-                    tierIndex -= 1
-                    coolingSince = (tierIndex > target) ? now : nil
-                }
-            } else {
-                coolingSince = now
-            }
-        } else {
-            coolingSince = nil
+        guard let dieC else {
+            isStandby = true
+            currentTier = .standby
+            pendingTier = nil
+            return Decision(tier: Tier(mode: .off, fanPercent: 0, label: "off", coolingTier: .standby),
+                            reason: "Mac temperature unavailable")
         }
 
-        let temperature = dieC.map { String(format: "%.0f°C", $0) } ?? "temp ?"
-        let easing = (target < tierIndex && coolingSince != nil) ? " — easing down soon" : ""
-        return Decision(tier: Self.tiers[tierIndex],
-                        reason: "Mac \(temperature) (\(thermalState.rawValue))\(easing)")
+        // Safety override for critical thermal pressure
+        if thermalState == .critical {
+            isStandby = false
+            currentTier = .tier4_turbo
+            pendingTier = nil
+            lastTierChangeTime = currentTime
+            return Decision(tier: Tier(mode: .max, fanPercent: 100, label: "emergency max", coolingTier: .tier4_turbo),
+                            reason: "Mac \(Int(round(dieC)))°C (critical)")
+        }
+
+        // Universal Condensation Cutoff: Die below 36.0°C forces Standby
+        if dieC < Config.Safety.condensationCutoffC {
+            isStandby = true
+            currentTier = .standby
+            pendingTier = nil
+            return Decision(tier: Tier(mode: .off, fanPercent: 0, label: "Standby (< 36°C Safety)", coolingTier: .standby),
+                            reason: "Mac \(String(format: "%.0f°C", dieC)) (Safety Intercept)")
+        }
+
+        // Thermal Velocity (dT/dt) Calculation:
+        var isRapidlyCooling = false
+        if let lastT = lastEvaluatedTempC, lastEvaluatedTime > 0, currentTime > lastEvaluatedTime {
+            let dt = currentTime - lastEvaluatedTime
+            if dt > 0.05 {
+                let dT = dieC - lastT
+                let rate = dT / dt // °C / second
+                if rate <= Config.Autopilot.velocityBypassRateCPerSec {
+                    isRapidlyCooling = true
+                }
+            }
+        }
+        lastEvaluatedTempC = dieC
+        lastEvaluatedTime = currentTime
+
+        // Determine Candidate Tier
+        let candidate = candidateTier(for: dieC, current: currentTier)
+
+        if candidate > currentTier {
+            // STEP-UP: Immediate execution (no dwell)
+            currentTier = candidate
+            pendingTier = nil
+            pendingTierStartTime = 0
+            pendingIsFastDwell = false
+            lastTierChangeTime = currentTime
+            isStandby = (currentTier == .standby)
+        } else if candidate < currentTier {
+            // STEP-DOWN: Enforce dwell unless rapid cooling bypasses it
+            if isRapidlyCooling {
+                pendingIsFastDwell = true
+            }
+
+            if pendingTier != candidate {
+                pendingTier = candidate
+                pendingTierStartTime = currentTime
+                if isRapidlyCooling {
+                    pendingIsFastDwell = true
+                }
+            }
+
+            let requiredDwell = pendingIsFastDwell ? Config.Autopilot.fastDwellSeconds : Config.Autopilot.stepDownDwellSeconds
+            let elapsed = currentTime - pendingTierStartTime
+            if elapsed >= requiredDwell {
+                currentTier = candidate
+                pendingTier = nil
+                pendingTierStartTime = 0
+                pendingIsFastDwell = false
+                lastTierChangeTime = currentTime
+                isStandby = (currentTier == .standby)
+            }
+            // While dwelling, currentTier is held!
+        } else {
+            // Equal: No change, clear any stale pending step-down
+            pendingTier = nil
+            pendingTierStartTime = 0
+            pendingIsFastDwell = false
+            isStandby = (currentTier == .standby)
+        }
+
+        let tempStr = String(format: "%.0f°C", dieC)
+        let tierObj = Tier(mode: currentTier.mode,
+                           fanPercent: currentTier.fanPercent,
+                           label: currentTier.label,
+                           coolingTier: currentTier)
+
+        return Decision(tier: tierObj,
+                        reason: "Mac \(tempStr) (\(thermalState.rawValue))")
     }
 
-    /// The tier the current conditions call for, before dwell/hysteresis smoothing.
-    private func targetTierIndex(thermalState: ThermalState, dieC: Double?) -> Int {
-        max(thermalState.tierFloor, temperatureTierIndex(for: dieC))
-    }
-
-    /// Highest tier whose engage point the temperature has reached, with
-    /// hysteresis applied so the current tier is held slightly past its own
-    /// engage point on the way down.
-    private func temperatureTierIndex(for dieC: Double?) -> Int {
-        guard let dieC else { return 0 }
-
-        let rising = engagePoints.last { dieC >= $0.temperatureC }?.tierIndex ?? 0
-        guard rising < tierIndex else { return rising }
-
-        guard let currentEngage = engagePoints.first(where: { $0.tierIndex == tierIndex })?.temperatureC
-        else { return 0 }
-        return dieC >= (currentEngage - hysteresisC) ? tierIndex : rising
-    }
-
-    // ── LED heat colour ──────────────────────────────────────────────────────
-
-    /// Green→red gradient for the current die temperature, used by the LED's
-    /// "Auto" effect. The endpoints track the ladder so the colour stays
-    /// meaningful when the user moves their engage point.
-    func heatColor(for dieC: Double?) -> RGB {
-        let temperature = dieC ?? ledGreenC
-        let span = max(1, ledRedC - ledGreenC)
-        let fraction = ((temperature - ledGreenC) / span).clamped(to: 0...1)
-        // Hue 120° (green) → 0° (red).
-        return RGB(hue: (1 - fraction) * (120.0 / 360.0))
+    /// Calculates realistic thermal LED colour based on host Mac hardware family.
+    /// Green: cool / nominal idle; Yellow: moderate active load; Red: high heat / throttling.
+    func heatColor(for dieC: Double?, macModel: String = SystemInfo.macModel) -> RGB {
+        guard let dieC else { return RGB(r: 0, g: 255, b: 0) }
+        let t = MacThermalProfile.thresholds(for: macModel)
+        if dieC <= t.greenMaxC {
+            return RGB(r: 0, g: 255, b: 0)
+        } else if dieC >= t.redMinC {
+            return RGB(r: 255, g: 0, b: 0)
+        } else {
+            let fraction = (dieC - t.greenMaxC) / (t.redMinC - t.greenMaxC)
+            let hue = (1.0 - fraction) * (120.0 / 360.0)
+            return RGB(hue: hue)
+        }
     }
 }

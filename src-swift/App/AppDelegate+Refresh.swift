@@ -91,7 +91,9 @@ extension AppDelegate {
         modeSwitch.setMode(appMode)
         modeSwitch.setEnabled(enabled)
 
-        autoOptions.configure(engageC: autopilot.engageC)
+        autoOptions.configure(currentTier: autopilot.currentTier,
+                              dieTempC: thermal.dieTemperatureC,
+                              isSafetyActive: isSafetyGovernorActive)
         autoOptions.setEnabled(enabled)
 
         // While a switch is in flight the fan write hasn't landed yet, so
@@ -134,11 +136,10 @@ extension AppDelegate {
 
         rows.coolingHeader.isHidden = !connected
         rows.modeSwitch.isHidden = !connected
-        rows.autoOptions.isHidden = !connected || isManual
-        rows.coolingSlider.isHidden = !connected || !isManual
-        // The auto-off limit belongs to Manual, and only Manual: Auto stands
-        // itself down as the Mac cools, so it has nothing to time out.
-        rows.manualTimer.isHidden = !connected || !isManual
+        rows.autoOptions.isHidden = !connected || (appMode != .auto)
+        rows.turboStatus.isHidden = !connected || (appMode != .turbo)
+        rows.coolingSlider.isHidden = !connected || (appMode != .manual)
+        rows.manualTimer.isHidden = !connected || (appMode != .manual)
         // LED controls only mean something while the cooler is running — its
         // LED cannot show a colour when it isn't.
         rows.ledHeader.isHidden = !coolerOn
@@ -152,6 +153,7 @@ extension AppDelegate {
         applyPanelSegments(to: [
             (modeSwitch, !rows.modeSwitch.isHidden),
             (autoOptions, !rows.autoOptions.isHidden),
+            (turboStatus, !rows.turboStatus.isHidden),
             (coolingSlider, !rows.coolingSlider.isHidden),
             (manualTimerRow, !rows.manualTimer.isHidden),
         ])
@@ -199,7 +201,7 @@ extension AppDelegate {
 
     // ── Menu-bar button ──────────────────────────────────────────────────────
 
-    private func refreshStatusItemButton() {
+    func refreshStatusItemButton() {
         guard let button = statusItem.button else { return }
         let temperature = ble.isConnected
             ? SystemInfo.formatTemp(thermal.dieTemperatureC, degreeOnly: true)
@@ -227,10 +229,34 @@ extension AppDelegate {
 
     // ── Status card and cooler panel ─────────────────────────────────────────
 
-    private func refreshCards(connected: Bool) {
+    func refreshCards(connected: Bool) {
+        let pickingDevice = !connected && !ble.phase.isBusy
+                         && (isSelectingDevice || !ble.hasKnownDevice)
+        statusCard.panelSegment = pickingDevice ? .only : .top
+        coolerPanel.panelSegment = .bottom
+
         statusCard.update(StatusCardView.ViewModel(
             dieTempC: thermal.dieTemperatureC,
             thermalState: thermal.thermalState))
+
+        let statusDetail: String?
+        if connected {
+            if isSafetyGovernorActive {
+                statusDetail = "🛡️ Safety Intercepted (< 36°C)"
+            } else if appMode == .turbo {
+                statusDetail = "Turbo Max Boost (100%)"
+            } else if appMode == .manual {
+                statusDetail = ble.mode.isOn ? "Manual Cooling (\(ble.fanPercent)%)" : "Standby"
+            } else {
+                if autopilot.currentTier == .standby {
+                    statusDetail = "Auto Standby (Idle < 50°C)"
+                } else {
+                    statusDetail = "Auto \(autopilot.currentTier.label)"
+                }
+            }
+        } else {
+            statusDetail = nil
+        }
 
         coolerPanel.update(CoolerPanelView.ViewModel(
             isConnected: connected,
@@ -238,6 +264,8 @@ extension AppDelegate {
             deviceModelName: ble.profile?.modelName,
             telemetry: telemetry,
             mode: ble.mode,
+            fanPercent: ble.fanPercent,
+            statusDetail: statusDetail,
             deviceLooksPoweredOff: switchMonitor.looksPoweredOff,
             note: coolerNote(connected: connected),
             actionsEnabled: !isInstallingUpdate))
@@ -255,7 +283,14 @@ extension AppDelegate {
     private func coolerNote(connected: Bool) -> CoolerPanelView.Note? {
         guard connected else { return nil }
         if isSwitching { return .switching }
+        if isSafetyGovernorActive {
+            return .safetyIntercepted(cutoffC: Config.Safety.condensationCutoffC,
+                                      rearmC: Config.Safety.condensationRearmC)
+        }
         if switchMonitor.looksPoweredOff { return .powerSwitchOff }
+        if appMode == .turbo {
+            return .turboMax
+        }
         if appMode == .manual {
             guard ble.mode.isOn else {
                 // Off, and the user didn't do it — say who did.
@@ -267,7 +302,7 @@ extension AppDelegate {
             return manualTimer.deadline == nil ? .manualStaysOn : nil
         }
         // Auto below its threshold: doing nothing, on purpose.
-        return ble.mode.isOn ? nil : .autoWaiting(engageC: Int(autopilot.engageC))
+        return ble.mode.isOn ? nil : .autoWaiting(shutoffC: Int(round(autopilot.wakeThresholdC)))
     }
 
 }

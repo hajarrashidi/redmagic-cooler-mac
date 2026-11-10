@@ -36,7 +36,7 @@ extension AppDelegate: CoolerBLEManagerDelegate {
     /// the tick rather than from telemetry, because *silence* is one of the
     /// tells and silence produces no callback to hang this off.
     func updateSwitchMonitor() {
-        guard ble.isConnected, let lastTelemetryAt else {
+        guard let profile = ble.profile, profile.hasPhysicalPowerSwitch, ble.isConnected, let lastTelemetryAt else {
             switchMonitor.reset()
             return
         }
@@ -56,8 +56,12 @@ extension AppDelegate: CoolerBLEManagerDelegate {
         // had chosen, and Auto still engages on its own once the Mac heats up.
         if turnOffOnConnect {
             turnOffOnConnect = false
-            ble.apply(mode: .off, fanPercent: 0)
-            EventLogger.record("forced cooler off on connect (preference preserved)")
+            if appMode == .auto {
+                EventLogger.record("connected — running autopilot immediately")
+                runAutopilot()
+            } else {
+                EventLogger.record("connected in manual mode — holding initial state")
+            }
         }
 
         // The cooler forgets its light state across a disconnect. Re-push it,

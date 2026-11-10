@@ -18,11 +18,14 @@ extension AppDelegate {
             // Evaluate immediately rather than waiting for the next autopilot
             // tick, so the cooler follows the temperature the moment Auto is
             // chosen instead of holding the manual level for a few seconds.
-            EventLogger.record("switch → auto")
+            EventLogger.record("switch → auto (Step-Ladder)")
             // Auto backs itself off as the Mac cools, so it needs no deadline.
             manualTimer.stop()
             manualTimedOut = false
-            runAutopilot()
+            autopilot.resetStandby()
+            if !isSafetyGovernorActive {
+                runAutopilot()
+            }
 
         case .manual:
             manualTimedOut = false
@@ -34,6 +37,16 @@ extension AppDelegate {
             if step <= 0 { step = CoolingSliderView.defaultStep }
             EventLogger.record("switch → manual")
             applyManualStep(step, alreadySwitching: true)
+
+        case .turbo:
+            manualTimer.stop()
+            manualTimedOut = false
+            EventLogger.record("switch → turbo (100% boost)")
+            if !isSafetyGovernorActive {
+                ble.apply(mode: .max, fanPercent: 100)
+            } else {
+                ble.apply(mode: .off, fanPercent: 0)
+            }
         }
         refresh()
     }
@@ -41,9 +54,48 @@ extension AppDelegate {
     /// Fires continuously while the engage slider moves, so it deliberately
     /// skips the switching lockout — the autopilot simply re-evaluates against
     /// the new threshold on each change.
+    func setAutoProfile(_ profile: AutoProfile) {
+        autopilot.setProfile(profile)
+        UserDefaults.standard.set(profile.rawValue, forKey: "AutoProfile")
+        EventLogger.record("auto profile → \(profile.rawValue)")
+        if appMode == .auto { runAutopilot() }
+        refresh()
+    }
+
+    private static var settingsSaveTimer: Timer?
+
     func setEngage(_ celsius: Double) {
         autopilot.setEngage(celsius)
-        UserDefaults.standard.set(autopilot.engageC, forKey: Config.Key.engageC)
+        EventLogger.record("autopilot engage → \(Int(round(autopilot.engageC)))°C")
+        if appMode == .auto { runAutopilot() }
+        refreshCards(connected: ble.isConnected)
+        refreshStatusItemButton()
+        debounceSettingsSave()
+    }
+
+    func setShutoff(_ celsius: Double) {
+        autopilot.setShutoff(celsius)
+        EventLogger.record("autopilot shutoff → \(Int(round(autopilot.shutoffC)))°C")
+        if appMode == .auto { runAutopilot() }
+        refreshCards(connected: ble.isConnected)
+        debounceSettingsSave()
+    }
+
+    private func debounceSettingsSave() {
+        Self.settingsSaveTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.5, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            UserDefaults.standard.set(self.autopilot.engageC, forKey: Config.Key.engageC)
+            UserDefaults.standard.set(self.autopilot.shutoffC, forKey: Config.Key.shutoffC)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        Self.settingsSaveTimer = timer
+    }
+
+    func setSmartMaxMinFan(_ percent: UInt8) {
+        autopilot.setMinFanPercent(percent)
+        UserDefaults.standard.set(Int(autopilot.minFanPercent), forKey: Config.Key.smartMaxMinFan)
+        EventLogger.record("smart max min fan → \(autopilot.minFanPercent)%")
         if appMode == .auto { runAutopilot() }
         refresh()
     }
@@ -75,7 +127,12 @@ extension AppDelegate {
             manualTimer.stop()
         }
 
-        ble.apply(mode: step.mode, fanPercent: step.fanPercent)
+        if !isSafetyGovernorActive {
+            ble.apply(mode: step.mode, fanPercent: step.fanPercent)
+        } else {
+            ble.apply(mode: .off, fanPercent: 0)
+            EventLogger.record("manual → \(step.name) (held in Standby by Safety Governor < 36°C)")
+        }
         EventLogger.record("manual → \(step.name)")
         refresh()
     }

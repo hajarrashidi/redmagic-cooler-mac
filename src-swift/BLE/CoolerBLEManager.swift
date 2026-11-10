@@ -29,17 +29,6 @@ extension CoolerBLEManagerDelegate {
                     needsDeviceSelection devices: [CoolerBLEManager.DiscoveredDevice]) {}
 }
 
-/// A telemetry frame from the cooler's notify characteristic.
-struct CoolerTelemetry {
-    /// Cold plate — the face against the Mac.
-    let coldC: Int
-    /// Hot side — the fin stack the fan exhausts through.
-    let hotC: Int
-    let ambientC: Int
-    /// Fan speed in RPM, absent on shorter frames from older firmware.
-    let fanRPM: Int?
-}
-
 /// Owns the Bluetooth link to the cooler: discovery, connection lifecycle,
 /// characteristic writes, and telemetry decoding.
 ///
@@ -116,8 +105,19 @@ final class CoolerBLEManager: NSObject {
     /// `knownPeripheral()`: whether macOS still has the peripheral cached
     /// decides how `startScanning` reconnects, not whether the menu should
     /// offer to. With nothing saved the menu leads with the picker instead.
+    private var preferredDeviceUUIDString: String? {
+        if let saved = UserDefaults.standard.string(forKey: Config.Key.preferredDevice) {
+            return saved
+        }
+        if let legacy = UserDefaults(suiteName: "com.redmagic.cooler")?.string(forKey: Config.Key.preferredDevice) {
+            UserDefaults.standard.set(legacy, forKey: Config.Key.preferredDevice)
+            return legacy
+        }
+        return nil
+    }
+
     var hasKnownDevice: Bool {
-        UserDefaults.standard.string(forKey: Config.Key.preferredDevice) != nil
+        preferredDeviceUUIDString != nil
     }
 
     /// One-shot, fired once the peripheral has fully disconnected. Quit uses it
@@ -151,6 +151,9 @@ final class CoolerBLEManager: NSObject {
     /// wait for that disconnect, and its callback must not schedule a reconnect
     /// to the device the user is replacing.
     private var rescanAfterDisconnect = false
+
+    /// The active hardware driver bound strictly to the selected profile.
+    private var activeDriver: CoolerDriver?
 
     private var characteristics: [CBUUID: CBCharacteristic] = [:]
 
@@ -189,9 +192,8 @@ final class CoolerBLEManager: NSObject {
     private func activateCentral() -> CBCentralManager {
         if let central { return central }
         EventLogger.record("BLE — activating adapter (may prompt for permission)")
-        // A nil queue delivers delegate callbacks on the main queue, which is
-        // what every consumer here expects.
-        let created = CBCentralManager(delegate: self, queue: nil)
+        let created = CBCentralManager(delegate: self, queue: DispatchQueue.main)
+        EventLogger.record("BLE — created central, delegate set to: \(type(of: created.delegate!))")
         central = created
         return created
     }
@@ -250,16 +252,22 @@ final class CoolerBLEManager: NSObject {
             }
 
             // A saved UUID records an earlier explicit choice. Restore its
-            // profile only when the cached name positively matches a supported
-            // model; a missing or unknown name goes through discovery instead
+            // profile only when the cached name or saved profile ID positively matches
+            // a supported model; a missing or unknown name goes through discovery instead
             // of falling back to the first registry entry.
-            if profile == nil,
-               let name = known.name,
-               let matched = DeviceProfile.matching(deviceName: name) {
-                profile = matched
+            if profile == nil {
+                if let savedId = UserDefaults.standard.string(forKey: Config.Key.preferredDeviceProfileId),
+                   let matched = DeviceProfile.all.first(where: { $0.id == savedId }) {
+                    profile = matched
+                } else if let name = known.name,
+                          let matched = DeviceProfile.matching(deviceName: name) {
+                    profile = matched
+                    UserDefaults.standard.set(matched.id, forKey: Config.Key.preferredDeviceProfileId)
+                }
             }
-            if profile != nil {
-                EventLogger.record("BLE — reconnecting to selected peripheral")
+            if let profile {
+                activeDriver = profile.makeDriver()
+                EventLogger.record("BLE — reconnecting to selected peripheral (\(profile.modelName))")
                 beginConnect(to: known)
                 return
             }
@@ -298,7 +306,7 @@ final class CoolerBLEManager: NSObject {
     /// knows it. Returns `nil` on a cold cache, which sends us down the scan
     /// path instead.
     private func knownPeripheral() -> CBPeripheral? {
-        guard let saved = UserDefaults.standard.string(forKey: Config.Key.preferredDevice),
+        guard let saved = preferredDeviceUUIDString,
               let uuid = UUID(uuidString: saved) else { return nil }
         return central?.retrievePeripherals(withIdentifiers: [uuid]).first
     }
@@ -319,6 +327,8 @@ final class CoolerBLEManager: NSObject {
         scanSettleTimer = nil
         candidates = []
         profile = chosen
+        UserDefaults.standard.set(chosen.id, forKey: Config.Key.preferredDeviceProfileId)
+        activeDriver = chosen.makeDriver()
         beginConnect(to: device.peripheral)
     }
 
@@ -361,6 +371,9 @@ final class CoolerBLEManager: NSObject {
         central?.stopScan()
         candidates = []
         profile = nil
+        activeDriver?.disconnect()
+        activeDriver = nil
+        UserDefaults.standard.removeObject(forKey: Config.Key.preferredDeviceProfileId)
         characteristics.removeAll()
 
         if let peripheral, peripheral.state != .disconnected {
@@ -427,43 +440,22 @@ final class CoolerBLEManager: NSObject {
 
     // ── Writes ───────────────────────────────────────────────────────────────
 
-    private func write(_ bytes: [UInt8], to uuid: CBUUID) {
-        guard let peripheral, let characteristic = characteristics[uuid] else { return }
-        peripheral.writeValue(Data(bytes), for: characteristic, type: .withResponse)
-    }
-
     /// Sets the TEC power level.
-    ///
-    /// Prefer `apply(mode:fanPercent:)` when changing both mode and fan — the
-    /// device needs them separated in time.
     func setMode(_ mode: CoolingMode) {
-        guard let profile else { return }
-        self.mode = mode
-        write([mode.rawValue], to: profile.coolingModeUUID)
+        apply(mode: mode, fanPercent: fanPercent)
     }
 
     func setFanPercent(_ percent: UInt8) {
-        guard let profile else { return }
-        let clamped = min(percent, 100)
-        fanPercent = clamped
-        write([clamped], to: profile.fanSpeedUUID)
+        apply(mode: mode, fanPercent: percent)
     }
 
-    /// Applies a mode and fan speed together, in the order the cooler expects.
-    ///
-    /// The fan write is deferred by `Config.BLE.fanWriteDelay`: sent in the same
-    /// connection interval as a mode change the device silently drops it, which
-    /// is what used to leave the fan stuck at its previous speed after a mode
-    /// switch. Every caller changing both values should use this rather than
-    /// re-deriving the delay — that duplication was the original bug's habitat.
-    ///
-    /// Turning off forces the fan to 0 regardless of the requested percentage.
+    /// Applies a mode and fan speed together via the hardware's active driver.
     func apply(mode: CoolingMode, fanPercent: UInt8) {
-        setMode(mode)
-        let target = mode.isOn ? fanPercent : 0
-        DispatchQueue.main.asyncAfter(deadline: .now() + Config.BLE.fanWriteDelay) {
-            [weak self] in
-            self?.setFanPercent(target)
+        self.mode = mode
+        let target = mode.isOn ? min(fanPercent, 100) : 0
+        self.fanPercent = target
+        if let activeDriver, let peripheral {
+            activeDriver.apply(mode: mode, fanPercent: target, peripheral: peripheral)
         }
     }
 
@@ -472,15 +464,11 @@ final class CoolerBLEManager: NSObject {
         apply(mode: mode, fanPercent: fanPercent)
     }
 
-    /// Writes the light characteristic as `[effect, R, G, B]`.
-    ///
-    /// The colour bytes are honoured by the monochrome-breath (3), stroke (4)
-    /// and static effects and ignored by the rest. `effect` is deliberately
-    /// unclamped: the probe scripts in `tools/probe/` write bytes above the
-    /// range the UI exposes, to map undocumented effects.
+    /// Writes the light characteristic using the active hardware driver.
     func setLight(effect: UInt8, color: RGB = .black) {
-        guard let profile else { return }
-        write([effect] + color.bytes, to: profile.lightModeUUID)
+        if let activeDriver, let peripheral {
+            activeDriver.setLight(effect: effect, color: color, peripheral: peripheral)
+        }
     }
 
 }
@@ -490,6 +478,7 @@ final class CoolerBLEManager: NSObject {
 extension CoolerBLEManager: CBCentralManagerDelegate {
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        EventLogger.record("BLE — centralManagerDidUpdateState: \(central.state.rawValue)")
         switch central.state {
         case .poweredOn:
             EventLogger.record("BLE — adapter powered on")
@@ -533,7 +522,7 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         else { return }
 
         let support: DiscoveredDevice.Support
-        if let matched = DeviceProfile.matching(deviceName: name) {
+        if let matched = DeviceProfile.matching(deviceName: name, advertisementData: advertisementData) {
             support = .supported(matched)
         } else if DeviceProfile.looksLikeVendorDevice(deviceName: name) {
             support = .unsupported
@@ -572,10 +561,16 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
             central.cancelPeripheralConnection(peripheral)
             return
         }
+        if activeDriver == nil {
+            activeDriver = profile.makeDriver()
+        }
         UserDefaults.standard.set(peripheral.identifier.uuidString,
                                   forKey: Config.Key.preferredDevice)
-        EventLogger.record("BLE — connected to \(peripheral.name ?? "cooler")")
+        UserDefaults.standard.set(profile.id,
+                                  forKey: Config.Key.preferredDeviceProfileId)
+        EventLogger.record("BLE — connected to \(peripheral.name ?? profile.modelName)")
         setPhase(.discoveringServices)
+        activeDriver?.didConnect(peripheral: peripheral)
         peripheral.discoverServices([profile.serviceUUID])
     }
 
@@ -584,6 +579,8 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
                         error: Error?) {
         connectTimeoutTimer?.invalidate()
         connectTimeoutTimer = nil
+        activeDriver?.disconnect()
+        activeDriver = nil
         EventLogger.record("BLE — connect failed: \(error?.localizedDescription ?? "unknown")")
 
         // Move on to discovery rather than retrying the device being replaced.
@@ -598,6 +595,8 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
                         error: Error?) {
         connectTimeoutTimer?.invalidate()
         connectTimeoutTimer = nil
+        activeDriver?.disconnect()
+        activeDriver = nil
         characteristics.removeAll()
         EventLogger.record("BLE — disconnected"
                          + (error.map { ": \($0.localizedDescription)" } ?? " cleanly"))
@@ -643,30 +642,32 @@ extension CoolerBLEManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral,
                     didDiscoverCharacteristicsFor service: CBService,
                     error: Error?) {
-        guard let profile else { return }
-        guard let discovered = service.characteristics else { return }
+        guard let activeDriver, let discovered = service.characteristics else { return }
 
-        // Match on CBUUID rather than uuidString: CoreBluetooth shortens 128-bit
-        // UUIDs in the Bluetooth base range to their 16-bit form ("1011"), so
-        // comparing against full-length UUID strings never matches.
-        let notifying = profile.notifyingUUIDs
-        let writable = profile.writableUUIDs
+        let notifying = activeDriver.notifyingUUIDs
+        let writable = activeDriver.writableUUIDs
 
+        var mapped: [CBUUID: CBCharacteristic] = [:]
         for characteristic in discovered {
             let uuid = characteristic.uuid
-            guard notifying.contains(uuid) || writable.contains(uuid) else { continue }
-            characteristics[uuid] = characteristic
+            let uuidStr = uuid.uuidString.lowercased()
+            let isNotifying = notifying.contains(uuid)
+                || uuidStr.contains("1015") || uuidStr.contains("1016")
+                || uuidStr.contains("a002") || uuidStr.contains("ffe4")
+            let isWritable = writable.contains(uuid)
+                || uuidStr.contains("1011") || uuidStr.contains("1012") || uuidStr.contains("1013")
+                || uuidStr.contains("a001") || uuidStr.contains("ffe1")
 
-            if notifying.contains(uuid) {
+            guard isNotifying || isWritable else { continue }
+            mapped[uuid] = characteristic
+
+            if isNotifying {
+                EventLogger.record("BLE — subscribing to notification on \(uuid.uuidString)")
                 peripheral.setNotifyValue(true, for: characteristic)
-            } else if uuid == profile.coolingModeUUID || uuid == profile.fanSpeedUUID {
-                // Seed the two caches the app actually consults. The light
-                // state is pushed by LedController on every connect, so
-                // reading back what the cooler happens to be showing would
-                // only cache a value nothing consults.
-                peripheral.readValue(for: characteristic)
             }
         }
+        activeDriver.didDiscoverCharacteristics(characteristics: mapped, peripheral: peripheral)
+
         // Fully linked — the watchdog armed in beginConnect can stand down.
         connectTimeoutTimer?.invalidate()
         connectTimeoutTimer = nil
@@ -674,28 +675,40 @@ extension CoolerBLEManager: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral,
+                    didWriteValueFor characteristic: CBCharacteristic,
+                    error: Error?) {
+        if let error {
+            EventLogger.record("BLE — write error on \(characteristic.uuid.uuidString): \(error.localizedDescription)")
+        } else {
+            EventLogger.record("BLE — write confirmed on \(characteristic.uuid.uuidString)")
+            if characteristic.uuid.uuidString.lowercased().contains("1012") {
+                peripheral.readValue(for: characteristic)
+            }
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral,
                     didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
-        guard let profile else { return }
-        guard let data = characteristic.value, !data.isEmpty else { return }
+        guard let activeDriver else { return }
+        let update = activeDriver.handleCharacteristicUpdate(characteristic: characteristic, peripheral: peripheral)
 
-        switch characteristic.uuid {
-        case profile.coolingModeUUID:
-            mode = CoolingMode(rawValue: data[0])
+        switch update {
+        case .mode(let newMode):
+            self.mode = newMode
             delegate?.bleManagerDidChangeSettings(self)
 
-        case profile.fanSpeedUUID:
-            fanPercent = data[0]
+        case .fan(let newFan):
+            self.fanPercent = newFan
             delegate?.bleManagerDidChangeSettings(self)
 
-        case profile.hallUUID:
-            delegate?.bleManager(self, didChangeMountAttached: profile.decodeMountAttached(data))
+        case .mountAttached(let attached):
+            delegate?.bleManager(self, didChangeMountAttached: attached)
 
-        case profile.telemetryUUID:
-            guard let telemetry = profile.decodeTelemetry(data) else { return }
+        case .telemetry(let telemetry):
             delegate?.bleManager(self, didReceive: telemetry)
 
-        default:
+        case .none:
             break
         }
     }

@@ -4,17 +4,26 @@ import Foundation
 ///
 /// Persisted verbatim in `UserDefaults`, so changing the raw values requires a
 /// migration for existing users.
-enum AppMode: String {
-    /// The autopilot follows Mac temperature and drives the cooler itself.
+enum AppMode: String, CaseIterable {
+    /// The deterministic 4-stage step-ladder autopilot drives the cooler.
     case auto
-    /// The user's slider position is held until they change it.
+    /// The user's manual cooling setting is held until changed.
     case manual
+    /// Immediate 100% boost with 15-minute auto-decay back to auto.
+    case turbo
 
     /// Decodes a persisted value, defaulting to `.auto`.
     /// Legacy builds also wrote "off" here; it maps to `.manual`, which is
     /// where an explicit off-state now lives (manual step 0).
     init(persisted raw: String?) {
-        self = (raw == AppMode.manual.rawValue || raw == "off") ? .manual : .auto
+        switch raw {
+        case AppMode.manual.rawValue, "off":
+            self = .manual
+        case AppMode.turbo.rawValue:
+            self = .turbo
+        default:
+            self = .auto
+        }
     }
 }
 

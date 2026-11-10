@@ -454,7 +454,7 @@ private final class DeviceRowView: NSView {
     init(device: CoolerBLEManager.DiscoveredDevice) {
         super.init(frame: .zero)
 
-        nameLabel.stringValue = device.name
+        nameLabel.stringValue = device.profile?.modelName ?? device.name
         nameLabel.font = UIStyle.bodyFont
         nameLabel.lineBreakMode = .byTruncatingTail
         addSubview(nameLabel)

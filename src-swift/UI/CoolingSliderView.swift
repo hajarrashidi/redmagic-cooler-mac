@@ -19,16 +19,16 @@ final class CoolingSliderView: PanelRowView {
     }
 
     static let steps: [Step] = [
-        Step(mode: .off,    fanPercent:  0, name: "Off"),
-        Step(mode: .low,    fanPercent: 40, name: "Low ·"),      // ~6 200 RPM
-        Step(mode: .low,    fanPercent: 60, name: "Low ··"),     // ~6 600 RPM
-        Step(mode: .low,    fanPercent: 70, name: "Low"),        // ~7 400 RPM
-        Step(mode: .medium, fanPercent: 60, name: "Medium ·"),   // ~6 600 RPM
-        Step(mode: .medium, fanPercent: 70, name: "Medium ··"),  // ~7 400 RPM
-        Step(mode: .medium, fanPercent: 80, name: "Medium"),     // ~8 200 RPM
-        Step(mode: .max,    fanPercent: 70, name: "Max ·"),      // ~7 400 RPM
-        Step(mode: .max,    fanPercent: 75, name: "Max ··"),     // ~7 700 RPM
-        Step(mode: .max,    fanPercent: 80, name: "Max"),        // ~8 200 RPM
+        Step(mode: .off,    fanPercent:   0, name: "Off"),
+        Step(mode: .low,    fanPercent:  40, name: "Low ·"),      // ~6 200 RPM
+        Step(mode: .low,    fanPercent:  50, name: "Low ··"),     // ~6 600 RPM
+        Step(mode: .low,    fanPercent:  60, name: "Low"),        // ~7 200 RPM
+        Step(mode: .medium, fanPercent:  65, name: "Med ·"),      // ~7 600 RPM
+        Step(mode: .medium, fanPercent:  75, name: "Med ··"),     // ~8 000 RPM
+        Step(mode: .medium, fanPercent:  80, name: "Med"),        // ~8 400 RPM
+        Step(mode: .max,    fanPercent:  85, name: "Max ·"),      // ~8 800 RPM
+        Step(mode: .max,    fanPercent:  95, name: "Max ··"),     // ~9 400 RPM
+        Step(mode: .max,    fanPercent: 100, name: "Max"),        // ~10 000 RPM (Full 100% Boost)
     ]
 
     /// Step index chosen when the user switches into Manual with nothing (or
@@ -53,15 +53,15 @@ final class CoolingSliderView: PanelRowView {
         let height: CGFloat = 76
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
-        let titleY = height - UIStyle.panelPad - 13
-        let title = UIStyle.sectionLabel("POWER")
-        title.frame = NSRect(x: UIStyle.panelContentX, y: titleY, width: width * 0.6, height: 13)
+        let titleY = height - UIStyle.panelPad - 14
+        let title = UIStyle.sectionLabel("Fan Power")
+        title.frame = NSRect(x: UIStyle.panelContentX, y: titleY, width: width * 0.5, height: 14)
         addSubview(title)
 
-        nameLabel.font = UIStyle.captionFont
-        nameLabel.textColor = .secondaryLabelColor
+        nameLabel.font = UIStyle.valueFont
+        nameLabel.textColor = .labelColor
         nameLabel.alignment = .right
-        nameLabel.frame = NSRect(x: 0, y: titleY, width: width - UIStyle.panelContentX, height: 13)
+        nameLabel.frame = NSRect(x: 0, y: titleY, width: width - UIStyle.panelContentX, height: 14)
         addSubview(nameLabel)
 
         slider.minValue = 0
@@ -124,17 +124,14 @@ final class CoolingSliderView: PanelRowView {
     /// The step best matching a device state, for syncing the slider to values
     /// read back from the cooler.
     ///
-    /// The device reports intermediate modes the slider has no position for, so
-    /// the mode is first folded into its zone, then the closest fan speed within
-    /// that zone wins.
+    /// Matches by fan speed across active steps (1..<steps.count), ensuring accurate
+    /// representation even on devices with binary mode switches (like REDMAGIC 5 Pro).
     static func step(matching mode: CoolingMode, fanPercent: UInt8) -> Int {
-        guard mode.isOn else { return 0 }
-        let target = mode.zoneRepresentative
-        return steps.enumerated()
-            .filter { $0.element.mode == target }
-            .min { a, b in
-                abs(Int(a.element.fanPercent) - Int(fanPercent))
-                    < abs(Int(b.element.fanPercent) - Int(fanPercent))
-            }?.offset ?? 0
+        guard mode.isOn && fanPercent > 0 else { return 0 }
+        let activeSteps = Array(steps.enumerated().dropFirst())
+        return activeSteps.min { a, b in
+            abs(Int(a.element.fanPercent) - Int(fanPercent))
+                < abs(Int(b.element.fanPercent) - Int(fanPercent))
+        }?.offset ?? 1
     }
 }

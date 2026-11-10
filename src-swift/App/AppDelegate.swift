@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var devicePicker: DevicePickerView!
     var modeSwitch: ModeSwitchView!
     var autoOptions: AutoOptionsView!
+    var turboStatus: TurboStatusView!
     var coolingSlider: CoolingSliderView!
     var manualTimerRow: ManualTimerView!
     var effectPicker: LedEffectPickerView!
@@ -68,6 +69,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Latest thermal sample, refreshed each tick.
     var thermal = ThermalMonitor.Reading(thermalState: .nominal, dieTemperatureC: nil)
+
+    /// Universal Hardware Safety Governor:
+    /// Tripped when Mac die temperature drops below Config.Safety.condensationCutoffC (36.0°C).
+    /// Re-arms only when die temperature reaches Config.Safety.condensationRearmC (38.0°C).
+    var isSafetyGovernorActive: Bool = false
+
     /// Latest telemetry frame from the cooler, cleared when the link drops.
     var telemetry: CoolerTelemetry?
     /// Whether the magnetic mount is seated.
@@ -153,6 +160,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.tick()
         }
 
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(macWillSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(macDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(macWillPowerOff),
+            name: NSWorkspace.willPowerOffNotification,
+            object: nil
+        )
+
         EventLogger.record("app start — mode=\(appMode.rawValue) engage=\(autopilot.engageC)°C")
 
         // The friendly Mac name needs system_profiler, which is far too slow to
@@ -164,6 +190,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // nothing against GitHub's unauthenticated budget, and it still stamps
         // the clock, so the periodic check below stays a day behind it.
         updates.check()
+
+        if ble.hasKnownDevice {
+            EventLogger.record("auto-connecting to preferred cooler on launch")
+            ble.startScanning()
+        }
 
         writeProbeSnapshot()
     }
@@ -186,8 +217,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             engageC = Config.Autopilot.engageDefaultC
         }
-        autopilot = AutopilotPolicy(engageC: engageC)
+
+        let shutoffC: Double
+        if let saved = defaults.object(forKey: Config.Key.shutoffC) as? Double {
+            shutoffC = saved
+        } else {
+            shutoffC = Config.Autopilot.shutoffDefaultC
+        }
+
+        let minFan: UInt8
+        if let saved = defaults.object(forKey: Config.Key.smartMaxMinFan) as? Int {
+            minFan = UInt8(clamping: saved)
+        } else {
+            minFan = Config.Autopilot.smartMaxMinFanDefault
+        }
+
+        autopilot = AutopilotPolicy(engageC: engageC, shutoffC: shutoffC, minFanPercent: minFan)
+        if let savedProfile = defaults.string(forKey: "AutoProfile") {
+            if let p = AutoProfile(rawValue: savedProfile) {
+                autopilot.setProfile(p)
+            } else if savedProfile == "Max Inteligente" || savedProfile == "maxIntel" {
+                autopilot.setProfile(.smartMax)
+            } else if savedProfile == "Equilibrado" {
+                autopilot.setProfile(.balanced)
+            }
+        }
         defaults.set(autopilot.engageC, forKey: Config.Key.engageC)
+        defaults.set(autopilot.shutoffC, forKey: Config.Key.shutoffC)
+        defaults.set(Int(autopilot.minFanPercent), forKey: Config.Key.smartMaxMinFan)
     }
 
     private func buildStatusItem() {
@@ -207,16 +264,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         thermal = ThermalMonitor.read()
         updateSwitchMonitor()
         expireManualTimerIfDue()
+        evaluateSafetyGovernor()
 
-        if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
-            runAutopilot()
+        if !isSafetyGovernorActive {
+            if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
+                runAutopilot()
+            }
         }
         led.updateAutoColor(dieC: thermal.dieTemperatureC, autopilot: autopilot)
 
         // The cooler occasionally drops a write, so re-assert periodically —
         // cheap insurance against the UI and the hardware silently diverging.
         if ble.isConnected, tickCount.isMultiple(of: Config.Timing.heartbeatEveryTicks) {
-            ble.reassertCurrentSettings()
+            if !isSafetyGovernorActive {
+                ble.reassertCurrentSettings()
+            } else if ble.mode != .off || ble.fanPercent != 0 {
+                ble.apply(mode: .off, fanPercent: 0)
+            }
         }
 
         // Only so an app left running for days still notices a release; the
@@ -229,8 +293,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         writeProbeSnapshot()
     }
 
+    /// Evaluates the universal condensation safety barrier across ALL modes.
+    /// Trips at < 36.0°C and re-arms at >= 38.0°C.
+    private func evaluateSafetyGovernor() {
+        guard let dieC = thermal.dieTemperatureC else { return }
+
+        if !isSafetyGovernorActive {
+            if dieC < Config.Safety.condensationCutoffC {
+                isSafetyGovernorActive = true
+                EventLogger.record("🛡️ Safety Governor tripped: die temp \(String(format: "%.1f", dieC))°C < \(Config.Safety.condensationCutoffC)°C — forcing Standby across \(appMode.rawValue) mode to prevent condensation")
+                if ble != nil && ble.isConnected {
+                    ble.apply(mode: .off, fanPercent: 0)
+                }
+            }
+        } else {
+            // Already active: check re-arm threshold
+            if dieC >= Config.Safety.condensationRearmC {
+                isSafetyGovernorActive = false
+                EventLogger.record("🛡️ Safety Governor cleared: die temp \(String(format: "%.1f", dieC))°C >= \(Config.Safety.condensationRearmC)°C — re-arming \(appMode.rawValue) mode")
+                reapplyActiveMode()
+            } else {
+                // Ensure device remains off while governor is active
+                if ble != nil && ble.isConnected && (ble.mode != .off || ble.fanPercent != 0) {
+                    ble.apply(mode: .off, fanPercent: 0)
+                }
+            }
+        }
+    }
+
+    /// Re-applies active mode settings when safety governor disengages.
+    func reapplyActiveMode() {
+        guard !isSafetyGovernorActive else { return }
+        switch appMode {
+        case .auto:
+            autopilot.resetStandby(isStandby: false)
+            runAutopilot()
+        case .manual:
+            let step = UserDefaults.standard.object(forKey: Config.Key.manualStep) as? Int
+                ?? CoolingSliderView.defaultStep
+            applyManualStep(step, alreadySwitching: true)
+        case .turbo:
+            ble.apply(mode: .max, fanPercent: 100)
+        }
+    }
+
     /// Evaluates the autopilot and applies its decision, if anything changed.
     func runAutopilot() {
+        guard !isSafetyGovernorActive else { return }
         let decision = autopilot.evaluate(thermalState: thermal.thermalState,
                                           dieC: thermal.dieTemperatureC,
                                           now: Date().timeIntervalSince1970)
@@ -263,6 +372,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         refresh()
         return true
+    }
+
+    // ── Sleep / Wake Lifecycle ───────────────────────────────────────────────
+
+    @objc private func macWillSleep() {
+        EventLogger.record("system will sleep — turning cooler off")
+        if ble != nil && ble.isConnected {
+            ble.apply(mode: .off, fanPercent: 0)
+        }
+    }
+
+    @objc private func macDidWake() {
+        EventLogger.record("system did wake — resuming thermal autopilot")
+        if ble != nil && ble.isConnected {
+            if appMode == .auto {
+                runAutopilot()
+            }
+        }
+    }
+
+    @objc private func macWillPowerOff(_ notification: Notification) {
+        EventLogger.record("system shutting down / power off — turning cooler off")
+        if ble != nil && ble.isConnected {
+            ble.apply(mode: .off, fanPercent: 0)
+        }
     }
 
     // ── Termination ──────────────────────────────────────────────────────────

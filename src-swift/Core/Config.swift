@@ -41,8 +41,11 @@ enum Config {
     /// existing user, so treat these as a migration surface.
     enum Key {
         static let preferredDevice = "PreferredDeviceUUID"
+        static let preferredDeviceProfileId = "PreferredDeviceProfileId"
         static let appMode         = "AppMode"             // AppMode.rawValue
         static let engageC         = "AutopilotEngageTempC" // Double, °C
+        static let shutoffC        = "AutopilotShutoffTempC" // Double, °C
+        static let smartMaxMinFan  = "SmartMaxMinFanPercent" // Int, 0…100
         // Read only when migrating settings from builds with Standard/Custom.
         static let legacyAutoProfile = "AutoProfile"
         static let legacyCustomEngageC = "CustomEngageTempC"
@@ -61,7 +64,7 @@ enum Config {
     /// Where `UpdateChecker` looks, and how often.
     enum Updates {
         /// The repository releases are published from.
-        static let repository = "hajarrashidi/redmagic-cooler-mac"
+        static let repository = "Despensativo/redmagic-cooler-mac"
 
         /// `/releases/latest` already excludes drafts and prereleases, so
         /// nothing needs filtering on our side.
@@ -117,21 +120,51 @@ enum Config {
         static let instanceHandoffTimeout: TimeInterval = 3.5
     }
 
-    // ── Autopilot tuning ─────────────────────────────────────────────────────
+    // ── Autopilot tuning & Step-Ladder ───────────────────────────────────────
 
     enum Autopilot {
-        /// Degrees the die must fall *below* a tier's engage point before that
-        /// tier releases — stops the cooler oscillating around a threshold.
-        static let hysteresisC: Double = 5.0
-        /// How long the temperature must stay low before stepping down a tier.
-        static let cooldownDwell: TimeInterval = 15.0
+        /// Deterministic 4-stage Step-Ladder Trigger Thresholds (°C)
+        static let tier1TriggerC: Double = 50.0 // Min active cooling floor (40% fan)
+        static let tier2TriggerC: Double = 60.0 // Medium cooling (60% fan)
+        static let tier3TriggerC: Double = 65.0 // High boost (80% fan)
+        static let tier4TriggerC: Double = 70.0 // Full Turbo limit (100% fan)
 
-        /// Slider minimum doubles as the default: the retired Standard profile
-        /// engaged at 40 °C, and 45 °C is the closest the ladder now gets —
-        /// out of the box the cooler still helps while the Mac is merely warm.
-        static let engageDefaultC: Double = 45.0
-        static let engageMinC: Double = 45.0
-        static let engageMaxC: Double = 85.0
+        /// Asymmetric Anti-Chattering Release Thresholds (°C)
+        static let tier1ReleaseC: Double = 42.0 // 8°C wide buffer below 50°C
+        static let tier2ReleaseC: Double = 55.0 // 5°C buffer below 60°C
+        static let tier3ReleaseC: Double = 61.0 // 4°C buffer below 65°C
+        static let tier4ReleaseC: Double = 66.0 // 4°C buffer below 70°C
+
+        /// Step-down anti-chattering dwell time (seconds)
+        static let stepDownDwellSeconds: TimeInterval = 20.0
+        /// Thermal velocity drop threshold (°C/s): if die drops faster than this, compress dwell to 3s
+        static let velocityBypassRateCPerSec: Double = -1.0
+        static let fastDwellSeconds: TimeInterval = 3.0
+
+        /// Legacy slider compatibility constants
+        static let hysteresisC: Double = 5.0
+        static let cooldownDwell: TimeInterval = 20.0
+        static let tempMinC: Double = 30.0
+        static let tempMaxC: Double = 80.0
+        static let engageDefaultC: Double = 50.0
+        static let engageMinC: Double = tempMinC + 2.0
+        static let engageMaxC: Double = tempMaxC
+        static let shutoffDefaultC: Double = 38.0
+        static let shutoffMinC: Double = tempMinC
+        static let shutoffMaxC: Double = engageMaxC - 2.0
+        static let smartMaxMinFanDefault: UInt8 = 40
+        static let shutoffFloorC: Double = 38.0
+    }
+
+    // ── Safety Governor ──────────────────────────────────────────────────────
+
+    enum Safety {
+        /// Universal condensation cutoff: whenever Mac die drops below this temperature,
+        /// TEC and fan are forcefully commanded to Standby (0W / 0%) across ALL modes.
+        static let condensationCutoffC: Double = 36.0
+
+        /// Asymmetric re-arm threshold: cooler remains off until Mac die warms back to this temperature.
+        static let condensationRearmC: Double = 38.0
     }
 
     // ── Diagnostics ──────────────────────────────────────────────────────────
