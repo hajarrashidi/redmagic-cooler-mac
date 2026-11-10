@@ -211,46 +211,16 @@ final class CoolerPanelView: PanelRowView {
                           zone: runningZone)
         }
 
-        // 2. Status Line (y = 26)
-        let statusY: CGFloat = 26
-        let statusText: String
-        let statusColor: NSColor
-        if model.isConnected {
-            if let detail = model.statusDetail {
-                statusText = "● \(detail)"
-                statusColor = model.mode.isOn ? .systemGreen : .secondaryLabelColor
-            } else if model.mode.isOn {
-                statusText = "● Ativo (\(model.fanPercent)% RPM)"
-                statusColor = .systemGreen
-            } else {
-                statusText = "○ Standby"
-                statusColor = .tertiaryLabelColor
-            }
-        } else {
-            statusText = model.phase.statusText
-            statusColor = phaseColor()
-        }
+        // 2. Connection Line (y = 26)
+        let connY: CGFloat = 26
+        let connText = model.isConnected ? "Connected over Bluetooth" : model.phase.statusText
+        let connColor = model.isConnected ? NSColor.secondaryLabelColor : phaseColor()
+        let maxConnWidth = model.isConnected ? (bounds.width - pad * 2 - Self.fanSize - 12) : (connectButton.frame.minX - pad - 8)
+        let connAttr = UIStyle.text(connText, Self.statusFont, connColor)
+        connAttr.draw(in: NSRect(x: pad, y: connY, width: max(maxConnWidth, 1), height: 15))
 
-        let maxStatusWidth = model.isConnected ? (bounds.width - pad * 2 - Self.fanSize - 12) : (connectButton.frame.minX - pad - 8)
-        let statusAttr = UIStyle.text(statusText, Self.statusFont, statusColor)
-        statusAttr.draw(in: NSRect(x: pad, y: statusY, width: max(maxStatusWidth, 1), height: 15))
-
-        // 3. Telemetry or Note Line (y = 44)
+        // 3. Operational State or Note Line (y = 44)
         let bottomY: CGFloat = 44
-        if let telemetry = model.telemetry {
-            var parts: [String] = []
-            if telemetry.coldC > 0 { parts.append("❄️ \(telemetry.coldC)°C") }
-            if telemetry.hotC > 0  { parts.append("🔥 \(telemetry.hotC)°C") }
-            if let rpm = telemetry.fanRPM, rpm > 0 { parts.append("⚡ \(rpm) RPM") }
-
-            if !parts.isEmpty {
-                let strip = parts.joined(separator: "   ·   ")
-                UIStyle.text(strip, Self.telemetryFont, .secondaryLabelColor)
-                    .draw(at: NSPoint(x: pad, y: bottomY))
-                return
-            }
-        }
-
         if let note = model.note {
             var x = pad
             if let noteSymbol {
@@ -263,9 +233,23 @@ final class CoolerPanelView: PanelRowView {
             }
             UIStyle.text(note.text, Self.noteFont, note.tint)
                 .draw(in: NSRect(x: x, y: bottomY, width: max(bounds.width - x - pad - (model.isConnected ? Self.fanSize + 8 : 0), 1), height: 14))
-        } else if model.isConnected && !model.mode.isOn {
-            UIStyle.text("🛡️ Proteção anticondensação ativa (< 36°C)", Self.noteFont, .tertiaryLabelColor)
-                .draw(at: NSPoint(x: pad, y: bottomY))
+        } else if model.isConnected {
+            let opText: String
+            let opColor: NSColor
+            if let detail = model.statusDetail {
+                opText = detail
+                opColor = model.mode.isOn ? .systemGreen : .secondaryLabelColor
+            } else if model.mode.isOn {
+                opText = "Ativo (\(model.fanPercent)%)"
+                opColor = .systemGreen
+            } else {
+                opText = "Standby"
+                opColor = .tertiaryLabelColor
+            }
+            let dot = model.mode.isOn ? "● " : "○ "
+            let maxOpWidth = bounds.width - pad * 2 - Self.fanSize - 12
+            UIStyle.text("\(dot)\(opText)", Self.statusFont, opColor)
+                .draw(in: NSRect(x: pad, y: bottomY, width: max(maxOpWidth, 1), height: 14))
         }
     }
 
