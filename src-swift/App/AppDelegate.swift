@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var devicePicker: DevicePickerView!
     var modeSwitch: ModeSwitchView!
     var autoOptions: AutoOptionsView!
+    var turboStatus: TurboStatusView!
     var coolingSlider: CoolingSliderView!
     var manualTimerRow: ManualTimerView!
     var effectPicker: LedEffectPickerView!

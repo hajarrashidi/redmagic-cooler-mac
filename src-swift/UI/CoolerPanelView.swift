@@ -1,52 +1,30 @@
 import AppKit
 
-/// The cooler's own panel: its model and live telemetry with the animated fan
-/// while the link is up, and the Connect button while it isn't.
+/// Unified Hardware Deck (Lower Half): Cooler model, live telemetry, and animated fan.
 ///
-/// This used to be the lower half of `StatusCardView`. It is a menu row of its
-/// own now so that it can be hidden entirely, because there are two states in
-/// which it has nothing to say: with no remembered cooler there is nothing for
-/// a Connect button to aim at, and while the picker is listing every device in
-/// range a panel reading "Not connected" above it is noise. Hiding a *row* is
-/// something `NSMenu` re-lays out live; resizing a row's view — which is what
-/// collapsing a panel inside the status card would have needed — is not.
+/// Shares the continuous rounded panel with `StatusCardView` directly above it.
 final class CoolerPanelView: PanelRowView {
 
-    /// The one thing the panel has to say beyond its numbers.
-    ///
-    /// These were four banner rows scattered down the menu, each appearing and
-    /// disappearing on its own. They are mutually exclusive — every one of them
-    /// is a fact about the cooler this panel already describes — so they belong
-    /// on its last line, where the reader is already looking, and where a menu
-    /// that gains and loses rows stops jumping under the cursor.
     enum Note: Equatable {
-        /// A write is in flight and the controls are locked out.
         case switching
-        /// Manual holds its level until the user changes it — the one state the
-        /// app will not leave on its own.
         case manualStaysOn
-        /// Linked and commanded on, but the hardware's own switch looks off.
         case powerSwitchOff
-        /// Auto is armed and deliberately idle below its threshold.
         case autoWaiting(shutoffC: Int)
-        /// The manual auto-off timer ran down and switched the cooler off.
         case manualTimedOut
-        /// Universal condensation safety barrier intercepted cooling.
         case safetyIntercepted(cutoffC: Double, rearmC: Double)
-        /// Turbo Max active.
         case turboMax
 
         var text: String {
             switch self {
-            case .switching:             return "Switching… please wait"
-            case .manualStaysOn:         return "Manual stays on until you turn it off"
-            case .powerSwitchOff:        return "Cooler is idle, unmounted, or switch is off"
-            case .autoWaiting(let shut): return "Standby: Mac below \(shut)°C trigger threshold"
-            case .manualTimedOut:        return "Auto-off timer ended Manual cooling"
+            case .switching:             return "Comutando modo… aguarde"
+            case .manualStaysOn:         return "Modo Manual contínuo"
+            case .powerSwitchOff:        return "Chave de energia desligada ou ocioso"
+            case .autoWaiting(let shut): return "Standby: Mac abaixo de \(shut)°C"
+            case .manualTimedOut:        return "Auto-off encerrou o resfriamento manual"
             case .safetyIntercepted(let cutoff, let rearm):
-                return "🛡️ Safety Cutoff: Mac < \(Int(round(cutoff)))°C (Re-arms ≥ \(Int(round(rearm)))°C)"
+                return "🛡️ Corte de segurança: < \(Int(round(cutoff)))°C (retoma ≥ \(Int(round(rearm)))°C)"
             case .turboMax:
-                return "Turbo Max (100% full power · Proteção < 36°C)"
+                return "Turbo Boost 100% (Proteção < 36°C ativa)"
             }
         }
 
@@ -64,26 +42,17 @@ final class CoolerPanelView: PanelRowView {
 
         var tint: NSColor {
             switch self {
-            case .switching: return .systemBlue
-            // A genuine hardware fault: the app is commanding a cooler that
-            // cannot answer. This one earns the amber.
-            case .powerSwitchOff: return .systemOrange
-            // Plain ink. Manual staying on is the mode working as documented,
-            // not a fault, and an amber line that is on screen for the whole of
-            // every manual session teaches the reader to ignore amber.
+            case .switching:         return .systemBlue
+            case .powerSwitchOff:    return .systemOrange
             case .manualStaysOn,
-                 .manualTimedOut: return .labelColor
-            // Auto idling below its threshold is the autopilot working, not a
-            // warning about it.
-            case .autoWaiting: return .secondaryLabelColor
+                 .manualTimedOut:    return .labelColor
+            case .autoWaiting:       return .secondaryLabelColor
             case .safetyIntercepted: return .systemTeal
-            case .turboMax: return .systemRed
+            case .turboMax:          return .systemRed
             }
         }
     }
 
-    /// Everything the panel draws, passed in one value so the view holds no
-    /// opinions about where any of it came from.
     struct ViewModel {
         var isConnected = false
         var phase: ConnectionPhase = .idle
@@ -92,14 +61,8 @@ final class CoolerPanelView: PanelRowView {
         var mode: CoolingMode = .off
         var fanPercent: UInt8 = 0
         var statusDetail: String? = nil
-        /// The cooler is linked and commanded on, but its physical switch looks
-        /// to be off. The fan is then drawn still: showing it spinning while the
-        /// hardware sits idle is the single most misleading thing this panel can
-        /// do, because the spin is the main "it's working" cue.
         var deviceLooksPoweredOff = false
         var note: Note?
-        /// False while an update is installing: the app is about to be replaced
-        /// and a connection started into that has nowhere to land.
         var actionsEnabled = true
     }
 
@@ -108,64 +71,30 @@ final class CoolerPanelView: PanelRowView {
     private var model = ViewModel()
     private var noteSymbol: NSImage?
     private let connectButton = PillButton(title: "Connect")
-    private static let noteSymbolSize: CGFloat = 10
 
     // ── Metrics ──────────────────────────────────────────────────────────────
+    static let panelHeight: CGFloat = 66
+    static let height: CGFloat = panelHeight
 
-    private static let panelPad = UIStyle.panelPad
-    private static let panelContentX = UIStyle.panelContentX
-    /// The animated fan: its glyph size, and the lane reserved for it so
-    /// telemetry cells never run underneath it.
-    private static let fanSize: CGFloat = 26
-    private static let fanLane = fanSize + 10
-    private static let cellLabelFont = NSFont.systemFont(ofSize: 9)
-    /// Larger than the section captions elsewhere: this names the device the
-    /// whole panel is about, and at 9pt it read as another field label.
-    private static let titleFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-    private static let titleHeight: CGFloat = 16
-    private static let statusFont = UIStyle.captionFont
-    private static let statusHeight = UIStyle.text("A", statusFont).size().height
-
-    // Measured from the fonts themselves, so the panel height stays correct if
-    // any of them are restyled — a hand-tuned height silently clips its last
-    // row the moment a font changes.
-    private static let cellLabelHeight = UIStyle.text("A", cellLabelFont).size().height
-    private static let cellValueHeight = UIStyle.text("0", UIStyle.valueFont).size().height
-
-    private static let noteGap: CGFloat = 7
-    private static let noteHeight = UIStyle.text("A", UIStyle.captionFont).size().height
-    /// The note's line is always reserved, even with nothing to say. A panel
-    /// that grew and shrank with it would have to resize its row, and `NSMenu`
-    /// does not re-lay out a row's view while the menu is open — which is
-    /// exactly when every one of these notes appears.
-    static let panelHeight =
-        panelPad + titleHeight + statusHeight + 4
-        + cellLabelHeight + 2 + cellValueHeight
-        + noteGap + noteHeight + panelPad
-
-    /// The panel plus the bottom padding that used to belong to the status
-    /// card's own frame — this row is the last thing before the separator.
-    static let height = panelHeight + UIStyle.hPad
+    private static let pad = UIStyle.panelContentX
+    private static let fanSize: CGFloat = 24
+    private static let titleFont = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+    private static let statusFont = NSFont.systemFont(ofSize: 10, weight: .medium)
+    private static let telemetryFont = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .regular)
+    private static let noteFont = NSFont.systemFont(ofSize: 9.5, weight: .medium)
 
     // ── Fan animation ────────────────────────────────────────────────────────
-
     private var fanAngle: CGFloat = 0
     private var animationTimer: Timer?
-    /// Spin rate, in radians per frame, per zone step.
-    ///
-    /// Halved from where it started. At 30fps the blades were stepping far
-    /// enough between frames to strobe — the eye reads a fast wheel with a
-    /// coarse step as stuttering backwards, not as speed — so the slower sweep
-    /// actually looks more like a spinning fan than the quick one did.
     private static let spinRatePerZone: CGFloat = 0.055
     private static let frameInterval: TimeInterval = 1.0 / 30.0
 
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.height))
         autoresizingMask = .width
+        panelSegment = .bottom
 
         connectButton.onClick = { [weak self] in self?.onConnect?() }
-        // Anchored to the trailing edge, like the fan it stands in for.
         connectButton.autoresizingMask = .minXMargin
         addSubview(connectButton)
         layOutConnectButton()
@@ -174,11 +103,7 @@ final class CoolerPanelView: PanelRowView {
 
     override var isFlipped: Bool { true }
 
-    // ── Mouse ────────────────────────────────────────────────────────────────
-    //
-    // Routed from here rather than left to the button's own tracking area:
-    // `NSMenu` hands events to the item's view, and nothing nested inside it
-    // ever sees the cursor. See `PillButton.isHovered`.
+    // ── Mouse & Connect Button ───────────────────────────────────────────────
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -195,10 +120,7 @@ final class CoolerPanelView: PanelRowView {
     }
 
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
-
-    override func mouseExited(with event: NSEvent) {
-        connectButton.isHovered = false
-    }
+    override func mouseExited(with event: NSEvent) { connectButton.isHovered = false }
 
     override func mouseUp(with event: NSEvent) {
         guard !connectButton.isHidden,
@@ -208,12 +130,9 @@ final class CoolerPanelView: PanelRowView {
     }
 
     func update(_ model: ViewModel) {
-        // Re-tinting a template symbol allocates an image; this runs on every
-        // telemetry frame, so the note's icon is rebuilt only when the note
-        // itself changes.
         if model.note != self.model.note {
             noteSymbol = model.note.map {
-                Self.tinted($0.symbol, size: Self.noteSymbolSize, color: $0.tint)
+                Self.tinted($0.symbol, size: 9, color: $0.tint)
             } ?? nil
         }
         self.model = model
@@ -221,10 +140,24 @@ final class CoolerPanelView: PanelRowView {
         needsDisplay = true
     }
 
-    // ── Animation, driven by the menu opening and closing ────────────────────
+    private func syncConnectButton() {
+        connectButton.isHidden = model.isConnected
+        guard !model.isConnected else { return }
+        connectButton.title = model.phase.connectButtonTitle
+        connectButton.isEnabled = model.phase.allowsConnectAction && model.actionsEnabled
+        layOutConnectButton()
+    }
 
-    /// The fan only spins while the menu is on screen; a timer running behind a
-    /// closed menu would wake the CPU 30×/s to draw nothing.
+    private func layOutConnectButton() {
+        let width = connectButton.fittingWidth
+        connectButton.frame = NSRect(
+            x: bounds.width - Self.pad - width,
+            y: (Self.panelHeight - PillButton.height) / 2,
+            width: width, height: PillButton.height)
+    }
+
+    // ── Animation ────────────────────────────────────────────────────────────
+
     func startAnimating() {
         guard animationTimer == nil else { return }
         let timer = Timer(timeInterval: Self.frameInterval, repeats: true) { [weak self] _ in
@@ -232,13 +165,9 @@ final class CoolerPanelView: PanelRowView {
             guard !self.model.deviceLooksPoweredOff else { return }
             let zone = self.model.mode.zone.rawValue
             guard zone > 0 else { return }
-            // Positive, and this view is flipped — which mirrors the y-axis,
-            // so `rotate(byRadians:)`'s usual anticlockwise sweep lands on
-            // screen as clockwise. Which is the way a fan turns.
             self.fanAngle += CGFloat(zone) * Self.spinRatePerZone
             self.needsDisplay = true
         }
-        // .common keeps it running while the menu tracks mouse events.
         RunLoop.main.add(timer, forMode: .common)
         animationTimer = timer
     }
@@ -248,130 +177,115 @@ final class CoolerPanelView: PanelRowView {
         animationTimer = nil
     }
 
-    // ── Connect button ───────────────────────────────────────────────────────
-
-    private func syncConnectButton() {
-        connectButton.isHidden = model.isConnected
-        guard !model.isConnected else { return }
-        // The title changes width with the phase, so the trailing edge has to
-        // be re-anchored rather than merely relabelled.
-        connectButton.title = model.phase.connectButtonTitle
-        connectButton.isEnabled = model.phase.allowsConnectAction && model.actionsEnabled
-        layOutConnectButton()
-    }
-
-    private func layOutConnectButton() {
-        let width = connectButton.fittingWidth
-        connectButton.frame = NSRect(
-            x: bounds.width - Self.panelContentX - width,
-            y: (Self.panelHeight - PillButton.height) / 2,
-            width: width, height: PillButton.height)
-    }
-
-    // ── Drawing ──────────────────────────────────────────────────────────────
-
-    /// The zone the fan glyph should read as. Distinct from the commanded mode:
-    /// with no link, or with the device's own switch off, nothing is actually
-    /// spinning however the app has set it.
     private var runningZone: CoolingMode.Zone {
         guard model.isConnected, !model.deviceLooksPoweredOff else { return .off }
         return model.mode.zone
     }
 
+    // ── Drawing ──────────────────────────────────────────────────────────────
+
     override func draw(_ dirtyRect: NSRect) {
-        // Lays down the menu backdrop; this row paints over it.
         super.draw(dirtyRect)
-        let inset = UIStyle.panelInset
-        let rect = NSRect(x: inset, y: 0,
-                          width: bounds.width - inset * 2, height: Self.panelHeight)
-        UIStyle.panelColor.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: UIStyle.panelRadius,
-                     yRadius: UIStyle.panelRadius).fill()
 
-        // The fan narrates a running cooler. With no link the Connect button
-        // occupies that lane instead, so only one of the two is ever drawn.
-        if model.isConnected { drawFan() }
+        let pad = Self.pad
+        let contentWidth = bounds.width - pad * 2
 
-        var y = Self.panelPad
-        drawContents(y: &y)
-    }
+        // Hairline boundary with upper deck
+        let divRect = NSRect(x: pad, y: 0, width: contentWidth, height: 1)
+        NSColor.separatorColor.withAlphaComponent(0.12).setFill()
+        divRect.fill()
 
-    /// The spinning fan, centred vertically along the panel's trailing edge.
-    private func drawFan() {
-        let rect = NSRect(x: bounds.width - Self.panelContentX - Self.fanSize,
-                          y: (Self.panelHeight - Self.fanSize) / 2,
-                          width: Self.fanSize, height: Self.fanSize)
-        // One fixed grey. The blades used to carry the LED's colour, which put
-        // a second colour-coded readout next to the temperature — and made the
-        // fan look like it was reporting something when it is only spinning.
-        FanGlyph.draw(in: rect, angleRadians: fanAngle,
-                      color: .tertiaryLabelColor, zone: runningZone)
-    }
+        // 1. Device Title (y = 8)
+        let nameY: CGFloat = 8
+        let deviceTitle = cleanDeviceName(model.deviceModelName)
+        let title = UIStyle.text(deviceTitle, Self.titleFont, .labelColor)
+        title.draw(at: NSPoint(x: pad, y: nameY))
 
-    /// Cooler telemetry, or the connection phase when there's no link.
-    private func drawContents(y: inout CGFloat) {
-        let pad = Self.panelContentX
-        let deviceTitle = model.deviceModelName?.uppercased() ?? "COOLER"
-        let title = UIStyle.text(deviceTitle, Self.titleFont, .secondaryLabelColor)
-        title.draw(at: NSPoint(x: pad, y: y))
-
-        y += Self.titleHeight
-
-        // The link's own line, under the name of the thing it connects to. It
-        // says the same thing the phase line says when there is no link, so the
-        // two share a slot rather than one of them being a mark tucked beside
-        // the title — an icon there had to carry "connected, over Bluetooth,
-        // right now" on its own, which is more than a 6pt glyph can say.
-        let status = model.isConnected
-            ? UIStyle.text("Connected over Bluetooth", Self.statusFont, .secondaryLabelColor)
-            : UIStyle.text(model.phase.statusText, Self.statusFont, phaseColor())
-        // Kept clear of the Connect button, which shares this line's height.
-        let statusWidth = model.isConnected
-            ? bounds.width - pad * 2 - Self.fanLane
-            : connectButton.frame.minX - pad - 8
-        status.draw(in: NSRect(x: pad, y: y, width: max(statusWidth, 1),
-                               height: Self.statusHeight))
-        y += Self.statusHeight + 4
-
-        // Always at the panel's foot, whether or not the telemetry above it is
-        // there to be pushed down.
-        if let note = model.note {
-            drawNote(note, y: Self.panelHeight - Self.panelPad - Self.noteHeight)
+        // Fan or Connect Button
+        if model.isConnected {
+            let fanX = bounds.width - pad - Self.fanSize
+            let fanRect = NSRect(x: fanX, y: (Self.panelHeight - Self.fanSize) / 2,
+                                 width: Self.fanSize, height: Self.fanSize)
+            FanGlyph.draw(in: fanRect, angleRadians: fanAngle,
+                          color: model.mode.isOn ? .controlAccentColor : .tertiaryLabelColor,
+                          zone: runningZone)
         }
 
-        guard model.isConnected else { return }
-
-        let cells = telemetryCells()
-        guard !cells.isEmpty else {
-            let label: String
+        // 2. Status Line (y = 26)
+        let statusY: CGFloat = 26
+        let statusText: String
+        let statusColor: NSColor
+        if model.isConnected {
             if let detail = model.statusDetail {
-                label = detail
+                statusText = "● \(detail)"
+                statusColor = model.mode.isOn ? .systemGreen : .secondaryLabelColor
             } else if model.mode.isOn {
-                label = "Active Cooling (\(model.fanPercent)%)"
+                statusText = "● Ativo (\(model.fanPercent)% RPM)"
+                statusColor = .systemGreen
             } else {
-                label = "Standby"
+                statusText = "○ Standby"
+                statusColor = .tertiaryLabelColor
             }
-            UIStyle.text(label, Self.cellLabelFont, .secondaryLabelColor)
-                .draw(at: NSPoint(x: pad, y: y))
-            return
+        } else {
+            statusText = model.phase.statusText
+            statusColor = phaseColor()
         }
 
-        // The fan occupies the panel's trailing edge; keep the cells clear of it.
-        let cellWidth = (bounds.width - pad * 2 - Self.fanLane) / CGFloat(cells.count)
-        for (index, cell) in cells.enumerated() {
-            let x = pad + cellWidth * CGFloat(index)
-            UIStyle.text(cell.label, Self.cellLabelFont, .tertiaryLabelColor)
-                .draw(in: NSRect(x: x, y: y, width: cellWidth, height: Self.cellLabelHeight))
-            UIStyle.text(cell.value, UIStyle.valueFont, .secondaryLabelColor)
-                .draw(in: NSRect(x: x, y: y + Self.cellLabelHeight + 2,
-                                 width: cellWidth, height: Self.cellValueHeight))
+        let maxStatusWidth = model.isConnected ? (bounds.width - pad * 2 - Self.fanSize - 12) : (connectButton.frame.minX - pad - 8)
+        let statusAttr = UIStyle.text(statusText, Self.statusFont, statusColor)
+        statusAttr.draw(in: NSRect(x: pad, y: statusY, width: max(maxStatusWidth, 1), height: 15))
+
+        // 3. Telemetry or Note Line (y = 44)
+        let bottomY: CGFloat = 44
+        if let telemetry = model.telemetry {
+            var parts: [String] = []
+            if telemetry.coldC > 0 { parts.append("❄️ \(telemetry.coldC)°C") }
+            if telemetry.hotC > 0  { parts.append("🔥 \(telemetry.hotC)°C") }
+            if let rpm = telemetry.fanRPM, rpm > 0 { parts.append("⚡ \(rpm) RPM") }
+
+            if !parts.isEmpty {
+                let strip = parts.joined(separator: "   ·   ")
+                UIStyle.text(strip, Self.telemetryFont, .secondaryLabelColor)
+                    .draw(at: NSPoint(x: pad, y: bottomY))
+                return
+            }
+        }
+
+        if let note = model.note {
+            var x = pad
+            if let noteSymbol {
+                let size = noteSymbol.size
+                noteSymbol.draw(in: NSRect(x: x, y: bottomY + (13 - size.height) / 2,
+                                           width: size.width, height: size.height),
+                                from: .zero, operation: .sourceOver, fraction: 1,
+                                respectFlipped: true, hints: nil)
+                x += size.width + 5
+            }
+            UIStyle.text(note.text, Self.noteFont, note.tint)
+                .draw(in: NSRect(x: x, y: bottomY, width: max(bounds.width - x - pad - (model.isConnected ? Self.fanSize + 8 : 0), 1), height: 14))
+        } else if model.isConnected && !model.mode.isOn {
+            UIStyle.text("🛡️ Proteção anticondensação ativa (< 36°C)", Self.noteFont, .tertiaryLabelColor)
+                .draw(at: NSPoint(x: pad, y: bottomY))
         }
     }
 
-    /// The note's icon, in its own colour. Template images can't be tinted at
-    /// draw time the way a view's `contentTintColor` does it, so the symbol is
-    /// rendered once into a coloured image — see `update`, which is what
-    /// decides when "once" is.
+    private func cleanDeviceName(_ raw: String?) -> String {
+        guard let raw else { return "Cooler Inteligente" }
+        // Format shouting device names to title case
+        if raw.contains("REDMAGIC") || raw.contains("RM ") {
+            if raw.contains("5") { return "REDMAGIC 5 Pro (36W)" }
+            if raw.contains("6") { return "REDMAGIC 6 Pro (36W)" }
+            if raw.contains("8") { return "REDMAGIC Cryo 8 Pro" }
+            if raw.contains("4") { return "REDMAGIC 4 Pro" }
+            return "REDMAGIC Cooler"
+        }
+        if raw.contains("Black Shark") || raw.contains("BS ") {
+            return "Black Shark MagCooler"
+        }
+        if raw.contains("Flydigi") { return "Flydigi Cooler" }
+        return raw
+    }
+
     private static func tinted(_ name: String, size: CGFloat, color: NSColor) -> NSImage? {
         let config = NSImage.SymbolConfiguration(pointSize: size, weight: .semibold)
         guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
@@ -382,40 +296,6 @@ final class CoolerPanelView: PanelRowView {
             rect.fill(using: .sourceAtop)
             return true
         }
-    }
-
-    /// The note line: its icon, then its message, along the panel's foot.
-    private func drawNote(_ note: Note, y: CGFloat) {
-        let pad = Self.panelContentX
-        var x = pad
-        if let noteSymbol {
-            let size = noteSymbol.size
-            noteSymbol.draw(in: NSRect(x: x, y: y + (Self.noteHeight - size.height) / 2,
-                                       width: size.width, height: size.height),
-                            from: .zero, operation: .sourceOver, fraction: 1,
-                            respectFlipped: true, hints: nil)
-            x += size.width + 5
-        }
-        UIStyle.text(note.text, UIStyle.captionFont, note.tint)
-            .draw(in: NSRect(x: x, y: y, width: bounds.width - x - pad,
-                             height: Self.noteHeight))
-    }
-
-    /// Telemetry laid out as evenly spaced cells. A sensor reporting 0 is
-    /// reporting "not measured yet", so it shows an em dash rather than 0°.
-    private func telemetryCells() -> [(label: String, value: String)] {
-        guard let telemetry = model.telemetry else { return [] }
-        func temp(_ celsius: Int) -> String {
-            celsius > 0 ? SystemInfo.formatTemp(celsius, degreeOnly: true) : "—"
-        }
-        var cells = [(label: String, value: String)]()
-        cells.append(("Cold", temp(telemetry.coldC)))
-        cells.append(("Hot", temp(telemetry.hotC)))
-        cells.append(("Ambient", SystemInfo.formatTemp(telemetry.ambientC, degreeOnly: true)))
-        if let rpm = telemetry.fanRPM {
-            cells.append(("RPM", rpm > 0 ? "\(rpm)" : "—"))
-        }
-        return cells
     }
 
     private func phaseColor() -> NSColor {

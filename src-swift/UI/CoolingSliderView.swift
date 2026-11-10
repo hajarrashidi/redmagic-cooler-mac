@@ -53,15 +53,15 @@ final class CoolingSliderView: PanelRowView {
         let height: CGFloat = 76
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
 
-        let titleY = height - UIStyle.panelPad - 13
-        let title = UIStyle.sectionLabel("POWER")
-        title.frame = NSRect(x: UIStyle.panelContentX, y: titleY, width: width * 0.6, height: 13)
+        let titleY = height - UIStyle.panelPad - 14
+        let title = UIStyle.sectionLabel("Fan Power")
+        title.frame = NSRect(x: UIStyle.panelContentX, y: titleY, width: width * 0.5, height: 14)
         addSubview(title)
 
-        nameLabel.font = UIStyle.captionFont
-        nameLabel.textColor = .secondaryLabelColor
+        nameLabel.font = UIStyle.valueFont
+        nameLabel.textColor = .labelColor
         nameLabel.alignment = .right
-        nameLabel.frame = NSRect(x: 0, y: titleY, width: width - UIStyle.panelContentX, height: 13)
+        nameLabel.frame = NSRect(x: 0, y: titleY, width: width - UIStyle.panelContentX, height: 14)
         addSubview(nameLabel)
 
         slider.minValue = 0

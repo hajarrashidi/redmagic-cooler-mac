@@ -14,6 +14,7 @@ struct MenuRows {
     let coolingHeader: NSMenuItem
     let modeSwitch: NSMenuItem
     let autoOptions: NSMenuItem
+    let turboStatus: NSMenuItem
     let coolingSlider: NSMenuItem
     let manualTimer: NSMenuItem
     let ledHeader: NSMenuItem
@@ -108,6 +109,12 @@ extension AppDelegate: NSMenuDelegate {
         let autoOptionsItem = wrap(autoOptions)
         menu.addItem(autoOptionsItem)
 
+        turboStatus = TurboStatusView(width: width)
+        turboStatus.panelSegment = .bottom
+        let turboStatusItem = wrap(turboStatus)
+        turboStatusItem.isHidden = true
+        menu.addItem(turboStatusItem)
+
         coolingSlider = CoolingSliderView(width: width)
         coolingSlider.onStep = { [weak self] in self?.applyManualStep($0) }
         coolingSlider.panelSegment = .bottom
@@ -146,7 +153,7 @@ extension AppDelegate: NSMenuDelegate {
         // depends on what is visible, so refresh() assigns the segments.
         menu.addItem(wrap(SectionHeaderRow(width: width, title: "Settings")))
 
-        turnOffRow = settingsRow("Turn Off", symbol: "power") {
+        turnOffRow = settingsRow("Turn Off Cooler", symbol: "power") {
             [weak self] in self?.turnOff()
         }
         let turnOff = wrap(turnOffRow)
@@ -161,12 +168,8 @@ extension AppDelegate: NSMenuDelegate {
         let changeDevice = wrap(changeDeviceRow)
         menu.addItem(changeDevice)
 
-        // The way out of the app, and the last row for that reason. It replaces
-        // a plain "Quit": quitting already turned the cooler off and dropped the
-        // link — leaving hardware running after its controller exits is not an
-        // option — so a separate Quit only offered the same thing under a name
-        // that hid what it did.
-        turnOffQuitRow = settingsRow("Turn Off & Quit", symbol: "power.circle") {
+        // The way out of the app, and the last row for that reason.
+        turnOffQuitRow = settingsRow("Quit Smart Cooler", symbol: "xmark.circle") {
             [weak self] in self?.turnOffAndQuit()
         }
         let turnOffAndQuit = wrap(turnOffQuitRow)
@@ -184,6 +187,7 @@ extension AppDelegate: NSMenuDelegate {
                         coolingHeader: coolingHeader,
                         modeSwitch: modeSwitchItem,
                         autoOptions: autoOptionsItem,
+                        turboStatus: turboStatusItem,
                         coolingSlider: coolingSliderItem,
                         manualTimer: manualTimerItem,
                         ledHeader: ledHeader,

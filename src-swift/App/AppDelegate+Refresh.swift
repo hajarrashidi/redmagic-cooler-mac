@@ -137,9 +137,8 @@ extension AppDelegate {
         rows.coolingHeader.isHidden = !connected
         rows.modeSwitch.isHidden = !connected
         rows.autoOptions.isHidden = !connected || (appMode != .auto)
+        rows.turboStatus.isHidden = !connected || (appMode != .turbo)
         rows.coolingSlider.isHidden = !connected || (appMode != .manual)
-        // The auto-off limit belongs to Manual, and only Manual: Auto stands
-        // itself down as the Mac cools, so it has nothing to time out.
         rows.manualTimer.isHidden = !connected || (appMode != .manual)
         // LED controls only mean something while the cooler is running — its
         // LED cannot show a colour when it isn't.
@@ -154,6 +153,7 @@ extension AppDelegate {
         applyPanelSegments(to: [
             (modeSwitch, !rows.modeSwitch.isHidden),
             (autoOptions, !rows.autoOptions.isHidden),
+            (turboStatus, !rows.turboStatus.isHidden),
             (coolingSlider, !rows.coolingSlider.isHidden),
             (manualTimerRow, !rows.manualTimer.isHidden),
         ])
@@ -230,6 +230,11 @@ extension AppDelegate {
     // ── Status card and cooler panel ─────────────────────────────────────────
 
     func refreshCards(connected: Bool) {
+        let pickingDevice = !connected && !ble.phase.isBusy
+                         && (isSelectingDevice || !ble.hasKnownDevice)
+        statusCard.panelSegment = pickingDevice ? .only : .top
+        coolerPanel.panelSegment = .bottom
+
         statusCard.update(StatusCardView.ViewModel(
             dieTempC: thermal.dieTemperatureC,
             thermalState: thermal.thermalState))

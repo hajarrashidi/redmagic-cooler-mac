@@ -20,10 +20,10 @@ enum LedEffect: Int, CaseIterable {
     var title: String {
         switch self {
         case .off:      return "Off"
-        case .colorful: return "Colorful"
-        case .breath:   return "Breath"
-        case .stroke:   return "Stroke"
-        case .auto:     return "Auto"
+        case .colorful: return "Rainbow"
+        case .breath:   return "Pulse"
+        case .stroke:   return "Solid"
+        case .auto:     return "Thermal"
         }
     }
 
