@@ -99,14 +99,24 @@ func runTests() {
     assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off when Mac drops below 38°C shutoff threshold")
     print("  ✅ Smart Max Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // E. Test user-customized min fan percent to 50%:
-    policy.setMinFanPercent(50)
+    // E. 5°C Hysteresis Protection: Mac warms to 41°C (< wake threshold 43°C) -> MUST REMAIN IN STANDBY (NO CHATTERING!)
     dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1004)
-    assert(dec.tier.fanPercent == 50, "Expected cooler at 50% fan with 50% min power, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Custom Min Power: 41°C -> Cooler holds configured 50% fan")
+    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler to hold Standby at 41°C (< 43°C wake)")
+    print("  ✅ 5°C Hysteresis Hold: 41°C (< 43°C wake) -> Holds Standby safely without chattering")
 
-    // At 37°C (< 38°C), it still safely shuts off:
-    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1005)
+    // F. Wake Up at 43°C (38°C shutoff + 5°C hysteresis): Wakes up and engages configured min fan!
+    policy.setMinFanPercent(50)
+    dec = policy.evaluate(thermalState: .nominal, dieC: 43.0, now: 1005)
+    assert(dec.tier.fanPercent == 50, "Expected cooler to wake up at 43°C and hold 50% min power, got \(dec.tier.fanPercent)%")
+    print("  ✅ 5°C Hysteresis Wake-Up: 43°C (shutoff + 5°C) -> Wakes up smoothly at configured 50% fan")
+
+    // G. While actively cooling, it continues cooling at 38°C (shutoff boundary) without premature cutoff:
+    dec = policy.evaluate(thermalState: .nominal, dieC: 38.0, now: 1006)
+    assert(dec.tier.fanPercent == 50, "Expected cooler to remain actively cooling down to 38°C")
+    print("  ✅ Active Cooling Hold: Continues cooling at 38°C down to shutoff threshold")
+
+    // H. At 37°C (< 38°C), it safely shuts off again:
+    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1007)
     assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off below 38°C shutoff")
     print("  ✅ Smart Max Shutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan)")
 
@@ -120,12 +130,12 @@ func runTests() {
     assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off below shutoff threshold")
     print("  ✅ Balanced Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
 
-    // B. At shutoff boundary (38°C): starts at 40% fan (user-chosen min power)
-    bDec = balanced.evaluate(thermalState: .nominal, dieC: 38.0)
-    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 40, "Expected Balanced at 40% at 38°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Acoustic Floor: 38°C -> Starts gently at 40% fan")
+    // B. Wake up at 43°C (shutoff 38°C + 5°C hysteresis): starts at 40% fan (user-chosen min power)
+    bDec = balanced.evaluate(thermalState: .nominal, dieC: 43.0)
+    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 40, "Expected Balanced at 40% at 43°C, got \(bDec.tier.fanPercent)%")
+    print("  ✅ Balanced Acoustic Floor: 43°C -> Wakes up gently at 40% fan")
 
-    // C. At 41°C (below engage 50°C): MUST FAITHFULLY HOLD 40% MIN POWER!
+    // C. Cooling back down at 41°C (below engage 50°C): MUST FAITHFULLY HOLD 40% MIN POWER!
     bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
     assert(bDec.tier.fanPercent == 40, "Expected Balanced to hold 40% min power below engage 50°C, got \(bDec.tier.fanPercent)%")
     print("  ✅ Balanced Min Power Hold: 41°C (< 50°C) -> Faithfully holds 40% fan")
@@ -175,6 +185,7 @@ func runTests() {
     print("  ✅ Independent Clamping: Engage stops safely at 50°C (shutoff + 2°C) without altering Shutoff (48°C)")
 
     // G. Test 100% Min Power Option:
+    policy.resetStandby()
     policy.setMinFanPercent(100)
     let fullMinDec = policy.evaluate(thermalState: .nominal, dieC: 41.0)
     assert(fullMinDec.tier.fanPercent == 100 && fullMinDec.tier.mode == .max, "Expected full 100% max mode with 100% min power")

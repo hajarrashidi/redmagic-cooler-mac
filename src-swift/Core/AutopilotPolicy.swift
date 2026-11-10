@@ -71,6 +71,14 @@ final class AutopilotPolicy {
     private(set) var shutoffC: Double
     private(set) var minFanPercent: UInt8
     private(set) var profile: AutoProfile = .balanced
+    private(set) var hysteresisC: Double
+    private(set) var isStandby: Bool = false
+
+    /// The temperature the Mac must reach to exit Standby and resume active cooling.
+    /// Clamped so it never exceeds the Engage threshold.
+    var wakeThresholdC: Double {
+        min(shutoffC + hysteresisC, engageC)
+    }
 
     init(engageC: Double = Config.Autopilot.engageDefaultC,
          shutoffC: Double = Config.Autopilot.shutoffDefaultC,
@@ -84,6 +92,7 @@ final class AutopilotPolicy {
         self.shutoffC = effectiveShutoff.clamped(to: Config.Autopilot.shutoffMinC...maxAllowedShutoff)
         self.engageC = safeEngage
         self.minFanPercent = minFanPercent.clamped(to: 40...100)
+        self.hysteresisC = max(0.0, hysteresisC)
     }
 
     func setProfile(_ profile: AutoProfile) {
@@ -104,35 +113,57 @@ final class AutopilotPolicy {
         self.minFanPercent = percent.clamped(to: 40...100)
     }
 
+    func setHysteresis(_ celsius: Double) {
+        self.hysteresisC = max(0.0, celsius)
+    }
+
+    func resetStandby(isStandby: Bool = false) {
+        self.isStandby = isStandby
+    }
+
     // ── Evaluation ───────────────────────────────────────────────────────────
 
     func evaluate(thermalState: ThermalState,
                   dieC: Double?,
                   now: TimeInterval = 0) -> Decision {
         guard let dieC else {
+            isStandby = true
             return Decision(tier: Tier(mode: .off, fanPercent: 0, label: "off"),
                             reason: "Mac temperature unavailable")
         }
 
         // Safety override for critical thermal pressure
         if thermalState == .critical {
+            isStandby = false
             return Decision(tier: Tier(mode: .max, fanPercent: 100, label: "emergency max"),
                             reason: "Mac \(Int(round(dieC)))°C (critical)")
+        }
+
+        // 1. Cutoff & 5°C Hysteresis State Machine:
+        // When die drops below shutoff, cooler enters Standby immediately to prevent condensation.
+        if dieC < shutoffC {
+            isStandby = true
+        } else if isStandby {
+            // While in Standby, hold off cooling until die rises to wakeThresholdC (shutoff + 5°C)
+            if dieC >= wakeThresholdC {
+                isStandby = false
+            }
+        }
+
+        if isStandby {
+            let label = "Standby (< \(Int(round(wakeThresholdC)))°C)"
+            return Decision(tier: Tier(mode: .off, fanPercent: 0, label: label),
+                            reason: "Mac \(String(format: "%.0f°C", dieC)) (\(thermalState.rawValue))")
         }
 
         let targetMode: CoolingMode
         let targetFan: UInt8
         let label: String
 
-        // 1. Cutoff: Below shutoff threshold, cooler turns completely off to prevent condensation
-        if dieC < shutoffC {
-            targetMode = .off
-            targetFan = 0
-            label = "Standby (< \(Int(round(shutoffC)))°C)"
-        } else if dieC < engageC {
-            // 2. Nominal Zone: shutoffC <= dieC < engageC
-            // RIGIDLY HONORS USER'S MIN POWER!
-            // When below engage threshold, the cooler stays quiet and steady at user-chosen minFanPercent.
+        // 2. Active Nominal Zone: shutoffC <= dieC < engageC
+        // RIGIDLY HONORS USER'S MIN POWER!
+        // When below engage threshold, the cooler stays quiet and steady at user-chosen minFanPercent.
+        if dieC < engageC {
             targetFan = minFanPercent
             label = "\(profile == .smartMax ? "Smart Max" : "Balanced") (\(targetFan)%)"
             if targetFan >= 85 {

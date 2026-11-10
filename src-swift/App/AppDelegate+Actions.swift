@@ -22,6 +22,7 @@ extension AppDelegate {
             // Auto backs itself off as the Mac cools, so it needs no deadline.
             manualTimer.stop()
             manualTimedOut = false
+            autopilot.resetStandby()
             runAutopilot()
 
         case .manual:

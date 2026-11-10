@@ -241,8 +241,12 @@ extension AppDelegate {
                 statusDetail = ble.mode.isOn ? "Manual Cooling (\(ble.fanPercent)%)" : "Standby"
             } else {
                 let dieC = thermal.dieTemperatureC ?? 0.0
-                if dieC < autopilot.shutoffC {
-                    statusDetail = "Standby (< \(Int(round(autopilot.shutoffC)))°C Off)"
+                if autopilot.isStandby || dieC < autopilot.shutoffC {
+                    if dieC < autopilot.shutoffC {
+                        statusDetail = "Standby (< \(Int(round(autopilot.shutoffC)))°C Off)"
+                    } else {
+                        statusDetail = "Standby (resting until ≥ \(Int(round(autopilot.wakeThresholdC)))°C)"
+                    }
                 } else if dieC < autopilot.engageC {
                     statusDetail = "Min Power (\(ble.fanPercent)%) — Mac below engage"
                 } else if autopilot.profile == .smartMax {
