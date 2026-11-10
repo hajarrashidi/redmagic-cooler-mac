@@ -37,19 +37,19 @@ Coolers comuns de celular de **10W a 15W** não têm potência de bombeamento de
 <table>
   <tr>
     <td align="center" width="25%">
-      <img src="docs/images/screenshot_auto_smartmax.png" alt="Perfil Smart Max" width="100%"/>
-      <br/><b>Perfil Smart Max</b><br/>
-      <sub>Salto imediato para 100% no limiar de engate</sub>
+      <img src="docs/images/screenshot_auto_stepladder.png" alt="Autopilot Step-Ladder" width="100%"/>
+      <br/><b>Autopilot Step-Ladder</b><br/>
+      <sub>4 estágios calibrados e buffer dwell</sub>
     </td>
     <td align="center" width="25%">
-      <img src="docs/images/screenshot_auto_balanced.png" alt="Perfil Balanced" width="100%"/>
-      <br/><b>Perfil Balanced</b><br/>
-      <sub>Rampa acústica suave e progressiva</sub>
+      <img src="docs/images/screenshot_turbo.png" alt="Modo Turbo Boost" width="100%"/>
+      <br/><b>Modo Turbo Boost</b><br/>
+      <sub>100% de potência máxima imediata</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/screenshot_manual.png" alt="Modo Manual" width="100%"/>
       <br/><b>Modo Manual de Precisão</b><br/>
-      <sub>Slider, timer e espectro RGB</sub>
+      <sub>Slider 10 posições, timer e RGB</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/screenshot_device_picker.png" alt="Seletor Multimarca" width="100%"/>

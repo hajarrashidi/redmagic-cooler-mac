@@ -26,8 +26,7 @@ final class StatusCardView: PanelRowView {
     private static let subFont = NSFont.systemFont(ofSize: 10, weight: .regular)
 
     private static let versionText: String? =
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
-            .map { "v\($0)" }
+        "v\((Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "3.1")"
 
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: Self.cardHeight))

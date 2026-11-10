@@ -37,19 +37,19 @@
 <table>
   <tr>
     <td align="center" width="25%">
-      <img src="docs/images/screenshot_auto_smartmax.png" alt="Smart Max 极速制冷模式" width="100%"/>
-      <br/><b>Smart Max 极速模式</b><br/>
-      <sub>达到阈值瞬时爆发 100% 制冷</sub>
+      <img src="docs/images/screenshot_auto_stepladder.png" alt="Step-Ladder 阶梯巡航模式" width="100%"/>
+      <br/><b>Step-Ladder 阶梯模式</b><br/>
+      <sub>4 档精准调校与滞后防抖缓冲</sub>
     </td>
     <td align="center" width="25%">
-      <img src="docs/images/screenshot_auto_balanced.png" alt="Balanced 均衡温控模式" width="100%"/>
-      <br/><b>Balanced 均衡模式</b><br/>
-      <sub>随核心温度平滑声学曲线升降速</sub>
+      <img src="docs/images/screenshot_turbo.png" alt="Turbo 极速散热模式" width="100%"/>
+      <br/><b>Turbo 极速模式</b><br/>
+      <sub>100% 满血极速爆发与防冷凝保护</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/screenshot_manual.png" alt="Manual 手动精准模式" width="100%"/>
       <br/><b>Manual 手动档位模式</b><br/>
-      <sub>滑块、定时器与全彩灯效控制</sub>
+      <sub>10 级滑块、定时器与全彩灯效</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/screenshot_device_picker.png" alt="多品牌设备发现" width="100%"/>
@@ -64,25 +64,32 @@
 
 ## 🚀 核心功能亮点
 
-### 🧠 双模智能温控自动巡航 (Thermal Autopilot)
-- **Smart Max (极速性能模式)：** 平常以静音最低功耗（`[40%] [60%] [80%] [100%]`）维持基准冷却；一旦核心温度达到设定的**介入阈值**（如 $\ge 50^\circ\text{C}$），瞬间开启 100% 满血功率暴力散热。
-- **Balanced (均衡平滑模式)：** 低温时保持基准静音转速；一旦超过介入温度，风扇转速随温度平滑线性爬升，兼顾极致散热与低噪体验。
+### 🧠 Step-Ladder 四阶确定性智能温控 (v3.1)
+- **专为 Apple Silicon 定制：** 彻底淘汰不可控的连续曲线，采用专为 M1–M4 芯片热工特性设计的 4 级确定性阶梯温控：
+  - **待机 Standby (< 50°C):** 0% 转速 / 0W TEC 极度静音。
+  - **Tier 1 — Quiet (≥ 50°C):** 40% 风速 (`.low`)，降至 42°C 以下平稳退出。
+  - **Tier 2 — Balanced (≥ 60°C):** 60% 风速 (`.medium`)，降至 55°C 以下退出。
+  - **Tier 3 — Boost (≥ 65°C):** 80% 风速 (`.medium`)，降至 61°C 以下退出。
+  - **Tier 4 — Turbo (≥ 70°C):** 100% 风速 (`.max`)，高负载压制降频。
+- **非对称滞后与动态 Dwell 缓冲：** 升温瞬时直达，降速设 20 秒稳定缓冲防止半导体反复冷热冲击，检测到急速降温时 3 秒智能快速旁路。
 
-### ❄️ 主动防冷凝水与结霜保护 (Anti-Condensation)
-- 36W 至 40W 的大功率半导体制冷片在低负载或电脑低温时可能使接触面降至冰点以下（$< 0^\circ\text{C}$），引发空气中水汽结露。
-- 软件内置**关断阈值 (Shutoff Threshold)**（如 $< 38^\circ\text{C}$），在 Mac 降温后自动将散热器置于待机关机状态（0% 转速与断电保护）。
-- 滑块完全解耦独立：调节关断温度绝不会错误拖拽或干扰启动温度。
+### ❄️ 全局防冷凝与结霜保护阀 (Universal Governor)
+- 30W 至 45W 强力半导体制冷片在芯片低温时极易使接触面降至冰点以下（$< 0^\circ\text{C}$）。
+- Smart Cooler Control 在**所有模式**（Auto、Manual、Turbo）下强制执行硬件级断电保护：
+  - **强制断电：** 芯片核心温度低于 **`< 36.0°C`** 时瞬间切断制冷并停转。
+  - **防抖重新激活：** 待机直到芯片温度平稳回升至 **`≥ 38.0°C`** 方可再次运转。
 
-### ⚙️ 契合硬件电机物理特性的档位划分 (MIN POWER)
-- 9,000 转高速无刷风机在低于 40% PWM 占空比时因磁阻力无法正常平稳转动。
-- 彻底摒弃误导性的 20% 与 30% 虚拟档位，采用与官方红魔 Goper 原厂一致且每一档均具有明显风量与转速递进的真实档位：**`[40%] [60%] [80%] [100%]`**。
+### ⚙️ 三模精准操控体系 (Tri-Mode)
+- **Auto：** 4 阶确定性 Step-Ladder 阶梯全自主巡航。
+- **Manual：** 10 级无级触感档位滑块（0% 至 100%）与定时关机。
+- **Turbo：** 一键开启 100% 满血暴力压制，并全程维持防冷凝保护。
 
 ### 🌈 适配 Mac 全系机型的智能温控氛围灯
-- 散热器 RGB 随芯片真实发热区间智能变色：**翡翠绿**（低温待机） $\rightarrow$ **暖黄/琥珀色**（中度负载） $\rightarrow$ **警示鲜红**（高温过热/降频保护）。
-- 针对 Apple Silicon 机型定制专属温控曲线：
-  - **MacBook Air:** 针对无风扇机身散热特性调校（$35^\circ\text{C}\dots55^\circ\text{C}$ 绿灯，$>80^\circ\text{C}$ 红灯）。
-  - **MacBook Pro:** 结合内置双风扇工作机制调校（$38^\circ\text{C}\dots58^\circ\text{C}$ 绿灯，$>82^\circ\text{C}$ 红灯）。
-  - **Mac Studio / Mac mini / Mac Pro:** 针对台式机厚散热鳍片调校（$30^\circ\text{C}\dots50^\circ\text{C}$ 绿灯，$>72^\circ\text{C}$ 红灯）。
+- 氛围灯精准映射 Apple Silicon 真实工作温度区间：
+  - **MacBook Air (无风扇):** **冷蓝** (低温正常 `< 65°C`) $\rightarrow$ **暖黄** (`65°C–75°C`) $\rightarrow$ **橙色** (`75°C–85°C`) $\rightarrow$ **警示鲜红** (`≥ 88°C`).
+  - **MacBook Pro (内置风扇):** **冷蓝** (`< 68°C`) $\rightarrow$ **暖黄** (`68°C–78°C`) $\rightarrow$ **橙色** (`78°C–88°C`) $\rightarrow$ **警示鲜红** (`≥ 90°C`).
+  - **Mac Studio / Mac mini / Mac Pro:** **冷蓝** (`< 58°C`) $\rightarrow$ **暖黄** (`58°C–68°C`) $\rightarrow$ **橙色** (`68°C–78°C`) $\rightarrow$ **警示鲜红** (`≥ 85°C`).
+- **待机保持：** 在 0% 停转待机时持续保持静谧冷蓝灯光，杜绝原厂固件报红警示。
 
 ### 🛡️ 原生深入 macOS 系统电源生命周期
 - 完美监听 macOS `NSWorkspace` 生命周期：Mac 睡眠合盖（`willSleepNotification`）或关机（`willPowerOffNotification`）时立即自动关闭散热器，唤醒亮屏（`didWakeNotification`）时自动恢复智控。

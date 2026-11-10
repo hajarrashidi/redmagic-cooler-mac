@@ -37,19 +37,19 @@ Generic 10W–15W smartphone coolers lack the thermal pump capacity to penetrate
 <table>
   <tr>
     <td align="center" width="25%">
-      <img src="docs/images/screenshot_auto_smartmax.png" alt="Smart Max Profile" width="100%"/>
-      <br/><b>Smart Max Profile</b><br/>
-      <sub>Immediate 100% boost at engage threshold</sub>
+      <img src="docs/images/screenshot_auto_stepladder.png" alt="Step-Ladder Autopilot" width="100%"/>
+      <br/><b>Step-Ladder Autopilot</b><br/>
+      <sub>4 calibrated stages & dwell buffer</sub>
     </td>
     <td align="center" width="25%">
-      <img src="docs/images/screenshot_auto_balanced.png" alt="Balanced Profile" width="100%"/>
-      <br/><b>Balanced Profile</b><br/>
-      <sub>Smooth acoustic ramp from min power</sub>
+      <img src="docs/images/screenshot_turbo.png" alt="Turbo Boost Mode" width="100%"/>
+      <br/><b>Turbo Boost Mode</b><br/>
+      <sub>Instant 100% peak thermal power</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/screenshot_manual.png" alt="Manual Mode" width="100%"/>
       <br/><b>Manual Precision Mode</b><br/>
-      <sub>Step slider, timers & RGB spectrum</sub>
+      <sub>10-step slider, timer & RGB spectrum</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/screenshot_device_picker.png" alt="Multi-Brand Device Picker" width="100%"/>

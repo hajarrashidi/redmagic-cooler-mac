@@ -116,22 +116,23 @@ final class PopulatedDevicePickerRow: PanelRowView {
     }
 
     private let items: [MockDevice] = [
-        MockDevice(name: "REDMAGIC Cooler 5 Pro (36W)", power: "Excellent", isHovered: true),
+        MockDevice(name: "REDMAGIC Cooler 5 Pro (36W)", power: "Connected", isHovered: true),
         MockDevice(name: "REDMAGIC VC Cooler 6 Pro+ (40W)", power: "Excellent", isHovered: false),
         MockDevice(name: "Black Shark MagCooler 5 Pro (35W)", power: "Good", isHovered: false),
         MockDevice(name: "Flydigi B8X Overclock (30W)", power: "Good", isHovered: false),
-        MockDevice(name: "REDMAGIC Cryo Cooler 8 Pro (36W)", power: "Fair", isHovered: false),
+        MockDevice(name: "OnePlus 45W Liquid Cooler (45W)", power: "Good", isHovered: false),
+        MockDevice(name: "MEMO CX08 Magnetic Cooler (36W)", power: "Fair", isHovered: false),
     ]
 
     init(width: CGFloat) {
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 248))
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 268))
         panelSegment = .only
 
         let pad = UIStyle.panelContentX
         let content = width - pad * 2
 
         let scanBtn = PillButton(title: "Scan Again")
-        scanBtn.frame = NSRect(x: pad, y: 182, width: content, height: PillButton.height)
+        scanBtn.frame = NSRect(x: pad, y: 204, width: content, height: PillButton.height)
         addSubview(scanBtn)
     }
 
@@ -165,18 +166,18 @@ final class PopulatedDevicePickerRow: PanelRowView {
 
         // Device rows
         for item in items {
-            let rowRect = NSRect(x: pad, y: y, width: content, height: 26)
+            let rowRect = NSRect(x: pad, y: y, width: content, height: 24)
             if item.isHovered {
                 NSColor.controlAccentColor.withAlphaComponent(0.28).setFill()
                 NSBezierPath(roundedRect: rowRect, xRadius: 6, yRadius: 6).fill()
             }
 
             let nameAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 11.5, weight: item.isHovered ? .medium : .regular),
+                .font: NSFont.systemFont(ofSize: 11, weight: item.isHovered ? .medium : .regular),
                 .foregroundColor: NSColor.labelColor
             ]
             NSAttributedString(string: item.name, attributes: nameAttrs)
-                .draw(at: NSPoint(x: rowRect.minX + 8, y: rowRect.minY + 5))
+                .draw(at: NSPoint(x: rowRect.minX + 8, y: rowRect.minY + 4))
 
             let sigAttrs: [NSAttributedString.Key: Any] = [
                 .font: UIStyle.captionFont,
@@ -184,9 +185,9 @@ final class PopulatedDevicePickerRow: PanelRowView {
             ]
             let sigStr = NSAttributedString(string: item.power, attributes: sigAttrs)
             let sigSize = sigStr.size()
-            sigStr.draw(at: NSPoint(x: rowRect.maxX - sigSize.width - 8, y: rowRect.minY + 6))
+            sigStr.draw(at: NSPoint(x: rowRect.maxX - sigSize.width - 8, y: rowRect.minY + 5))
 
-            y += 27
+            y += 25
         }
 
         // Footer link
@@ -195,7 +196,7 @@ final class PopulatedDevicePickerRow: PanelRowView {
             .foregroundColor: NSColor.controlAccentColor
         ]
         NSAttributedString(string: "Add support for your cooler →", attributes: linkAttrs)
-            .draw(at: NSPoint(x: pad, y: 218))
+            .draw(at: NSPoint(x: pad, y: 240))
     }
 }
 
@@ -209,9 +210,9 @@ final class HeroBannerView: NSView {
     init() {
         let cardW = UIStyle.menuWidth // 330
 
-        // Primary foreground card: Smart Max Autopilot
+        // Primary foreground card: Step-Ladder Autopilot v3.1
         let status1 = StatusCardView(width: cardW)
-        status1.update(StatusCardView.ViewModel(dieTempC: 42.0, thermalState: .nominal))
+        status1.update(StatusCardView.ViewModel(dieTempC: 52.0, thermalState: .nominal))
         status1.menuEdges = [.top]
 
         let cooler1 = CoolerPanelView(width: cardW)
@@ -219,10 +220,10 @@ final class HeroBannerView: NSView {
             isConnected: true,
             phase: .ready,
             deviceModelName: "REDMAGIC Magnetic Cooler 5 Pro (36W)",
-            telemetry: CoolerTelemetry(coldC: 12, hotC: 36, ambientC: 24, fanRPM: 6100),
+            telemetry: CoolerTelemetry(coldC: 10, hotC: 38, ambientC: 24, fanRPM: 6200),
             mode: .low,
             fanPercent: 40,
-            statusDetail: "Min Power (40%) — Mac below engage",
+            statusDetail: "Auto Tier 1 — Quiet (40%)",
             deviceLooksPoweredOff: false,
             note: nil
         ))
@@ -233,14 +234,19 @@ final class HeroBannerView: NSView {
         mode1.panelSegment = .top
 
         let auto1 = AutoOptionsView(width: cardW)
-        auto1.configure(engageC: 52.0, shutoffC: 38.0, minFanPercent: 40, profile: .smartMax)
+        auto1.configure(currentTier: .tier1_low, dieTempC: 52.0, isSafetyActive: false)
         auto1.panelSegment = .bottom
+
+        let lightHeader1 = SectionHeaderRow(width: cardW, title: "Light")
+        let effect1 = LedEffectPickerView(width: cardW)
+        effect1.setSelected(.auto)
+        effect1.panelSegment = .only
 
         let footer1 = MenuFooterRow(width: cardW)
         footer1.menuEdges = [.bottom]
 
         self.leftCard = MenuPopupContainerView(width: cardW, rows: [
-            status1, cooler1, coolHeader1, mode1, auto1, footer1
+            status1, cooler1, coolHeader1, mode1, auto1, lightHeader1, effect1, footer1
         ])
 
         // Secondary background card: Multi-Brand Device Picker + RGB
@@ -348,9 +354,9 @@ final class HeroBannerView: NSView {
 
         // Feature Pills Grid
         let features: [(title: String, detail: String)] = [
-            ("Dual Thermal Autopilot", "Smart Max 100% boost & Balanced progressive ramp"),
-            ("Hardware-Calibrated Floor", "True [40% · 60% · 80% · 100%] brushless PWM steps"),
-            ("Anti-Condensation Cutoff", "Automatic standby shutoff when Mac cools below threshold"),
+            ("Deterministic Step-Ladder", "4 calibrated stages [50°·60°·65°·70°C] with dwell buffer"),
+            ("Universal Safety Governor", "Automatic standby shutoff < 36°C against condensation"),
+            ("Calibrated Thermal LED", "Apple Silicon Blue → Yellow → Orange → Red chassis gauge"),
             ("Multi-Brand ≥ 30W Catalog", "REDMAGIC 5/6/8 Pro · Black Shark 5 Pro · Flydigi B8X")
         ]
 
@@ -470,9 +476,9 @@ func renderImage(view: NSView, to path: String, asJPEG: Bool = false) {
     }
 }
 
-func buildSmartMaxScreenshot(width: CGFloat) -> NSView {
+func buildAutoScreenshot(width: CGFloat) -> NSView {
     let statusCard = StatusCardView(width: width)
-    statusCard.update(StatusCardView.ViewModel(dieTempC: 42.0, thermalState: .nominal))
+    statusCard.update(StatusCardView.ViewModel(dieTempC: 52.0, thermalState: .nominal))
     statusCard.menuEdges = [.top]
 
     let coolerPanel = CoolerPanelView(width: width)
@@ -480,10 +486,10 @@ func buildSmartMaxScreenshot(width: CGFloat) -> NSView {
         isConnected: true,
         phase: .ready,
         deviceModelName: "REDMAGIC Magnetic Cooler 5 Pro (36W)",
-        telemetry: CoolerTelemetry(coldC: 12, hotC: 36, ambientC: 24, fanRPM: 6100),
+        telemetry: CoolerTelemetry(coldC: 10, hotC: 38, ambientC: 24, fanRPM: 6200),
         mode: .low,
         fanPercent: 40,
-        statusDetail: "Min Power (40%) — Mac below engage",
+        statusDetail: "Auto Tier 1 — Quiet (40%)",
         deviceLooksPoweredOff: false,
         note: nil
     ))
@@ -495,7 +501,7 @@ func buildSmartMaxScreenshot(width: CGFloat) -> NSView {
     modeSwitch.panelSegment = .top
 
     let autoOptions = AutoOptionsView(width: width)
-    autoOptions.configure(engageC: 52.0, shutoffC: 38.0, minFanPercent: 40, profile: .smartMax)
+    autoOptions.configure(currentTier: .tier1_low, dieTempC: 52.0, isSafetyActive: false)
     autoOptions.panelSegment = .bottom
 
     let lightHeader = SectionHeaderRow(width: width, title: "Light")
@@ -506,13 +512,13 @@ func buildSmartMaxScreenshot(width: CGFloat) -> NSView {
 
     let settingsHeader = SectionHeaderRow(width: width, title: "Settings")
 
-    let turnOff = MenuActionRow(width: width, title: "Turn Off", symbol: "power")
+    let turnOff = MenuActionRow(width: width, title: "Turn Off Cooler", symbol: "power")
     turnOff.panelSegment = .top
 
     let changeDevice = MenuActionRow(width: width, title: "Change Device…", symbol: "antenna.radiowaves.left.and.right")
     changeDevice.panelSegment = .middle
 
-    let quit = MenuActionRow(width: width, title: "Turn Off & Quit", symbol: "power.circle")
+    let quit = MenuActionRow(width: width, title: "Quit Smart Cooler", symbol: "xmark.circle")
     quit.panelSegment = .bottom
 
     let footer = MenuFooterRow(width: width)
@@ -522,67 +528,12 @@ func buildSmartMaxScreenshot(width: CGFloat) -> NSView {
         statusCard, coolerPanel, coolingHeader, modeSwitch, autoOptions,
         lightHeader, effectPicker, settingsHeader, turnOff, changeDevice, quit, footer
     ])
-    return ShowcaseCanvasView(menuBarTemp: "42°", menuView: menu)
+    return ShowcaseCanvasView(menuBarTemp: "52°", menuView: menu)
 }
 
-func buildBalancedScreenshot(width: CGFloat) -> NSView {
+func buildTurboScreenshot(width: CGFloat) -> NSView {
     let statusCard = StatusCardView(width: width)
-    statusCard.update(StatusCardView.ViewModel(dieTempC: 55.0, thermalState: .nominal))
-    statusCard.menuEdges = [.top]
-
-    let coolerPanel = CoolerPanelView(width: width)
-    coolerPanel.update(CoolerPanelView.ViewModel(
-        isConnected: true,
-        phase: .ready,
-        deviceModelName: "REDMAGIC Magnetic Cooler 5 Pro (36W)",
-        telemetry: CoolerTelemetry(coldC: 8, hotC: 43, ambientC: 25, fanRPM: 7500),
-        mode: .medium,
-        fanPercent: 60,
-        statusDetail: "Balanced Ramp (60%) [≥ 50°C]",
-        deviceLooksPoweredOff: false,
-        note: nil
-    ))
-
-    let coolingHeader = SectionHeaderRow(width: width, title: "Cooling")
-
-    let modeSwitch = ModeSwitchView(width: width)
-    modeSwitch.setMode(.auto)
-    modeSwitch.panelSegment = .top
-
-    let autoOptions = AutoOptionsView(width: width)
-    autoOptions.configure(engageC: 50.0, shutoffC: 38.0, minFanPercent: 60, profile: .balanced)
-    autoOptions.panelSegment = .bottom
-
-    let lightHeader = SectionHeaderRow(width: width, title: "Light")
-
-    let effectPicker = LedEffectPickerView(width: width)
-    effectPicker.setSelected(.auto)
-    effectPicker.panelSegment = .only
-
-    let settingsHeader = SectionHeaderRow(width: width, title: "Settings")
-
-    let turnOff = MenuActionRow(width: width, title: "Turn Off", symbol: "power")
-    turnOff.panelSegment = .top
-
-    let changeDevice = MenuActionRow(width: width, title: "Change Device…", symbol: "antenna.radiowaves.left.and.right")
-    changeDevice.panelSegment = .middle
-
-    let quit = MenuActionRow(width: width, title: "Turn Off & Quit", symbol: "power.circle")
-    quit.panelSegment = .bottom
-
-    let footer = MenuFooterRow(width: width)
-    footer.menuEdges = [.bottom]
-
-    let menu = MenuPopupContainerView(width: width, rows: [
-        statusCard, coolerPanel, coolingHeader, modeSwitch, autoOptions,
-        lightHeader, effectPicker, settingsHeader, turnOff, changeDevice, quit, footer
-    ])
-    return ShowcaseCanvasView(menuBarTemp: "55°", menuView: menu)
-}
-
-func buildManualScreenshot(width: CGFloat) -> NSView {
-    let statusCard = StatusCardView(width: width)
-    statusCard.update(StatusCardView.ViewModel(dieTempC: 46.0, thermalState: .nominal))
+    statusCard.update(StatusCardView.ViewModel(dieTempC: 74.0, thermalState: .fair))
     statusCard.menuEdges = [.top]
 
     let coolerPanel = CoolerPanelView(width: width)
@@ -590,10 +541,64 @@ func buildManualScreenshot(width: CGFloat) -> NSView {
         isConnected: true,
         phase: .ready,
         deviceModelName: "REDMAGIC VC Cooler 6 Pro+ (40W)",
-        telemetry: CoolerTelemetry(coldC: 4, hotC: 45, ambientC: 25, fanRPM: 8900),
+        telemetry: CoolerTelemetry(coldC: -2, hotC: 48, ambientC: 25, fanRPM: 9600),
         mode: .max,
         fanPercent: 100,
-        statusDetail: "Manual Cooling (100%)",
+        statusDetail: "Turbo Boost (100%) — Peak Defense",
+        deviceLooksPoweredOff: false,
+        note: nil
+    ))
+
+    let coolingHeader = SectionHeaderRow(width: width, title: "Cooling")
+
+    let modeSwitch = ModeSwitchView(width: width)
+    modeSwitch.setMode(.turbo)
+    modeSwitch.panelSegment = .top
+
+    let turboStatus = TurboStatusView(width: width)
+    turboStatus.panelSegment = .bottom
+
+    let lightHeader = SectionHeaderRow(width: width, title: "Light")
+
+    let effectPicker = LedEffectPickerView(width: width)
+    effectPicker.setSelected(.auto)
+    effectPicker.panelSegment = .only
+
+    let settingsHeader = SectionHeaderRow(width: width, title: "Settings")
+
+    let turnOff = MenuActionRow(width: width, title: "Turn Off Cooler", symbol: "power")
+    turnOff.panelSegment = .top
+
+    let changeDevice = MenuActionRow(width: width, title: "Change Device…", symbol: "antenna.radiowaves.left.and.right")
+    changeDevice.panelSegment = .middle
+
+    let quit = MenuActionRow(width: width, title: "Quit Smart Cooler", symbol: "xmark.circle")
+    quit.panelSegment = .bottom
+
+    let footer = MenuFooterRow(width: width)
+    footer.menuEdges = [.bottom]
+
+    let menu = MenuPopupContainerView(width: width, rows: [
+        statusCard, coolerPanel, coolingHeader, modeSwitch, turboStatus,
+        lightHeader, effectPicker, settingsHeader, turnOff, changeDevice, quit, footer
+    ])
+    return ShowcaseCanvasView(menuBarTemp: "74°", menuView: menu)
+}
+
+func buildManualScreenshot(width: CGFloat) -> NSView {
+    let statusCard = StatusCardView(width: width)
+    statusCard.update(StatusCardView.ViewModel(dieTempC: 48.0, thermalState: .nominal))
+    statusCard.menuEdges = [.top]
+
+    let coolerPanel = CoolerPanelView(width: width)
+    coolerPanel.update(CoolerPanelView.ViewModel(
+        isConnected: true,
+        phase: .ready,
+        deviceModelName: "Black Shark MagCooler 5 Pro (35W)",
+        telemetry: CoolerTelemetry(coldC: 6, hotC: 42, ambientC: 24, fanRPM: 7800),
+        mode: .medium,
+        fanPercent: 80,
+        statusDetail: "Manual Cooling (80%)",
         deviceLooksPoweredOff: false,
         note: nil
     ))
@@ -605,7 +610,7 @@ func buildManualScreenshot(width: CGFloat) -> NSView {
     modeSwitch.panelSegment = .top
 
     let coolingSlider = CoolingSliderView(width: width)
-    coolingSlider.setStep(12) // Max 100%
+    coolingSlider.setStep(6) // 80% fan
     coolingSlider.panelSegment = .middle
 
     let manualTimer = ManualTimerView(width: width)
@@ -629,13 +634,13 @@ func buildManualScreenshot(width: CGFloat) -> NSView {
 
     let settingsHeader = SectionHeaderRow(width: width, title: "Settings")
 
-    let turnOff = MenuActionRow(width: width, title: "Turn Off", symbol: "power")
+    let turnOff = MenuActionRow(width: width, title: "Turn Off Cooler", symbol: "power")
     turnOff.panelSegment = .top
 
     let changeDevice = MenuActionRow(width: width, title: "Change Device…", symbol: "antenna.radiowaves.left.and.right")
     changeDevice.panelSegment = .middle
 
-    let quit = MenuActionRow(width: width, title: "Turn Off & Quit", symbol: "power.circle")
+    let quit = MenuActionRow(width: width, title: "Quit Smart Cooler", symbol: "xmark.circle")
     quit.panelSegment = .bottom
 
     let footer = MenuFooterRow(width: width)
@@ -646,19 +651,19 @@ func buildManualScreenshot(width: CGFloat) -> NSView {
         lightHeader, effectPicker, breathToggle, colorPicker,
         settingsHeader, turnOff, changeDevice, quit, footer
     ])
-    return ShowcaseCanvasView(menuBarTemp: "46°", menuView: menu)
+    return ShowcaseCanvasView(menuBarTemp: "48°", menuView: menu)
 }
 
 func buildDevicePickerScreenshot(width: CGFloat) -> NSView {
     let statusCard = StatusCardView(width: width)
-    statusCard.update(StatusCardView.ViewModel(dieTempC: 41.0, thermalState: .nominal))
+    statusCard.update(StatusCardView.ViewModel(dieTempC: 42.0, thermalState: .nominal))
     statusCard.menuEdges = [.top]
 
     let devicesHeader = SectionHeaderRow(width: width, title: "Available devices")
     let pickerRow = PopulatedDevicePickerRow(width: width)
 
     let settingsHeader = SectionHeaderRow(width: width, title: "Settings")
-    let quit = MenuActionRow(width: width, title: "Turn Off & Quit", symbol: "power.circle")
+    let quit = MenuActionRow(width: width, title: "Quit Smart Cooler", symbol: "xmark.circle")
     quit.panelSegment = .only
 
     let footer = MenuFooterRow(width: width)
@@ -667,7 +672,7 @@ func buildDevicePickerScreenshot(width: CGFloat) -> NSView {
     let menu = MenuPopupContainerView(width: width, rows: [
         statusCard, devicesHeader, pickerRow, settingsHeader, quit, footer
     ])
-    return ShowcaseCanvasView(menuBarTemp: "41°", menuView: menu)
+    return ShowcaseCanvasView(menuBarTemp: "42°", menuView: menu)
 }
 
 @main
@@ -680,19 +685,27 @@ struct ScreenshotGenerator {
         let outDir = "/Users/user/Documents/redmagic-cooler-mac/docs/images"
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
-        renderImage(view: buildSmartMaxScreenshot(width: width), to: "\(outDir)/screenshot_auto_smartmax.png")
-        renderImage(view: buildBalancedScreenshot(width: width), to: "\(outDir)/screenshot_auto_balanced.png")
-        renderImage(view: buildManualScreenshot(width: width), to: "\(outDir)/screenshot_manual.png")
-        renderImage(view: buildDevicePickerScreenshot(width: width), to: "\(outDir)/screenshot_device_picker.png")
-        renderImage(view: HeroBannerView(), to: "\(outDir)/banner.jpg", asJPEG: true)
+        let autoView = buildAutoScreenshot(width: width)
+        let turboView = buildTurboScreenshot(width: width)
+        let manualView = buildManualScreenshot(width: width)
+        let devicePickerView = buildDevicePickerScreenshot(width: width)
+        let bannerView = HeroBannerView()
 
-        let defaultPreview = "\(outDir)/screenshot_auto_smartmax.png"
+        renderImage(view: autoView, to: "\(outDir)/screenshot_auto_stepladder.png")
+        renderImage(view: autoView, to: "\(outDir)/screenshot_auto_smartmax.png")
+        renderImage(view: turboView, to: "\(outDir)/screenshot_turbo.png")
+        renderImage(view: turboView, to: "\(outDir)/screenshot_auto_balanced.png")
+        renderImage(view: manualView, to: "\(outDir)/screenshot_manual.png")
+        renderImage(view: devicePickerView, to: "\(outDir)/screenshot_device_picker.png")
+        renderImage(view: bannerView, to: "\(outDir)/banner.jpg", asJPEG: true)
+
+        let defaultPreview = "\(outDir)/screenshot_auto_stepladder.png"
         let legacyTarget = "/Users/user/Documents/redmagic-cooler-mac/docs/screenshot.png"
         if FileManager.default.fileExists(atPath: defaultPreview) {
             try? FileManager.default.removeItem(atPath: legacyTarget)
             try? FileManager.default.copyItem(atPath: defaultPreview, toPath: legacyTarget)
         }
 
-        print("All 4 Retina screenshots + Hero Banner generated successfully!")
+        print("All Retina screenshots + Hero Banner generated successfully!")
     }
 }
