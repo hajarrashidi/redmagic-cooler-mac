@@ -25,3 +25,13 @@
   1. `RedMagicDriver.swift` envia estritamente `0x02` quando `mode.isOn` para o 5 Pro, modulando a potência 100% via PWM na característica `0x1012`.
   2. `CoolingSliderView.steps` reorganizado com rotação estritamente crescente (0%, 40%, 50%, 60%, 65%, 75%, 80%, 85%, 95%, 100%).
   3. `step(matching:)` sincroniza pela velocidade real da ventoinha (`fanPercent`) através dos passos ativos, garantindo que 100% permaneça em Max sem regressão.
+
+## [AL-COOLER-004] Sobreposição no Cabeçalho de Status e Escala Térmica de LED (Azul-Amarelo-Laranja-Vermelho)
+* **Erro:** A versão `v3.1` saía desenhada por cima do nome do modelo do Mac (`MacBook Air`) no topo do menu bar, e o LED no modo térmico ficava verde/vermelho em repouso em vez de azul.
+* **Causa-Raiz:** 
+  1. `StatusCardView.swift` renderizava Título, Versão, Modelo e Estado Térmico todos em uma única linha horizontal de 330pt, causando colisão direta quando o texto da esquerda encontrava o da direita.
+  2. `AutopilotPolicy.swift` usava uma interpolação antiga restrita a Verde -> Vermelho. Em repouso ou temperatura mínima, o hardware nunca recebia Azul, transmitindo sensação incorreta de calor.
+* **Solução Permanente:** 
+  1. No `StatusCardView.swift`, separou-se a Linha 1 (Marca à esquerda + Versão à direita) da Linha 2 (Temperatura grande à esquerda + Modelo e Estado empilhados com folga à direita).
+  2. Em `AutopilotPolicy.swift`, implementou-se a escala térmica de 4 quadrantes contínuos calibrada por família de Mac (Air, Pro, Studio): Azul (< 48°C) -> Amarelo (48°C-60°C) -> Laranja (60°C-70°C) -> Vermelho (≥ 80°C).
+
