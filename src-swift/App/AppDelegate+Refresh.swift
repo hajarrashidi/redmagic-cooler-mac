@@ -284,13 +284,7 @@ extension AppDelegate {
         }
         if switchMonitor.looksPoweredOff { return .powerSwitchOff }
         if appMode == .turbo {
-            var remainingM: Int? = nil
-            if let start = turboStartTime {
-                let elapsed = Date().timeIntervalSince1970 - start
-                let remaining = max(0, Int(ceil((Config.Safety.turboDecaySeconds - elapsed) / 60.0)))
-                remainingM = remaining
-            }
-            return .turboMax(remainingMinutes: remainingM)
+            return .turboMax
         }
         if appMode == .manual {
             guard ble.mode.isOn else {

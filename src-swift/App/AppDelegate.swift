@@ -74,9 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Re-arms only when die temperature reaches Config.Safety.condensationRearmC (38.0°C).
     var isSafetyGovernorActive: Bool = false
 
-    /// When Turbo Max was activated, used for 15-minute auto-decay.
-    var turboStartTime: TimeInterval?
-
     /// Latest telemetry frame from the cooler, cleared when the link drops.
     var telemetry: CoolerTelemetry?
     /// Whether the magnetic mount is seated.
@@ -266,7 +263,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         thermal = ThermalMonitor.read()
         updateSwitchMonitor()
         expireManualTimerIfDue()
-        checkTurboDecayIfDue()
         evaluateSafetyGovernor()
 
         if !isSafetyGovernorActive {
@@ -321,17 +317,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ble.apply(mode: .off, fanPercent: 0)
                 }
             }
-        }
-    }
-
-    /// Auto-decays Turbo Max mode back to Auto after 15 minutes.
-    private func checkTurboDecayIfDue() {
-        guard appMode == .turbo, let start = turboStartTime else { return }
-        let elapsed = Date().timeIntervalSince1970 - start
-        if elapsed >= Config.Safety.turboDecaySeconds {
-            EventLogger.record("Turbo Max 15m duration elapsed — auto-decaying to Auto")
-            turboStartTime = nil
-            selectMode(.auto)
         }
     }
 

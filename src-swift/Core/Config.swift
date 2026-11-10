@@ -165,9 +165,6 @@ enum Config {
 
         /// Asymmetric re-arm threshold: cooler remains off until Mac die warms back to this temperature.
         static let condensationRearmC: Double = 38.0
-
-        /// Auto-decay duration for Turbo Max mode (15 minutes).
-        static let turboDecaySeconds: TimeInterval = 15.0 * 60.0
     }
 
     // ── Diagnostics ──────────────────────────────────────────────────────────

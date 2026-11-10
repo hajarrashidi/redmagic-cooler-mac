@@ -170,19 +170,29 @@ func runTests() {
            "Expected Safety Governor to hold Standby at 37.0°C (< 38°C re-arm)")
     print("  ✅ Anti-Hunting Deadband: Die 37.0°C (< 38.0°C) -> Retains Standby, no relay chattering")
 
-    // 7. Tri-Mode State Representation & Turbo Max Mode
-    print("\n⚡ Testing Tri-Mode Representation & Turbo Max...")
+    // 7. Tri-Mode State & Manual Slider Progression Tests
+    print("\n⚡ Testing Tri-Mode Representation & Manual Slider Progression...")
     assert(AppMode(persisted: "auto") == .auto)
     assert(AppMode(persisted: "manual") == .manual)
     assert(AppMode(persisted: "turbo") == .turbo)
     assert(AppMode(persisted: "off") == .manual) // Legacy fallback
     print("  ✅ AppMode Serialization: auto, manual, turbo, legacy 'off' roundtrip correctly")
 
-    // Turbo Max configuration check
-    assert(Config.Safety.turboDecaySeconds == 15.0 * 60.0, "Turbo decay must be exactly 15 minutes (900s)")
     assert(Config.Safety.condensationCutoffC == 36.0, "Condensation cutoff must be 36.0°C")
     assert(Config.Safety.condensationRearmC == 38.0, "Condensation re-arm must be 38.0°C")
-    print("  ✅ Safety Constants: 36.0°C Cutoff, 38.0°C Re-Arm, 15m Turbo Decay confirmed")
+    print("  ✅ Safety Constants: 36.0°C Cutoff, 38.0°C Re-Arm confirmed (no arbitrary decay timeout)")
+
+    // Slider progression verification: strictly increasing fan speed from Off to 100% Max
+    let speeds = CoolingSliderView.steps.map(\.fanPercent)
+    assert(speeds == [0, 40, 50, 60, 65, 75, 80, 85, 95, 100], "Slider fan speeds must be strictly progressive up to 100%")
+    print("  ✅ Slider Progression: Off(0%) -> Low(40/50/60%) -> Med(65/75/80%) -> Max(85/95/100%) confirmed")
+
+    // Fix verification: When 5 Pro reports mode 0x02 (.medium) at 100% fan, slider MUST match Step 9 (Max)!
+    let maxMatch = CoolingSliderView.step(matching: .medium, fanPercent: 100)
+    assert(maxMatch == 9, "Expected 100% fan to match Step 9 (Max), got \(maxMatch)")
+    let medMatch = CoolingSliderView.step(matching: .medium, fanPercent: 80)
+    assert(medMatch == 6, "Expected 80% fan to match Step 6 (Med), got \(medMatch)")
+    print("  ✅ Med-to-Max Bug Seam Fixed: 100% fan correctly matches Step 9 (Max) without snapping back to Med")
 
     // 8. Mac Family Thermal LED Calibration
     print("\n🌈 Testing Mac Family-Aware LED Thermal Color Calibration...")

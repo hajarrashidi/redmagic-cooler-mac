@@ -34,7 +34,7 @@ final class CoolerPanelView: PanelRowView {
         /// Universal condensation safety barrier intercepted cooling.
         case safetyIntercepted(cutoffC: Double, rearmC: Double)
         /// Turbo Max active.
-        case turboMax(remainingMinutes: Int?)
+        case turboMax
 
         var text: String {
             switch self {
@@ -45,12 +45,8 @@ final class CoolerPanelView: PanelRowView {
             case .manualTimedOut:        return "Auto-off timer ended Manual cooling"
             case .safetyIntercepted(let cutoff, let rearm):
                 return "🛡️ Safety Cutoff: Mac < \(Int(round(cutoff)))°C (Re-arms ≥ \(Int(round(rearm)))°C)"
-            case .turboMax(let remaining):
-                if let remaining {
-                    return "Turbo Max (100% boost · \(remaining)m remaining)"
-                } else {
-                    return "Turbo Max (100% full cooling boost)"
-                }
+            case .turboMax:
+                return "Turbo Max (100% full power · Proteção < 36°C)"
             }
         }
 

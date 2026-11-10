@@ -15,7 +15,6 @@ extension AppDelegate {
 
         switch mode {
         case .auto:
-            turboStartTime = nil
             // Evaluate immediately rather than waiting for the next autopilot
             // tick, so the cooler follows the temperature the moment Auto is
             // chosen instead of holding the manual level for a few seconds.
@@ -29,7 +28,6 @@ extension AppDelegate {
             }
 
         case .manual:
-            turboStartTime = nil
             manualTimedOut = false
             // Entering Manual should actually cool. If the remembered level is
             // Off — never set, or left off last time — fall back to a mid step
@@ -43,8 +41,7 @@ extension AppDelegate {
         case .turbo:
             manualTimer.stop()
             manualTimedOut = false
-            turboStartTime = Date().timeIntervalSince1970
-            EventLogger.record("switch → turbo (100% boost, 15m decay)")
+            EventLogger.record("switch → turbo (100% boost)")
             if !isSafetyGovernorActive {
                 ble.apply(mode: .max, fanPercent: 100)
             } else {

@@ -45,6 +45,7 @@ final class RedMagicDriver: CoolerDriver {
     private var telemetryPollTimer: Timer?
     private weak var peripheral: CBPeripheral?
 
+    private var lastWrittenRawMode: UInt8?
     private var lastWrittenMode: CoolingMode?
     private var lastWrittenFan: UInt8?
 
@@ -104,18 +105,28 @@ final class RedMagicDriver: CoolerDriver {
     func apply(mode: CoolingMode, fanPercent: UInt8, peripheral: CBPeripheral) {
         let targetSpeed = mode.isOn ? min(fanPercent, 100) : 0
 
+        let rawByte: UInt8
+        if mode == .off {
+            rawByte = 0x03
+        } else if is5Pro {
+            // REDMAGIC Cooler 5 Pro binary power switch:
+            // 0x02 = ON, 0x03 = OFF. Values like 0x01/0x08 cause firmware rejection and shutdown!
+            rawByte = 0x02
+        } else {
+            rawByte = mode.rawValue
+        }
+
+        let modeByteChanged = (rawByte != lastWrittenRawMode)
+        let fanChanged = (targetSpeed != lastWrittenFan)
+
         // Skip redundant writes if the hardware is already confirmed at this exact mode and fan speed.
         // Prevents motor driver PWM resets and fan hiccups during periodic heartbeats.
-        if mode == lastWrittenMode && targetSpeed == lastWrittenFan {
-            return
-        }
+        guard modeByteChanged || fanChanged else { return }
 
         pendingFanWorkItem?.cancel()
 
-        let modeChanged = (mode != lastWrittenMode)
-        let rawByte: UInt8 = (mode == .off) ? 0x03 : mode.rawValue
-
-        if modeChanged {
+        if modeByteChanged {
+            lastWrittenRawMode = rawByte
             lastWrittenMode = mode
             if let modeChar {
                 EventLogger.record("REDMAGIC — writing mode 0x\(String(format: "%02X", rawByte)) to 1011")
@@ -123,10 +134,12 @@ final class RedMagicDriver: CoolerDriver {
             } else {
                 EventLogger.record("REDMAGIC — apply error: modeChar is nil")
             }
+        } else {
+            lastWrittenMode = mode
         }
 
         // Deferred fan speed write (cooler firmware requires ~200ms spacing after mode change)
-        let delay = modeChanged ? Config.BLE.fanWriteDelay : 0.0
+        let delay = modeByteChanged ? Config.BLE.fanWriteDelay : 0.0
         let work = DispatchWorkItem { [weak self, weak peripheral] in
             guard let self, let peripheral, let fanChar = self.fanChar else {
                 EventLogger.record("REDMAGIC — apply error: fanChar is nil")
@@ -218,6 +231,7 @@ final class RedMagicDriver: CoolerDriver {
         telemetryPollTimer = nil
         pendingFanWorkItem?.cancel()
         pendingFanWorkItem = nil
+        lastWrittenRawMode = nil
         lastWrittenMode = nil
         lastWrittenFan = nil
         modeChar = nil
