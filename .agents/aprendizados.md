@@ -14,3 +14,14 @@
 * **Erro:** Transição rápida de step-down por encerramento de carga pesada não completava em 3s e revertia para o dwell lento de 20s.
 * **Causa-Raiz:** Quando a temperatura caía abruptamente (ex: 57°C -> 45°C) e estabilizava no tick seguinte, $dT/dt$ tornava-se 0.0°C/s, fazendo a checagem instantânea desarmar o bypass de velocidade.
 * **Solução Permanente:** Persistir o estado no flag `pendingIsFastDwell = true` associado ao `pendingTier`, garantindo que o dwell acelerado de 3s permaneça ativo até a conclusão do step-down.
+
+## [AL-COOLER-003] Comutação Manual Med -> Max no REDMAGIC 5 Pro e Sincronização do Slider
+* **Erro:** No modo Manual, passar o slider de Med para Max não aumentava a potência ou o slider voltava para Med.
+* **Causa-Raiz:** 
+  1. O firmware do REDMAGIC Cooler 5 Pro possui chave binária na característica `0x1011` (`0x02` = ON, `0x03` = OFF). Ao enviar `0x08` (modo Max), o firmware rejeitava o comando e resetava para OFF ou ignorava.
+  2. Como o 5 Pro reporta sempre `0x02` quando ligado, o método `step(matching:)` filtrava apenas passos com `mode == .medium`, ignorando os passos de Max e forçando o medidor a voltar para Med.
+  3. A lista de passos anterior continha rotações que não subiam até 100% (paravam em 80%).
+* **Solução Permanente:** 
+  1. `RedMagicDriver.swift` envia estritamente `0x02` quando `mode.isOn` para o 5 Pro, modulando a potência 100% via PWM na característica `0x1012`.
+  2. `CoolingSliderView.steps` reorganizado com rotação estritamente crescente (0%, 40%, 50%, 60%, 65%, 75%, 80%, 85%, 95%, 100%).
+  3. `step(matching:)` sincroniza pela velocidade real da ventoinha (`fanPercent`) através dos passos ativos, garantindo que 100% permaneça em Max sem regressão.
