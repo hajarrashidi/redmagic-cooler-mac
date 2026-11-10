@@ -218,6 +218,16 @@ func runTests() {
     assert(studioHot.r == 255 && studioHot.g == 0 && studioHot.b == 0, "Expected red for Mac Studio at 74°C")
     print("  ✅ Mac Studio: 40°C -> Blue, 74°C -> Pure Red LED")
 
+    // 9. Hardware Profile Telemetry & Multi-Brand Verification
+    print("\n📡 Testing Multi-Brand Telemetry Capabilities...")
+    assert(DeviceProfile.vcCooler6Pro.hasTelemetryStream, "REDMAGIC 6 Pro must have telemetry stream")
+    assert(!DeviceProfile.magcooler5Pro.hasTelemetryStream, "REDMAGIC 5 Pro does not broadcast continuous telemetry stream")
+    assert(DeviceProfile.blackSharkMagCooler5Pro.hasTelemetryStream, "Black Shark 5 Pro must have telemetry stream")
+    assert(DeviceProfile.blackSharkMagCooler4Pro.hasTelemetryStream, "Black Shark 4 Pro must have telemetry stream")
+    assert(DeviceProfile.flydigiB8X.hasTelemetryStream, "Flydigi B8X must have telemetry stream")
+    assert(DeviceProfile.flydigiB7X.hasTelemetryStream, "Flydigi B7X must have telemetry stream")
+    print("  ✅ Telemetry Stream configured for REDMAGIC, Black Shark and Flydigi active profiles")
+
     print("\n🎉 ALL TESTS PASSED! Deterministic Step-Ladder, Asymmetric Hysteresis, Dwell & Velocity Bypass, Universal Condensation Safety Governor & Multi-Brand Isolation verified.")
 }
 

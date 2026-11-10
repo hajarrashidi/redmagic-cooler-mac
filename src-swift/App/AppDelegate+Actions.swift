@@ -26,6 +26,7 @@ extension AppDelegate {
             if !isSafetyGovernorActive {
                 runAutopilot()
             }
+            scheduleLedReassertion()
 
         case .manual:
             manualTimedOut = false
@@ -37,6 +38,7 @@ extension AppDelegate {
             if step <= 0 { step = CoolingSliderView.defaultStep }
             EventLogger.record("switch → manual")
             applyManualStep(step, alreadySwitching: true)
+            scheduleLedReassertion()
 
         case .turbo:
             manualTimer.stop()
@@ -47,6 +49,7 @@ extension AppDelegate {
             } else {
                 ble.apply(mode: .off, fanPercent: 0)
             }
+            scheduleLedReassertion()
         }
         refresh()
     }
@@ -134,6 +137,7 @@ extension AppDelegate {
             EventLogger.record("manual → \(step.name) (held in Standby by Safety Governor < 36°C)")
         }
         EventLogger.record("manual → \(step.name)")
+        scheduleLedReassertion()
         refresh()
     }
 
@@ -210,6 +214,7 @@ extension AppDelegate {
         UserDefaults.standard.set(0, forKey: Config.Key.manualStep)
         ble.apply(mode: .off, fanPercent: 0)
         EventLogger.record("manual → off")
+        scheduleLedReassertion()
         refresh()
     }
 

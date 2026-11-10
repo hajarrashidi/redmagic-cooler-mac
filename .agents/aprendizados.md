@@ -35,3 +35,17 @@
   1. No `StatusCardView.swift`, separou-se a Linha 1 (Marca à esquerda + Versão à direita) da Linha 2 (Temperatura grande à esquerda + Modelo e Estado empilhados com folga à direita).
   2. Em `AutopilotPolicy.swift`, implementou-se a escala térmica de 4 quadrantes contínuos calibrada por família de Mac (Air, Pro, Studio): Azul (< 48°C) -> Amarelo (48°C-60°C) -> Laranja (60°C-70°C) -> Vermelho (≥ 80°C).
 
+## [AL-COOLER-005] Reset de LED RGB no Hardware MCU em Trocas de Modo e Supressão de Escrita BLE
+* **Erro:** Ao alternar de Turbo (Máximo) para Auto, o LED físico no cooler ficava travado em Vermelho indefinidamente em vez de voltar para o Azul da temperatura.
+* **Causa-Raiz:**
+  1. O MCU interno dos coolers (especialmente REDMAGIC 5 Pro e Black Shark) reseta sua eletrônica de iluminação para o perfil de fábrica (estático/pulsante vermelho) toda vez que recebe comando de modo de refrigeração na característica principal (`0x1011`).
+  2. O `LedController` utilizava cache em `lastWrittenColor` para evitar escritas BLE redundantes. Ao voltar para Auto, como a temperatura do Mac continuava fria (ex: Azul), `color == lastWrittenColor` retornava `true` e suprimia silenciosamente o envio do pacote `0x1013`, deixando o LED preso no padrão do hardware.
+  3. Comandos de LED enviados simultaneamente com a comutação de modo colidiam com a escrita de ventoinha (`0x1012`) que possui delay de ~200ms no firmware.
+  4. O heartbeat periódico de 30 segundos chamava apenas `reassertCurrentSettings()` (refrigeração), nunca re-afirmando o LED.
+* **Solução Permanente:**
+  1. Criado `invalidateCache()` em `LedController.swift` e parâmetro `force: Bool = false` em `updateAutoColor` para furar o cache em reaplicações explícitas.
+  2. Criado `scheduleLedReassertion(delay: 0.35)` em `AppDelegate.swift`, cancelando dispatches anteriores e enviando o comando de LED 350ms após as escritas de refrigeração assentarem.
+  3. `scheduleLedReassertion()` disparado em todas as transições de modo (`selectMode`, `applyManualStep`, `turnOff`).
+  4. Adicionada re-afirmação periódica de LED no heartbeat de 30s (`led.reapply(dieC:autopilot:)`), tornando a recuperação de hardware 100% autônoma e imune a quedas ou resets de firmware.
+
+

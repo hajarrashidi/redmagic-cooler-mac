@@ -96,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// dropped it before the device has caught up.
     var isSwitching = false
     private var switchingTimer: Timer?
+    private var pendingLedWorkItem: DispatchWorkItem?
 
     /// An update is downloading or being swapped in. The menu locks down for
     /// the duration: the app is about to be replaced and relaunched, and a
@@ -278,6 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ble.isConnected, tickCount.isMultiple(of: Config.Timing.heartbeatEveryTicks) {
             if !isSafetyGovernorActive {
                 ble.reassertCurrentSettings()
+                led.reapply(dieC: thermal.dieTemperatureC, autopilot: autopilot)
             } else if ble.mode != .off || ble.fanPercent != 0 {
                 ble.apply(mode: .off, fanPercent: 0)
             }
@@ -372,6 +374,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         refresh()
         return true
+    }
+
+    /// Invalidates LED cache and schedules a clean re-assertion after BLE mode/fan writes settle.
+    /// This cures hardware firmware resets that revert the LED to default red on mode switches.
+    func scheduleLedReassertion(delay: TimeInterval = 0.35) {
+        pendingLedWorkItem?.cancel()
+        led.invalidateCache()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.led.reapply(dieC: self.thermal.dieTemperatureC, autopilot: self.autopilot)
+        }
+        pendingLedWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     // ── Sleep / Wake Lifecycle ───────────────────────────────────────────────

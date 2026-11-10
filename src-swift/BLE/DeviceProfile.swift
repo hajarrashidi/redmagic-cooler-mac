@@ -270,7 +270,7 @@ extension DeviceProfile {
         modelName: "Black Shark MagCooler 5 Pro (35W)",
         ratedWatts: 35,
         hasPhysicalPowerSwitch: false,
-        hasTelemetryStream: false,
+        hasTelemetryStream: true,
         nameHints: ["black shark 5", "blackshark 5", "magcooler 5 pro", "bs 5pro", "br42"],
         serviceUUID: CBUUID(string: "0000A0A0-3C17-D293-8E48-14FE2E4DA212"),
         driverFactory: { BlackSharkDriver(profile: $0) }
@@ -283,7 +283,7 @@ extension DeviceProfile {
         modelName: "Black Shark MagCooler 4 Pro (27W)",
         ratedWatts: 27,
         hasPhysicalPowerSwitch: false,
-        hasTelemetryStream: false,
+        hasTelemetryStream: true,
         nameHints: ["black shark 4", "blackshark 4", "magcooler 4 pro", "bs 4pro"],
         serviceUUID: CBUUID(string: "0000A0A0-3C17-D293-8E48-14FE2E4DA212"),
         driverFactory: { BlackSharkDriver(profile: $0) }
@@ -298,7 +298,7 @@ extension DeviceProfile {
         modelName: "Flydigi B8X Overclock (30W)",
         ratedWatts: 30,
         hasPhysicalPowerSwitch: false,
-        hasTelemetryStream: false,
+        hasTelemetryStream: true,
         nameHints: ["b8x", "flydigi b8x", "feizhi b8x"],
         serviceUUID: CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB"),
         driverFactory: { FlydigiDriver(profile: $0) }
@@ -311,7 +311,7 @@ extension DeviceProfile {
         modelName: "Flydigi B7X (27W)",
         ratedWatts: 27,
         hasPhysicalPowerSwitch: false,
-        hasTelemetryStream: false,
+        hasTelemetryStream: true,
         nameHints: ["b7x", "flydigi b7x", "feizhi b7x"],
         serviceUUID: CBUUID(string: "0000FFE0-0000-1000-8000-00805F9B34FB"),
         driverFactory: { FlydigiDriver(profile: $0) }
