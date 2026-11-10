@@ -209,14 +209,14 @@ enum UIStyle {
     }
 
     /// Heat-graded colour for a Mac die temperature (°C).
-    /// Thermal scale: Azul (frio) -> Amarelo (moderado) -> Laranja (quente) -> Vermelho (crítico).
+    /// Thermal scale: Azul (frio/nominal <65°C) -> Amarelo (moderado 65-75°C) -> Laranja (quente 75-85°C) -> Vermelho (crítico >=85°C).
     static func heatColor(_ celsius: Double?) -> NSColor {
         guard let celsius else { return .secondaryLabelColor }
         switch celsius {
-        case ..<50: return NSColor(srgbRed: 0.10, green: 0.58, blue: 1.0, alpha: 1.0) // Azul
-        case ..<62: return .systemYellow                                            // Amarelo
-        case ..<74: return .systemOrange                                            // Laranja
-        default:    return .systemRed                                               // Vermelho
+        case ..<65: return NSColor(srgbRed: 0.10, green: 0.58, blue: 1.0, alpha: 1.0) // Azul Puro / Nominal
+        case ..<75: return .systemYellow                                            // Amarelo (>65°C)
+        case ..<85: return .systemOrange                                            // Laranja (>75°C)
+        default:    return .systemRed                                               // Vermelho (>=85°C)
         }
     }
 

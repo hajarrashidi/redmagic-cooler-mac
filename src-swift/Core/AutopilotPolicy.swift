@@ -72,16 +72,16 @@ enum MacThermalProfile {
     static func thresholds(for model: String) -> MacThermalThresholds {
         let lower = model.lowercased()
         if lower.contains("studio") || lower.contains("mini") || (lower.contains("pro") && !lower.contains("macbook")) {
-            // Mac Studio / Mac mini / Mac Pro: massive active heatsinks, lower normal temp band
-            return MacThermalThresholds(blueMaxC: 42.0, yellowC: 52.0, orangeC: 62.0, redMinC: 72.0)
+            // Mac Studio / Mac mini / Mac Pro: massive active desktop heatsinks; <58°C blue, 58-68°C yellow, 68-78°C orange, >=85°C red
+            return MacThermalThresholds(blueMaxC: 58.0, yellowC: 68.0, orangeC: 78.0, redMinC: 85.0)
         } else if lower.contains("air") {
-            // MacBook Air: fanless passive chassis; <48°C cold (blue), 48-60°C yellow, 60-70°C orange, >=80°C red
-            return MacThermalThresholds(blueMaxC: 48.0, yellowC: 60.0, orangeC: 70.0, redMinC: 80.0)
+            // MacBook Air: fanless passive chassis; <65°C cold/nominal (blue), 65-75°C yellow, 75-85°C orange, >=88°C red
+            return MacThermalThresholds(blueMaxC: 65.0, yellowC: 75.0, orangeC: 85.0, redMinC: 88.0)
         } else if lower.contains("macbook") {
-            // MacBook Pro: internal fans idle/off until ~75°C; <50°C cold (blue), 50-62°C yellow, 62-72°C orange, >=82°C red
-            return MacThermalThresholds(blueMaxC: 50.0, yellowC: 62.0, orangeC: 72.0, redMinC: 82.0)
+            // MacBook Pro: internal active fans; <68°C cold/nominal (blue), 68-78°C yellow, 78-88°C orange, >=90°C red
+            return MacThermalThresholds(blueMaxC: 68.0, yellowC: 78.0, orangeC: 88.0, redMinC: 90.0)
         } else {
-            return MacThermalThresholds(blueMaxC: 48.0, yellowC: 60.0, orangeC: 70.0, redMinC: 80.0)
+            return MacThermalThresholds(blueMaxC: 65.0, yellowC: 75.0, orangeC: 85.0, redMinC: 88.0)
         }
     }
 }
