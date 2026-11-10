@@ -64,25 +64,32 @@ Coolers comuns de celular de **10W a 15W** não têm potência de bombeamento de
 
 ## 🚀 Principais Recursos
 
-### 🧠 Piloto Automático Térmico Dinâmico (Thermal Autopilot)
-- **Perfil Smart Max:** Mantém uma potência mínima silenciosa (`[40%] [60%] [80%] [100%]`) em tarefas cotidianas. No instante em que a temperatura do processador cruza o **Limiar de Engate** configurado (ex: $\ge 50^\circ\text{C}$), o sistema injeta imediatamente 100% de resfriamento.
-- **Perfil Balanced:** Mantém o ventilador na rotação mínima configurada enquanto a máquina está fria e executa uma aceleração progressiva e suave conforme a temperatura sobe.
+### 🧠 Piloto Automático Step-Ladder em 4 Estágios (v3.1)
+- **Projetado para Apple Silicon:** Substitui curvas contínuas imprevisíveis por 4 estágios determinísticos calibrados para o comportamento térmico dos chips M1–M4:
+  - **Standby (< 50°C):** Ventoinha a 0% / TEC 0W em repouso e navegação leve.
+  - **Tier 1 — Quiet (≥ 50°C):** 40% ventoinha (`.low`) com liberação abaixo de 42°C.
+  - **Tier 2 — Balanced (≥ 60°C):** 60% ventoinha (`.medium`) com liberação abaixo de 55°C.
+  - **Tier 3 — Boost (≥ 65°C):** 80% ventoinha (`.medium`) com liberação abaixo de 61°C.
+  - **Tier 4 — Turbo (≥ 70°C):** 100% ventoinha (`.max`) com liberação abaixo de 66°C para máxima sustentação térmica.
+- **Histerese Assimétrica e Dwell Dinâmico:** Subida imediata em picos de compilação/render; amortecimento de 20s para reduções de velocidade protegendo a pastilha semicondutora, com bypass rápido em 3s se houver queda térmica brusca ($dT/dt \le -3^\circ\text{C/s}$).
 
-### ❄️ Prevenção Ativa Contra Condensação e Gelo
-- Coolers potentes de 36W a 40W conseguem atingir temperaturas negativas ($< 0^\circ\text{C}$) na face fria. Se o Mac estiver ocioso ou frio, isso pode condensar a umidade do ar sobre o chassi.
-- O **Limiar de Desligamento (Shutoff)** corta automaticamente a pastilha e o ventilador para 0% (Standby) quando o Mac atinge uma temperatura fria e segura (ex: $< 38^\circ\text{C}$).
-- Sliders totalmente desacoplados e independentes: ajustar o *Shutoff* nunca empurra nem desregula o *Engage*.
+### ❄️ Governador de Segurança Universal contra Condensação
+- Coolers de 30W a 45W podem atingir temperaturas negativas ($< 0^\circ\text{C}$) na face fria.
+- O Smart Cooler Control aplica uma trava de segurança em nível de hardware em **TODOS os modos** (Auto, Manual e Turbo):
+  - **Corte Imediato:** Se a temperatura do processador cair para **`< 36.0°C`**, a alimentação é cortada instantaneamente para 0% (Standby).
+  - **Rearme Seguro:** Permanece em Standby até a temperatura subir de forma estável para **`≥ 38.0°C`**.
 
-### ⚙️ MIN POWER Calibrado para o Hardware Real
-- Motores sem escovas (brushless) de 9.000 RPM possuem limite de torque físico abaixo de 40% de ciclo de trabalho PWM.
-- Em vez de opções fictícias como 20% ou 30% que causavam ruído idêntico ou paradas de ventoinha, o aplicativo adota degraus uniformes e audíveis: **`[40%] [60%] [80%] [100%]`**.
+### ⚙️ Controle em Três Modos (Tri-Mode)
+- **Auto:** Autopilot inteligente com degraus determinísticos e proteção ativa.
+- **Manual:** Slider contínuo de 10 posições (0% a 100%) para controle acústico e térmico tátil.
+- **Turbo:** Potência máxima imediata (100%) com preservação da segurança contra condensação.
 
 ### 🌈 LED Térmico Calibrado por Família de Mac
-- O LED do cooler muda de cor em tempo real de acordo com a temperatura interna: **Verde** (frio/ideal) $\rightarrow$ **Amarelo/Âmbar** (carga moderada) $\rightarrow$ **Vermelho Alerta** (alta temperatura / throttling).
-- Perfis térmicos reais por hardware:
-  - **MacBook Air:** Curva otimizada para chassi passivo sem ventoinha ($35^\circ\text{C}\dots55^\circ\text{C}$ verde, $>80^\circ\text{C}$ vermelho).
-  - **MacBook Pro:** Considera o acionamento das ventoinhas internas ($38^\circ\text{C}\dots58^\circ\text{C}$ verde, $>82^\circ\text{C}$ vermelho).
-  - **Mac Studio / Mac mini / Mac Pro:** Faixa térmica mais baixa para desktops ($30^\circ\text{C}\dots50^\circ\text{C}$ verde, $>72^\circ\text{C}$ vermelho).
+- O LED do cooler reflete o envelope térmico real do Apple Silicon:
+  - **MacBook Air (passivo):** **Azul** (frio/nominal `< 65°C`) $\rightarrow$ **Amarelo** (carga moderada `65°C–75°C`) $\rightarrow$ **Laranja** (`75°C–85°C`) $\rightarrow$ **Vermelho Alerta** (`≥ 88°C`).
+  - **MacBook Pro (ventoinhas internas):** **Azul** (`< 68°C`) $\rightarrow$ **Amarelo** (`68°C–78°C`) $\rightarrow$ **Laranja** (`78°C–88°C`) $\rightarrow$ **Vermelho** (`≥ 90°C`).
+  - **Mac Studio / Mac mini / Mac Pro:** **Azul** (`< 58°C`) $\rightarrow$ **Amarelo** (`58°C–68°C`) $\rightarrow$ **Laranja** (`68°C–78°C`) $\rightarrow$ **Vermelho** (`≥ 85°C`).
+- **Persistência em Standby:** Mantém o LED azul sereno mesmo quando o cooler está em 0% no modo Auto, evitando alertas falsos em vermelho de firmware padrão.
 
 ### 🛡️ Integração Nativa com o Ciclo de Vida do macOS
 - Monitora os eventos do sistema via `NSWorkspace`: desliga o cooler imediatamente ao **Suspender / Repouso** (`willSleepNotification`) e ao **Desligar** (`willPowerOffNotification`), e retoma o resfriamento ao **Acordar** (`didWakeNotification`).

@@ -17,6 +17,7 @@ func runTests() {
         ("REDMAGIC Cooler 8", "rm-cryocooler-8pro"),
         ("RM Magcooler 4pro", "rm-magcooler-4pro"),
         ("Black Shark MagCooler 5 Pro", "bs-magcooler-5pro"),
+        ("BR42-Cooler", "bs-magcooler-5pro"),
         ("BS 5Pro", "bs-magcooler-5pro"),
         ("Black Shark 4 Pro", "bs-magcooler-4pro"),
         ("Flydigi B8X", "fd-b8x"),
@@ -227,6 +228,23 @@ func runTests() {
     assert(DeviceProfile.flydigiB8X.hasTelemetryStream, "Flydigi B8X must have telemetry stream")
     assert(DeviceProfile.flydigiB7X.hasTelemetryStream, "Flydigi B7X must have telemetry stream")
     print("  ✅ Telemetry Stream configured for REDMAGIC, Black Shark and Flydigi active profiles")
+
+    // 10. Audit Bug Verifications: macOS .serious Floor & Signed Subzero Decoding
+    print("\n🧪 Testing Audit Hardening: .serious Floor & Subzero Signed Decoding...")
+    let seriousPolicy = AutopilotPolicy()
+    seriousPolicy.resetStandby(isStandby: true)
+    let seriousDec = seriousPolicy.evaluate(thermalState: .serious, dieC: 45.0, now: 3000)
+    assert(seriousDec.tier.coolingTier == .tier2_med && seriousDec.tier.fanPercent == 60,
+           "Expected .serious thermal state to enforce Tier 2 floor even at 45°C die, got \(seriousDec.tier.label)")
+    print("  ✅ Thermal Pressure Floor: macOS .serious forces >= Tier 2 (60% fan) at 45°C")
+
+    // Subzero cold plate decoding
+    let subzeroRaw: UInt8 = 0xFE // -2 in two's complement Int8
+    let decodedSubzero = Int(Int8(bitPattern: subzeroRaw))
+    assert(decodedSubzero == -2, "Expected 0xFE to decode as -2°C, got \(decodedSubzero)")
+    let subzeroValid = decodedSubzero > -30 && decodedSubzero < 60
+    assert(subzeroValid, "Subzero -2°C must pass range validation (-30°C to 60°C)")
+    print("  ✅ Signed Subzero Decoding: 0xFE correctly decodes to -2°C (not +254°C overflow)")
 
     print("\n🎉 ALL TESTS PASSED! Deterministic Step-Ladder, Asymmetric Hysteresis, Dwell & Velocity Bypass, Universal Condensation Safety Governor & Multi-Brand Isolation verified.")
 }

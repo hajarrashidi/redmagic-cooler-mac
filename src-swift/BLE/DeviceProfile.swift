@@ -86,10 +86,7 @@ struct DeviceProfile: Equatable {
            let mfgData = adv[CBAdvertisementDataManufacturerDataKey] as? Data {
             // Black Shark manufacturer ID: 0x8F, 0x03
             if mfgData.count >= 2 && mfgData[0] == 0x8F && mfgData[1] == 0x03 {
-                if lower.contains("4") || lower.contains("4pro") {
-                    return .blackSharkMagCooler4Pro
-                }
-                return .blackSharkMagCooler5Pro
+                return matchBlackShark(lower)
             }
         }
 
@@ -110,19 +107,13 @@ struct DeviceProfile: Equatable {
                 return lower.contains("45") ? .onePlus45WLiquidCooler : .onePlus27WCooler
             }
             if services.contains(CBUUID(string: "0000A0A0-3C17-D293-8E48-14FE2E4DA212")) {
-                if lower.contains("4") || lower.contains("4pro") {
-                    return .blackSharkMagCooler4Pro
-                }
-                return .blackSharkMagCooler5Pro
+                return matchBlackShark(lower)
             }
         }
 
         // 3. Brand disambiguation by name
-        if lower.contains("black shark") || lower.contains("blackshark") || lower.contains("bs ") || lower.hasPrefix("bs") {
-            if lower.contains("4") || lower.contains("4pro") {
-                return .blackSharkMagCooler4Pro
-            }
-            return .blackSharkMagCooler5Pro
+        if lower.contains("black shark") || lower.contains("blackshark") || lower.contains("bs ") || lower.hasPrefix("bs") || lower.contains("br42") {
+            return matchBlackShark(lower)
         }
 
         if lower.contains("flydigi") || lower.contains("feizhi") {
@@ -169,6 +160,18 @@ struct DeviceProfile: Equatable {
         return all.first { profile in
             profile.nameHints.contains(where: lower.contains)
         }
+    }
+
+    /// Disambiguates Black Shark 4 Pro vs 5 Pro.
+    /// 5 Pro models use "BR42-Cooler" or "5", which must not be grabbed by "4" from the 42 suffix.
+    private static func matchBlackShark(_ lower: String) -> DeviceProfile {
+        if lower.contains("5") || lower.contains("br42") {
+            return .blackSharkMagCooler5Pro
+        }
+        if lower.contains("4") || lower.contains("br40") || lower.contains("br32") {
+            return .blackSharkMagCooler4Pro
+        }
+        return .blackSharkMagCooler5Pro
     }
 
     /// Loose substrings suggesting a vendor cooler the app has *no* profile for.

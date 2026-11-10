@@ -41,9 +41,11 @@ final class MemoDriver: CoolerDriver {
 
     private func startTelemetryPolling() {
         telemetryPollTimer?.invalidate()
-        telemetryPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.pollTelemetry()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        telemetryPollTimer = timer
         pollTelemetry()
     }
 
@@ -96,9 +98,9 @@ final class MemoDriver: CoolerDriver {
         guard bytes[0] == 0xFE else { return .none }
 
         if bytes[1] == 0x03 && bytes.count >= 5 {
-            let coldTemp = Int(bytes[2])
+            let coldTemp = Int(Int8(bitPattern: bytes[2]))
             let telemetry = CoolerTelemetry(
-                coldC: coldTemp > 0 && coldTemp < 60 ? coldTemp : 0,
+                coldC: coldTemp > -30 && coldTemp < 60 ? coldTemp : 0,
                 hotC: 0,
                 ambientC: 0,
                 fanRPM: nil

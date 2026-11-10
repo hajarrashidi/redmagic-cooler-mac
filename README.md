@@ -64,25 +64,32 @@ Generic 10W–15W smartphone coolers lack the thermal pump capacity to penetrate
 
 ## 🚀 Key Features
 
-### 🧠 Dual Dynamic Thermal Autopilot
-- **Smart Max Profile:** Holds a quiet, baseline minimum power (`[40%] [60%] [80%] [100%]`) during nominal use. The instant your workload crosses the configurable **Engage Threshold** (e.g. $\ge 50^\circ\text{C}$), it activates 100% maximum cooling power immediately.
-- **Balanced Profile:** Holds your configured minimum power during light tasks and executes a smooth, progressive acoustic ramp as temperatures climb above the engage threshold.
+### 🧠 Deterministic 4-Stage Step-Ladder Autopilot (v3.1)
+- **Engineered for Apple Silicon:** Replaces unpredictable continuous curves with 4 deterministic stages calibrated for M1–M4 thermal dynamics:
+  - **Standby (< 50°C):** 0% fan / 0W TEC during quiet idle tasks.
+  - **Tier 1 — Quiet (≥ 50°C):** 40% fan (`.low`) with release below 42°C.
+  - **Tier 2 — Balanced (≥ 60°C):** 60% fan (`.medium`) with release below 55°C.
+  - **Tier 3 — Boost (≥ 65°C):** 80% fan (`.medium`) with release below 61°C.
+  - **Tier 4 — Turbo (≥ 70°C):** 100% fan (`.max`) with release below 66°C for peak thermal defense.
+- **Asymmetric Hysteresis & Dynamic Dwell:** Instant step-up on thermal spikes; 20-second dwell buffer on cooldowns to protect Peltier semiconductors from cycling fatigue, with automatic 3-second velocity bypass on rapid thermal drops ($dT/dt \le -3^\circ\text{C/s}$).
 
-### ❄️ Active Condensation & Frost Prevention
-- Heavy-duty 36W–40W Peltier coolers can rapidly drop cold-plate temperatures below freezing ($< 0^\circ\text{C}$), creating condensation or frost when the Mac is cool or idle.
-- The built-in **Shutoff Threshold** (e.g. $< 38^\circ\text{C}$) automatically powers off the cooler when your Mac cools down, safeguarding your laptop.
-- Independent, decoupled slider architecture prevents UI lockups and ensures Shutoff is always safely positioned below Engage ($\ge 2^\circ\text{C}$ margin).
+### ❄️ Universal Condensation & Frost Safety Governor
+- Heavy-duty 30W–45W Peltier coolers can rapidly drop cold-plate temperatures below freezing ($< 0^\circ\text{C}$).
+- Smart Cooler Control enforces a hardware-grade safety interlock across **ALL modes** (Auto, Manual, and Turbo):
+  - **Hard Cutoff:** Instantly cuts power to Standby (0% fan / 0W) if die temperature drops below **`< 36.0°C`**.
+  - **Anti-Hunting Re-Arm:** Stays in Standby until die temperature rises safely back to **`≥ 38.0°C`**.
 
-### ⚙️ Calibrated Hardware-Accurate MIN POWER
-- Physical 9,000 RPM blower motors experience PWM cogging torque below 40% duty cycle (~6,000 RPM floor).
-- Instead of misleading 20% or 30% buttons, Smart Cooler Control provides an audible, distinct, and calibrated four-step range: **`[40%] [60%] [80%] [100%]`**.
+### ⚙️ Tri-Mode Precision Control
+- **Auto:** Fully autonomous Step-Ladder Autopilot with safety governor and live status tracking.
+- **Manual:** Continuous 10-step fan slider (0% to 100%) for exact tactile airflow and acoustic control.
+- **Turbo:** Instant 100% maximum thermal power with active safety cutoff preservation.
 
-### 🌈 Mac Family-Aware Thermal LED
-- The cooler's RGB LED dynamically shifts from **Emerald Green** (cool/idle) through **Amber Yellow** (moderate load) to **Vibrant Red** (high heat/throttling).
-- Thresholds are tailored to Apple Silicon hardware profiles:
-  - **MacBook Air:** Fanless chassis calibration ($35^\circ\text{C}\dots55^\circ\text{C}$ green, $>80^\circ\text{C}$ red).
-  - **MacBook Pro:** Internal dual-fan curve ($38^\circ\text{C}\dots58^\circ\text{C}$ green, $>82^\circ\text{C}$ red).
-  - **Mac Studio / Mac mini / Mac Pro:** Desktop heatsink curve ($30^\circ\text{C}\dots50^\circ\text{C}$ green, $>72^\circ\text{C}$ red).
+### 🌈 Mac Family-Aware Calibrated Thermal LED
+- The cooler's RGB LED dynamically tracks Mac die temperature using Apple Silicon-calibrated operating envelopes:
+  - **MacBook Air (fanless):** **Blue** (cold/nominal `< 65°C`) $\rightarrow$ **Yellow** (moderate `65°C–75°C`) $\rightarrow$ **Orange** (sustained `75°C–85°C`) $\rightarrow$ **Red** (critical `≥ 88°C`).
+  - **MacBook Pro (internal fans):** **Blue** (`< 68°C`) $\rightarrow$ **Yellow** (`68°C–78°C`) $\rightarrow$ **Orange** (`78°C–88°C`) $\rightarrow$ **Red** (`≥ 90°C`).
+  - **Mac Studio / Mac mini / Mac Pro:** **Blue** (`< 58°C`) $\rightarrow$ **Yellow** (`58°C–68°C`) $\rightarrow$ **Orange** (`68°C–78°C`) $\rightarrow$ **Red** (`≥ 85°C`).
+- **Standby Persistence:** Retains calm nominal blue LED during 0% fan standby instead of reverting to vendor red alerts.
 
 ### 🛡️ Native macOS Lifecycle & Sleep Integration
 - Listens to `NSWorkspace` notifications: instantly powers down the cooler on **System Sleep** (`willSleepNotification`) and **Shutdown** (`willPowerOffNotification`), and resumes cooling seamlessly upon **Wake** (`didWakeNotification`).

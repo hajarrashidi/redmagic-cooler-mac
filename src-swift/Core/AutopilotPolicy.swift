@@ -290,7 +290,13 @@ final class AutopilotPolicy {
         lastEvaluatedTime = currentTime
 
         // Determine Candidate Tier
-        let candidate = candidateTier(for: dieC, current: currentTier)
+        var candidate = candidateTier(for: dieC, current: currentTier)
+
+        // Enforce macOS thermal pressure floors:
+        // .serious forces at least Tier 2 (Balanced, 60% fan)
+        if thermalState == .serious && candidate < .tier2_med {
+            candidate = .tier2_med
+        }
 
         if candidate > currentTier {
             // STEP-UP: Immediate execution (no dwell)

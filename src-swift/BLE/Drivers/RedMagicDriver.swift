@@ -48,6 +48,7 @@ final class RedMagicDriver: CoolerDriver {
     private var lastWrittenRawMode: UInt8?
     private var lastWrittenMode: CoolingMode?
     private var lastWrittenFan: UInt8?
+    private var lastReportedAttached: Bool?
 
     private var is5Pro: Bool {
         profile.id.contains("5pro") || profile.modelName.contains("5 Pro")
@@ -90,7 +91,7 @@ final class RedMagicDriver: CoolerDriver {
 
     private func startPolling() {
         telemetryPollTimer?.invalidate()
-        telemetryPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self, let peripheral = self.peripheral else { return }
             // Only poll telemetry if the profile officially provides a telemetry stream
             if self.profile.hasTelemetryStream, let telemetryChar = self.telemetryChar {
@@ -100,6 +101,8 @@ final class RedMagicDriver: CoolerDriver {
                 peripheral.readValue(for: hallChar)
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        telemetryPollTimer = timer
     }
 
     func apply(mode: CoolingMode, fanPercent: UInt8, peripheral: CBPeripheral) {
@@ -185,9 +188,9 @@ final class RedMagicDriver: CoolerDriver {
                 return .none
             }
 
-            let coldC = Int(data[2])
-            let hotC = Int(data[3])
-            let ambientC = Int(data[7])
+            let coldC = Int(Int8(bitPattern: data[2]))
+            let hotC = Int(Int8(bitPattern: data[3]))
+            let ambientC = Int(Int8(bitPattern: data[7]))
             let rpm = data.count >= 15 ? Int(data[13]) | (Int(data[14]) << 8) : nil
 
             let telemetry = CoolerTelemetry(
@@ -218,10 +221,13 @@ final class RedMagicDriver: CoolerDriver {
 
         // 4. Hall sensor notification (0x1015)
         if uuidStr.contains("1015") {
-            let hex = data.map { String(format: "%02X", $0) }.joined(separator: " ")
-            EventLogger.record("REDMAGIC — hall sensor raw: \(hex)")
             // On Cooler 5 Pro, 0x05 indicates normal active operation; bringing a magnet triggers 0x04 / cutoff
             let attached = is5Pro ? (data[0] == 0x05) : (data[0] == 0x04)
+            if lastReportedAttached != attached {
+                lastReportedAttached = attached
+                let hex = data.map { String(format: "%02X", $0) }.joined(separator: " ")
+                EventLogger.record("REDMAGIC — hall sensor status changed: attached=\(attached) (raw: \(hex))")
+            }
             return .mountAttached(attached)
         }
 

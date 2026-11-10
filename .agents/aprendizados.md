@@ -55,5 +55,25 @@
   1. Calibrado `MacThermalProfile` em `AutopilotPolicy.swift`: Azul (< 65°C), Amarelo (65°C – 75°C), Laranja (75°C – 85°C), Vermelho (≥ 88°C).
   2. Alinhado `UIStyle.heatColor` para refletir estritamente essa regra: temperaturas até 64.9°C permanecem no Azul Puro / Nominal.
 
+## [AL-COOLER-007] Blindagem de Drivers Multi-Brand, RunLoop AppKit e Decodificação Subzero
+* **Erro:** 
+  1. Cooler Black Shark 5 Pro ("BR42-Cooler", 35W) era mapeado para 4 Pro (27W) por colisão do caractere "4".
+  2. Leitura de temperatura negativa da face fria (-2°C / `0xFE`) dava overflow para +254°C na telemetria.
+  3. Sensor Hall gravava log a cada 2s sem mudança de status.
+  4. Timers de telemetria e polling congelavam enquanto o menu NSMenu do AppKit permanecia aberto.
+  5. Pressão térmica do macOS `.serious` não impunha piso de refrigeração mínimo no Autopilot.
+* **Causa-Raiz:**
+  1. `DeviceProfile.matching` checava `contains("4")` genericamente antes de prefixos de modelo.
+  2. Cast sem sinal `Int(bytes[2])` em vez de complemento de dois (`Int8(bitPattern:)`).
+  3. Falta de retenção do último estado do sensor Hall.
+  4. `Timer.scheduledTimer` registra apenas no `RunLoop.Mode.default`, que é pausado pelo AppKit durante tracking de menu.
+  5. Falta de clamp de tier baseado no `ProcessInfo.thermalState`.
+* **Solução Permanente:**
+  1. Criada desambiguação estrita `matchBlackShark` checando "5" e "br42" prioritariamente.
+  2. Decodificação signed `Int(Int8(bitPattern: bytes[2]))` com validação `> -30 && < 60` em todos os drivers.
+  3. Logging por transição de estado (`lastReportedAttached`) no sensor Hall.
+  4. Registro explícito de todos os timers em `RunLoop.main, forMode: .common`.
+  5. Enforced floor: `thermalState == .serious` garante no mínimo Tier 2 (Balanced, 60% fan).
+
 
 

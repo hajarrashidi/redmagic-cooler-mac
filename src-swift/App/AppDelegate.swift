@@ -156,10 +156,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         buildMenu()
 
-        tickTimer = Timer.scheduledTimer(withTimeInterval: Config.Timing.poll,
-                                         repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: Config.Timing.poll, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        tickTimer = timer
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self,

@@ -1,138 +1,96 @@
-# Autopilot — how automatic cooling works
+# Autopilot — Deterministic Step-Ladder Engine v3.1
 
-Auto mode follows the Mac's temperature. It turns the cooler on as the Mac
-heats up, raises cooling power with temperature, and turns it off after the Mac
-has cooled. Auto is the default mode after connection.
-
-This guide explains the temperature signal, engage threshold, cooling ladder,
-anti-flap behaviour, safety floor, and LED heat gauge.
+Smart Cooler Control uses a deterministic 4-stage **Step-Ladder Engine** with asymmetric hysteresis, dynamic dwell time, thermal velocity bypass, and a hardware-grade **Universal Condensation Safety Governor**.
 
 Implementation:
 [`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift).
 
-## The temperature it watches
+---
 
-On Apple Silicon, the app reads the Mac's **SoC die temperature** from its
-thermal sensors through IOKit's HID interface. It needs no `sudo` or additional
-installation, and responds within seconds when the Mac starts working hard.
+## 1. Primary Temperature Signal (Apple Silicon)
 
-macOS also exposes `ProcessInfo.thermalState`, but that signal is heavily
-damped. Autopilot uses it as a safety floor rather than its primary input.
+On Apple Silicon (M1 through M4), the app reads the Mac's **SoC die temperature** directly from internal hardware sensors via IOKit's HID interface:
+- **Zero Sudo / Privileges:** Operates completely in user space without kernel extensions or daemon privileges.
+- **Immediate Response:** Real-time sampling with a 3-second evaluation loop that responds instantly when sustained CPU/GPU compute loads begin.
 
-| Temperature | Source | Use |
-|-------------|--------|-----|
-| **Mac die °C** | Mac SoC sensors | Drives Auto mode |
-| Cooler cold/hot °C | Cooler telemetry | Display only |
-| Ambient °C | Cooler telemetry | Display only |
+| Metric | Source | Role in Controller |
+|---|---|---|
+| **Mac Die / CPU °C** | IOKit Apple Silicon Sensors | **Drives Step-Ladder Autopilot & Thermal LED** |
+| **Peltier Cold Plate °C** | Cooler BLE Telemetry Stream | Displayed in UI; monitored for frost prevention |
+| **Hot Exhaust °C** | Cooler BLE Telemetry Stream | Telemetry monitor |
+| **Fan RPM** | Cooler BLE Telemetry Stream | Real-time RPM readout |
 
-The cooler reports plate temperatures only while actively cooling. Cold or hot
-readings of `0 °C` while it is off are device behaviour.
+---
 
-## Engage threshold and cooling levels
+## 2. Deterministic 4-Stage Step-Ladder
 
-The **engage threshold** `E` is the die temperature at which cooling starts.
-Use the threshold slider in Auto mode to set it from 45–85 °C. The default is
-45 °C. There is one threshold control; the former Standard/Custom profile
-choice is no longer needed.
+The Step-Ladder replaces unpredictable continuous PIDs or legacy single-slider thresholds with 4 deterministic operating tiers engineered specifically for Apple Silicon thermal dissipation:
 
-The remaining tiers are derived from `E` in 10 °C steps. All tiers are capped
-at 95 °C so a high engage point cannot create an out-of-order ladder.
+| Stage | Trigger (Engage) | Power & Fan | Release (Disengage) | Primary Use Case |
+|---|---|---|---|---|
+| **Standby** | `< 50.0 °C` | 0% fan / 0W TEC | — | Idle, web browsing, word processing |
+| **Tier 1 (Quiet)** | `≥ 50.0 °C` | 40% fan (`.low`) | `< 42.0 °C` | Light multitasking, video playback |
+| **Tier 2 (Balanced)**| `≥ 60.0 °C` | 60% fan (`.medium`)| `< 55.0 °C` | Sustained compilation, Xcode builds |
+| **Tier 3 (Boost)** | `≥ 65.0 °C` | 80% fan (`.medium`)| `< 61.0 °C` | Heavy 3D rendering, video export |
+| **Tier 4 (Turbo)** | `≥ 70.0 °C` | 100% fan (`.max`) | `< 66.0 °C` | Peak compute stress, gaming, thermal throttling defense |
 
-| Die temperature | Tier | TEC mode | Fan |
-|-----------------|------|----------|-----|
-| Below `E` | off | off | 0% |
-| `E` and above | low | low | 60% |
-| `E`+10 and above | med-low | med-low | 80% |
-| `E`+20 and above | medium | medium | 95% |
-| `E`+30 and above | max | max | 100% |
+---
 
-For the default `E = 45 °C`, the tier boundaries are 45, 55, 65, and 75 °C.
+## 3. Asymmetric Hysteresis & Anti-Chattering
 
-The TEC and fan are independent cooler controls. Fan percentages are not
-linear in RPM; these values were selected from hardware probes of the
-firmware's response curve. See [`FINDINGS.md`](FINDINGS.md).
+Peltier semiconductors degrade rapidly if cycled on/off repeatedly. Autopilot implements two layers of physical protection:
 
-## Fast to turn on, slow to turn off
+### Immediate Step-Up
+When temperature spikes due to sudden compute demand (e.g. initiating a build or running local AI models), the engine steps up **immediately without delay**. Multi-tier jumps are permitted (e.g., from Standby straight to Tier 4 Turbo if die temp exceeds 70°C).
 
-Autopilot reacts immediately to rising heat but backs off deliberately so the
-Peltier does not rapid-cycle.
+### Asymmetric Hold & Dwell Buffer
+To drop a tier, two criteria must be satisfied:
+1. **Asymmetric Release Point:** The temperature must drop completely below the tier's release threshold (e.g. Tier 1 requires `< 42°C`, providing an 8°C anti-hunting band).
+2. **20-Second Cooldown Dwell:** The lower temperature must remain stable for at least 20 continuous seconds before lowering fan speed.
 
-**Heating up:** it steps up as soon as the die crosses a tier boundary.
+### Thermal Velocity Bypass
+If a massive thermal plunge occurs ($dT/dt \le -3.0^\circ\text{C/s}$), the 20-second dwell buffer is bypassed and replaced with a **3-second fast dwell**. This prevents excessive cooling of the aluminum chassis after an intense workload suddenly stops.
 
-**Cooling down:** both conditions must hold before it drops one tier:
+---
 
-1. The die is at least **5 °C below** that tier's engage point.
-2. It remains there for **15 seconds**.
+## 4. Universal Condensation Safety Governor
 
-The app then steps down one tier at a time. A drop from max to off therefore
-follows `max → medium → med-low → low → off`, with each change gated by those
-rules. Autopilot evaluates every three seconds.
+Peltier cooling on high-powered magnetic coolers (30W–45W) can pull cold plate temperatures below zero degrees Celsius. If the chassis cools below the ambient dew point, moisture forms on internal laptop components.
 
-## LED heat gauge
+Smart Cooler Control enforces a hardware-grade safety interlock across **ALL modes** (Auto, Manual, and Turbo):
+- **Hard Cutoff:** If Mac die temperature drops below **`< 36.0 °C`**, the cooler immediately cuts power to 0% fan / 0W Standby (`.off`).
+- **Anti-Hunting Re-Arm:** The cooler remains strictly in Standby until die temperature rises back to **`≥ 38.0 °C`**.
+- In the UI, the safety status is signaled clearly by the shield indicator: `🛡️ Corte contra condensação < 36°C (retoma ≥ 38°C)`.
 
-Set the cooler effect to **Auto** to make its colour follow the Mac die
-temperature: green while cool, through yellow and orange, to red while hot.
+---
 
-For an engage threshold `E`, the colour sweep starts at `E−10 °C` (with a
-30 °C minimum) and reaches red at `E+30 °C` (with a 95 °C maximum). At the
-default 45 °C threshold, that is green at 35 °C and red at 75 °C.
+## 5. macOS Thermal Pressure Floor
 
-The sweep uses HSV hue from 120° to 0° and writes the cooler's static-colour
-effect only when the colour changes. The LED is lit only while the cooler is
-running; select another effect to opt out of the heat gauge.
+macOS reports system-wide thermal pressure via `ProcessInfo.thermalState`. Autopilot treats this signal as a safety floor:
 
-## Safety floor
+| macOS Thermal State | Enforced Minimum Tier |
+|---|---|
+| `nominal`, `fair` | None (normal Step-Ladder rules apply) |
+| `serious` | Minimum **Tier 2 (Balanced, 60% fan)** |
+| `critical` | Forced **Tier 4 (Turbo, 100% fan)** |
 
-macOS's own thermal state can force a minimum cooling tier regardless of the
-die reading:
+The OS signal can elevate cooling power to protect hardware, but can never reduce cooling power below what the die temperature warrants.
 
-| macOS thermal state | Minimum tier |
-|---------------------|--------------|
-| `nominal`, `fair` | none |
-| `serious` | medium |
-| `critical` | max |
+---
 
-The final decision is the higher of the die-temperature tier and this safety
-floor. The OS signal can raise cooling power but cannot lower it.
+## 6. LED Thermal Scale (Mac Model-Aware)
 
-## Worked example
+When the cooler's lighting mode is set to **Auto**, the physical RGB ring functions as a real-time thermal gauge reflecting actual Mac thermal state. 
 
-With the default 45 °C engage threshold:
+Apple Silicon chips safely operate between 40°C–60°C under normal usage. Warning indicators (Yellow/Orange) are strictly calibrated to start only at true thermal escalation points:
 
-```text
-die 40 °C  → off
-die 48 °C  → low,     fan 60%
-die 58 °C  → med-low, fan 80%
-die 68 °C  → medium,  fan 95%
-die 78 °C  → max,     fan 100%
-...the workload finishes...
-die 69 °C  → max      (not yet below the 70 °C release point long enough)
-die 67 °C  → medium   (below 70 °C for 15 seconds)
-die 57 °C  → med-low  (below 60 °C for 15 seconds)
-die 47 °C  → low      (below 50 °C for 15 seconds)
-die 37 °C  → off      (below 40 °C for 15 seconds)
-```
+### Thermal Color Bands by Chassis
 
-Transitions are written to `~/.cooler.log`.
+| Mac Chassis Family | Blue (Nominal / Minimum) | Yellow (Moderate) | Orange (Sustained) | Red (Critical / Throttle) |
+|---|---|---|---|---|
+| **MacBook Air** (fanless) | `< 65.0 °C` | `65.0 °C – 75.0 °C` | `75.0 °C – 85.0 °C` | `≥ 88.0 °C` |
+| **MacBook Pro** (internal fans)| `< 68.0 °C` | `68.0 °C – 78.0 °C` | `78.0 °C – 88.0 °C` | `≥ 90.0 °C` |
+| **Mac Studio / Mini** (desktop)| `< 58.0 °C` | `58.0 °C – 68.0 °C` | `68.0 °C – 78.0 °C` | `≥ 85.0 °C` |
 
-## Tuning the implementation
-
-The threshold range, default, hysteresis, and dwell are in
-[`Config.swift`](../src-swift/Core/Config.swift). The tier ladder and LED band
-are built by `configure(engageC:)` in
-[`AutopilotPolicy.swift`](../src-swift/Core/AutopilotPolicy.swift).
-
-```swift
-enum Autopilot {
-    static let hysteresisC: Double = 5.0
-    static let cooldownDwell: TimeInterval = 15
-    static let engageDefaultC: Double = 45
-    static let engageMinC: Double = 45
-    static let engageMaxC: Double = 85
-}
-```
-
-Lowering the engage threshold makes cooling start earlier. Increasing the
-threshold, dwell, or hysteresis makes the controller less eager. The tier fan
-values are RPM-calibrated; read [`FINDINGS.md`](FINDINGS.md) before changing
-them.
+### Standby LED Persistence
+Unlike vendor defaults that revert to factory red flashing when fan stops, Smart Cooler Control maintains the thermal LED state during Auto Standby, keeping the ring in a serene, calm Blue so the user knows the system is healthy and active.

@@ -42,9 +42,11 @@ final class FlydigiDriver: CoolerDriver {
 
     private func startTelemetryPolling() {
         telemetryPollTimer?.invalidate()
-        telemetryPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.pollTelemetry()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        telemetryPollTimer = timer
         pollTelemetry()
     }
 
