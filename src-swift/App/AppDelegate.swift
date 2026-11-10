@@ -68,6 +68,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Latest thermal sample, refreshed each tick.
     var thermal = ThermalMonitor.Reading(thermalState: .nominal, dieTemperatureC: nil)
+
+    /// Universal Hardware Safety Governor:
+    /// Tripped when Mac die temperature drops below Config.Safety.condensationCutoffC (36.0°C).
+    /// Re-arms only when die temperature reaches Config.Safety.condensationRearmC (38.0°C).
+    var isSafetyGovernorActive: Bool = false
+
+    /// When Turbo Max was activated, used for 15-minute auto-decay.
+    var turboStartTime: TimeInterval?
+
     /// Latest telemetry frame from the cooler, cleared when the link drops.
     var telemetry: CoolerTelemetry?
     /// Whether the magnetic mount is seated.
@@ -257,16 +266,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         thermal = ThermalMonitor.read()
         updateSwitchMonitor()
         expireManualTimerIfDue()
+        checkTurboDecayIfDue()
+        evaluateSafetyGovernor()
 
-        if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
-            runAutopilot()
+        if !isSafetyGovernorActive {
+            if appMode == .auto, tickCount.isMultiple(of: Config.Timing.autopilotEveryTicks) {
+                runAutopilot()
+            }
         }
         led.updateAutoColor(dieC: thermal.dieTemperatureC, autopilot: autopilot)
 
         // The cooler occasionally drops a write, so re-assert periodically —
         // cheap insurance against the UI and the hardware silently diverging.
         if ble.isConnected, tickCount.isMultiple(of: Config.Timing.heartbeatEveryTicks) {
-            ble.reassertCurrentSettings()
+            if !isSafetyGovernorActive {
+                ble.reassertCurrentSettings()
+            } else if ble.mode != .off || ble.fanPercent != 0 {
+                ble.apply(mode: .off, fanPercent: 0)
+            }
         }
 
         // Only so an app left running for days still notices a release; the
@@ -279,8 +296,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         writeProbeSnapshot()
     }
 
+    /// Evaluates the universal condensation safety barrier across ALL modes.
+    /// Trips at < 36.0°C and re-arms at >= 38.0°C.
+    private func evaluateSafetyGovernor() {
+        guard let dieC = thermal.dieTemperatureC else { return }
+
+        if !isSafetyGovernorActive {
+            if dieC < Config.Safety.condensationCutoffC {
+                isSafetyGovernorActive = true
+                EventLogger.record("🛡️ Safety Governor tripped: die temp \(String(format: "%.1f", dieC))°C < \(Config.Safety.condensationCutoffC)°C — forcing Standby across \(appMode.rawValue) mode to prevent condensation")
+                if ble != nil && ble.isConnected {
+                    ble.apply(mode: .off, fanPercent: 0)
+                }
+            }
+        } else {
+            // Already active: check re-arm threshold
+            if dieC >= Config.Safety.condensationRearmC {
+                isSafetyGovernorActive = false
+                EventLogger.record("🛡️ Safety Governor cleared: die temp \(String(format: "%.1f", dieC))°C >= \(Config.Safety.condensationRearmC)°C — re-arming \(appMode.rawValue) mode")
+                reapplyActiveMode()
+            } else {
+                // Ensure device remains off while governor is active
+                if ble != nil && ble.isConnected && (ble.mode != .off || ble.fanPercent != 0) {
+                    ble.apply(mode: .off, fanPercent: 0)
+                }
+            }
+        }
+    }
+
+    /// Auto-decays Turbo Max mode back to Auto after 15 minutes.
+    private func checkTurboDecayIfDue() {
+        guard appMode == .turbo, let start = turboStartTime else { return }
+        let elapsed = Date().timeIntervalSince1970 - start
+        if elapsed >= Config.Safety.turboDecaySeconds {
+            EventLogger.record("Turbo Max 15m duration elapsed — auto-decaying to Auto")
+            turboStartTime = nil
+            selectMode(.auto)
+        }
+    }
+
+    /// Re-applies active mode settings when safety governor disengages.
+    func reapplyActiveMode() {
+        guard !isSafetyGovernorActive else { return }
+        switch appMode {
+        case .auto:
+            autopilot.resetStandby(isStandby: false)
+            runAutopilot()
+        case .manual:
+            let step = UserDefaults.standard.object(forKey: Config.Key.manualStep) as? Int
+                ?? CoolingSliderView.defaultStep
+            applyManualStep(step, alreadySwitching: true)
+        case .turbo:
+            ble.apply(mode: .max, fanPercent: 100)
+        }
+    }
+
     /// Evaluates the autopilot and applies its decision, if anything changed.
     func runAutopilot() {
+        guard !isSafetyGovernorActive else { return }
         let decision = autopilot.evaluate(thermalState: thermal.thermalState,
                                           dieC: thermal.dieTemperatureC,
                                           now: Date().timeIntervalSince1970)

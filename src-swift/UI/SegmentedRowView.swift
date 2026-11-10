@@ -93,36 +93,46 @@ class SegmentedRowView: PanelRowView {
     @objc func segmentChanged() {}
 }
 
-/// Auto / Manual — chooses which control loop owns the cooler.
+/// Auto / Manual / Turbo — chooses which control loop owns the cooler.
 final class ModeSwitchView: SegmentedRowView {
 
     var onSelect: ((AppMode) -> Void)?
 
-    /// One sentence per mode, and only the selected one is shown. Describing
-    /// both at once meant half the caption was always about a mode the user had
-    /// not chosen — and the Auto half named a threshold slider that Manual
-    /// hides, so it pointed at something that wasn't on screen.
     private static let autoCaption =
-        "Cooling follows the Mac's temperature: it starts at your engage "
-        + "threshold and backs off as the Mac cools."
+        "Deterministic 4-stage cooling (50°/60°/65°/70°C) with anti-chattering dwell and safety."
     private static let manualCaption =
-        "Cooling holds the level you set until you change it, or until the "
-        + "auto-off timer ends the session."
+        "Holds your chosen cooling level. Condensation safety (< 36°C) remains active."
+    private static let turboCaption =
+        "Dispatches 100% maximum cooling power. Automatically decays to Auto after 15 minutes."
 
     init(width: CGFloat) {
         // The section title is a menu row of its own now, outside the panel.
-        super.init(width: width, title: nil, labels: ["Auto", "Manual"],
-                   captions: [Self.autoCaption, Self.manualCaption])
+        super.init(width: width, title: nil, labels: ["Auto", "Manual", "Turbo"],
+                   captions: [Self.autoCaption, Self.manualCaption, Self.turboCaption])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func setMode(_ mode: AppMode) {
-        control.selectedSegment = (mode == .auto) ? 0 : 1
-        setCaption(mode == .auto ? Self.autoCaption : Self.manualCaption)
+        switch mode {
+        case .auto:
+            control.selectedSegment = 0
+            setCaption(Self.autoCaption)
+        case .manual:
+            control.selectedSegment = 1
+            setCaption(Self.manualCaption)
+        case .turbo:
+            control.selectedSegment = 2
+            setCaption(Self.turboCaption)
+        }
     }
 
     override func segmentChanged() {
-        onSelect?(control.selectedSegment == 0 ? .auto : .manual)
+        switch control.selectedSegment {
+        case 0: onSelect?(.auto)
+        case 1: onSelect?(.manual)
+        case 2: onSelect?(.turbo)
+        default: break
+        }
     }
 }
 

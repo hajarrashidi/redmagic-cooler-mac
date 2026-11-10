@@ -91,10 +91,9 @@ extension AppDelegate {
         modeSwitch.setMode(appMode)
         modeSwitch.setEnabled(enabled)
 
-        autoOptions.configure(engageC: autopilot.engageC,
-                              shutoffC: autopilot.shutoffC,
-                              minFanPercent: autopilot.minFanPercent,
-                              profile: autopilot.profile)
+        autoOptions.configure(currentTier: autopilot.currentTier,
+                              dieTempC: thermal.dieTemperatureC,
+                              isSafetyActive: isSafetyGovernorActive)
         autoOptions.setEnabled(enabled)
 
         // While a switch is in flight the fan write hasn't landed yet, so
@@ -137,11 +136,11 @@ extension AppDelegate {
 
         rows.coolingHeader.isHidden = !connected
         rows.modeSwitch.isHidden = !connected
-        rows.autoOptions.isHidden = !connected || isManual
-        rows.coolingSlider.isHidden = !connected || !isManual
+        rows.autoOptions.isHidden = !connected || (appMode != .auto)
+        rows.coolingSlider.isHidden = !connected || (appMode != .manual)
         // The auto-off limit belongs to Manual, and only Manual: Auto stands
         // itself down as the Mac cools, so it has nothing to time out.
-        rows.manualTimer.isHidden = !connected || !isManual
+        rows.manualTimer.isHidden = !connected || (appMode != .manual)
         // LED controls only mean something while the cooler is running — its
         // LED cannot show a colour when it isn't.
         rows.ledHeader.isHidden = !coolerOn
@@ -237,22 +236,17 @@ extension AppDelegate {
 
         let statusDetail: String?
         if connected {
-            if appMode == .manual {
+            if isSafetyGovernorActive {
+                statusDetail = "🛡️ Safety Intercepted (< 36°C)"
+            } else if appMode == .turbo {
+                statusDetail = "Turbo Max Boost (100%)"
+            } else if appMode == .manual {
                 statusDetail = ble.mode.isOn ? "Manual Cooling (\(ble.fanPercent)%)" : "Standby"
             } else {
-                let dieC = thermal.dieTemperatureC ?? 0.0
-                if autopilot.isStandby || dieC < autopilot.shutoffC {
-                    if dieC < autopilot.shutoffC {
-                        statusDetail = "Standby (< \(Int(round(autopilot.shutoffC)))°C Off)"
-                    } else {
-                        statusDetail = "Standby (resting until ≥ \(Int(round(autopilot.wakeThresholdC)))°C)"
-                    }
-                } else if dieC < autopilot.engageC {
-                    statusDetail = "Min Power (\(ble.fanPercent)%) — Mac below engage"
-                } else if autopilot.profile == .smartMax {
-                    statusDetail = "Smart Max Boost (100%) [≥ \(Int(round(autopilot.engageC)))°C]"
+                if autopilot.currentTier == .standby {
+                    statusDetail = "Auto Standby (Idle < 50°C)"
                 } else {
-                    statusDetail = "Balanced Ramp (\(ble.fanPercent)%) [≥ \(Int(round(autopilot.engageC)))°C]"
+                    statusDetail = "Auto \(autopilot.currentTier.label)"
                 }
             }
         } else {
@@ -284,7 +278,20 @@ extension AppDelegate {
     private func coolerNote(connected: Bool) -> CoolerPanelView.Note? {
         guard connected else { return nil }
         if isSwitching { return .switching }
+        if isSafetyGovernorActive {
+            return .safetyIntercepted(cutoffC: Config.Safety.condensationCutoffC,
+                                      rearmC: Config.Safety.condensationRearmC)
+        }
         if switchMonitor.looksPoweredOff { return .powerSwitchOff }
+        if appMode == .turbo {
+            var remainingM: Int? = nil
+            if let start = turboStartTime {
+                let elapsed = Date().timeIntervalSince1970 - start
+                let remaining = max(0, Int(ceil((Config.Safety.turboDecaySeconds - elapsed) / 60.0)))
+                remainingM = remaining
+            }
+            return .turboMax(remainingMinutes: remainingM)
+        }
         if appMode == .manual {
             guard ble.mode.isOn else {
                 // Off, and the user didn't do it — say who did.
@@ -296,7 +303,7 @@ extension AppDelegate {
             return manualTimer.deadline == nil ? .manualStaysOn : nil
         }
         // Auto below its threshold: doing nothing, on purpose.
-        return ble.mode.isOn ? nil : .autoWaiting(shutoffC: Int(round(autopilot.shutoffC)))
+        return ble.mode.isOn ? nil : .autoWaiting(shutoffC: Int(round(autopilot.wakeThresholdC)))
     }
 
 }

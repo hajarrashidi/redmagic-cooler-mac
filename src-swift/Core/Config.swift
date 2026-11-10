@@ -120,32 +120,54 @@ enum Config {
         static let instanceHandoffTimeout: TimeInterval = 3.5
     }
 
-    // ── Autopilot tuning ─────────────────────────────────────────────────────
+    // ── Autopilot tuning & Step-Ladder ───────────────────────────────────────
 
     enum Autopilot {
-        /// Degrees the die must fall *below* a tier's engage point before that
-        /// tier releases — stops the cooler oscillating around a threshold.
-        static let hysteresisC: Double = 5.0
-        /// How long the temperature must stay low before stepping down a tier.
-        static let cooldownDwell: TimeInterval = 15.0
+        /// Deterministic 4-stage Step-Ladder Trigger Thresholds (°C)
+        static let tier1TriggerC: Double = 50.0 // Min active cooling floor (40% fan)
+        static let tier2TriggerC: Double = 60.0 // Medium cooling (60% fan)
+        static let tier3TriggerC: Double = 65.0 // High boost (80% fan)
+        static let tier4TriggerC: Double = 70.0 // Full Turbo limit (100% fan)
 
-        /// Unified temperature scale shared by both Engage and Shutoff sliders (30°C to 80°C)
-        /// so both sliders have identical visual proportions and 1:1 physical alignment.
+        /// Asymmetric Anti-Chattering Release Thresholds (°C)
+        static let tier1ReleaseC: Double = 42.0 // 8°C wide buffer below 50°C
+        static let tier2ReleaseC: Double = 55.0 // 5°C buffer below 60°C
+        static let tier3ReleaseC: Double = 61.0 // 4°C buffer below 65°C
+        static let tier4ReleaseC: Double = 66.0 // 4°C buffer below 70°C
+
+        /// Step-down anti-chattering dwell time (seconds)
+        static let stepDownDwellSeconds: TimeInterval = 20.0
+        /// Thermal velocity drop threshold (°C/s): if die drops faster than this, compress dwell to 3s
+        static let velocityBypassRateCPerSec: Double = -1.0
+        static let fastDwellSeconds: TimeInterval = 3.0
+
+        /// Legacy slider compatibility constants
+        static let hysteresisC: Double = 5.0
+        static let cooldownDwell: TimeInterval = 20.0
         static let tempMinC: Double = 30.0
         static let tempMaxC: Double = 80.0
-
-        static let engageDefaultC: Double = 45.0
-        static let engageMinC: Double = tempMinC + 2.0 // 32.0
-        static let engageMaxC: Double = tempMaxC       // 80.0
-
-        /// User-configurable shutoff temperature: below this, cooling safely shuts off completely (0%)
+        static let engageDefaultC: Double = 50.0
+        static let engageMinC: Double = tempMinC + 2.0
+        static let engageMaxC: Double = tempMaxC
         static let shutoffDefaultC: Double = 38.0
-        static let shutoffMinC: Double = tempMinC       // 30.0
-        static let shutoffMaxC: Double = engageMaxC - 2.0 // 78.0 (strictly at least 2°C below engageMaxC)
-
-        /// User-configurable minimum fan speed in Smart Max and Balanced when below engage threshold:
-        static let smartMaxMinFanDefault: UInt8 = 40 // 40% fan power (quietest physical hardware floor, ~6,000 RPM)
+        static let shutoffMinC: Double = tempMinC
+        static let shutoffMaxC: Double = engageMaxC - 2.0
+        static let smartMaxMinFanDefault: UInt8 = 40
         static let shutoffFloorC: Double = 38.0
+    }
+
+    // ── Safety Governor ──────────────────────────────────────────────────────
+
+    enum Safety {
+        /// Universal condensation cutoff: whenever Mac die drops below this temperature,
+        /// TEC and fan are forcefully commanded to Standby (0W / 0%) across ALL modes.
+        static let condensationCutoffC: Double = 36.0
+
+        /// Asymmetric re-arm threshold: cooler remains off until Mac die warms back to this temperature.
+        static let condensationRearmC: Double = 38.0
+
+        /// Auto-decay duration for Turbo Max mode (15 minutes).
+        static let turboDecaySeconds: TimeInterval = 15.0 * 60.0
     }
 
     // ── Diagnostics ──────────────────────────────────────────────────────────

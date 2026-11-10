@@ -15,17 +15,21 @@ extension AppDelegate {
 
         switch mode {
         case .auto:
+            turboStartTime = nil
             // Evaluate immediately rather than waiting for the next autopilot
             // tick, so the cooler follows the temperature the moment Auto is
             // chosen instead of holding the manual level for a few seconds.
-            EventLogger.record("switch → auto")
+            EventLogger.record("switch → auto (Step-Ladder)")
             // Auto backs itself off as the Mac cools, so it needs no deadline.
             manualTimer.stop()
             manualTimedOut = false
             autopilot.resetStandby()
-            runAutopilot()
+            if !isSafetyGovernorActive {
+                runAutopilot()
+            }
 
         case .manual:
+            turboStartTime = nil
             manualTimedOut = false
             // Entering Manual should actually cool. If the remembered level is
             // Off — never set, or left off last time — fall back to a mid step
@@ -35,6 +39,17 @@ extension AppDelegate {
             if step <= 0 { step = CoolingSliderView.defaultStep }
             EventLogger.record("switch → manual")
             applyManualStep(step, alreadySwitching: true)
+
+        case .turbo:
+            manualTimer.stop()
+            manualTimedOut = false
+            turboStartTime = Date().timeIntervalSince1970
+            EventLogger.record("switch → turbo (100% boost, 15m decay)")
+            if !isSafetyGovernorActive {
+                ble.apply(mode: .max, fanPercent: 100)
+            } else {
+                ble.apply(mode: .off, fanPercent: 0)
+            }
         }
         refresh()
     }
@@ -115,7 +130,12 @@ extension AppDelegate {
             manualTimer.stop()
         }
 
-        ble.apply(mode: step.mode, fanPercent: step.fanPercent)
+        if !isSafetyGovernorActive {
+            ble.apply(mode: step.mode, fanPercent: step.fanPercent)
+        } else {
+            ble.apply(mode: .off, fanPercent: 0)
+            EventLogger.record("manual → \(step.name) (held in Standby by Safety Governor < 36°C)")
+        }
         EventLogger.record("manual → \(step.name)")
         refresh()
     }

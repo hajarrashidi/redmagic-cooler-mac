@@ -1,9 +1,10 @@
 import Foundation
 import CoreBluetooth
 
-// Standalone test script to verify profile matching, driver isolation, and autopilot 38°C shutoff
+// Standalone test script to verify profile matching, driver isolation, Step-Ladder engine,
+// asymmetric hysteresis, dynamic dwell, velocity bypass, and Universal Condensation Safety Governor.
 func runTests() {
-    print("🚀 Starting Smart Cooler Control Profile & Driver Test Suite...")
+    print("🚀 Starting Smart Cooler Control Test Suite (Tri-Mode & Step-Ladder Engine)...")
 
     // 1. Device Profile Matching Tests
     let testCases: [(name: String, expectedId: String?)] = [
@@ -74,152 +75,136 @@ func runTests() {
         print("  ✅ Driver: \(profile.id) -> \(type(of: driver)) with Service \(driver.serviceUUID.uuidString)")
     }
 
-    // 5. AutopilotPolicy Smart Max Baseline & Configurable Shutoff
-    print("\n🧠 Testing Autopilot Smart Max Baseline & Shutoff Cutoff...")
-    let policy = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
-    policy.setProfile(.smartMax)
+    // 5. Deterministic Step-Ladder Thermal Engine Tests
+    print("\n🧠 Testing Deterministic 4-Stage Step-Ladder Thermal Engine...")
+    let engine = AutopilotPolicy()
+    engine.resetStandby(isStandby: true)
 
-    // A. Mac is hot (50°C >= engage 50°C): MUST ENGAGE MAX (100% fan)
-    var dec = policy.evaluate(thermalState: .nominal, dieC: 50.0, now: 1000)
-    assert(dec.tier.mode == .max && dec.tier.fanPercent == 100, "Expected cooler max at 50°C")
-    print("  ✅ Smart Max High Heat: 50°C -> Cooler engages at MAX (100% fan)")
+    // A. Idle / Standby: Die at 45°C (< 50°C trigger) -> Standby (0% fan / .off)
+    var dec = engine.evaluate(thermalState: .nominal, dieC: 45.0, now: 1000)
+    assert(dec.tier.coolingTier == .standby && dec.tier.fanPercent == 0 && dec.tier.mode == .off,
+           "Expected Standby at 45°C, got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Idle: 45°C (< 50°C) -> Standby (0% fan / OFF)")
 
-    // B. Mac at 41°C (normal operational range): MUST HOLD 40% MIN POWER!
-    dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1001)
-    assert(dec.tier.fanPercent == 40, "Expected Smart Max to hold configured min power (40%) at 41°C, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Baseline: 41°C -> Holds quiet configured min power (40% fan)")
+    // B. Trigger Tier 1: Die reaches 50.0°C (>= 50°C) -> Immediate Step-Up to Tier 1 (40% fan / .low)
+    dec = engine.evaluate(thermalState: .nominal, dieC: 50.0, now: 1001)
+    assert(dec.tier.coolingTier == .tier1_low && dec.tier.fanPercent == 40 && dec.tier.mode == .low,
+           "Expected Tier 1 at 50°C, got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Tier 1 Trigger: 50.0°C -> Immediate Step-Up to Tier 1 (40% fan / Low)")
 
-    // C. Mac at 49°C (< 50°C engage threshold): STILL holds min power until threshold is reached!
-    dec = policy.evaluate(thermalState: .nominal, dieC: 49.0, now: 1002)
-    assert(dec.tier.fanPercent == 40, "Expected Smart Max to hold min power below engage threshold, got \(dec.tier.fanPercent)%")
-    print("  ✅ Smart Max Pre-Engage: 49°C (< 50°C) -> Faithfully holds min power (40% fan)")
+    // C. Asymmetric Hysteresis Hold Tier 1: Die drops to 46°C (>= 42°C release threshold) -> STILL HOLDS Tier 1!
+    // No chattering loop!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 46.0, now: 1002)
+    assert(dec.tier.coolingTier == .tier1_low && dec.tier.fanPercent == 40,
+           "Expected Tier 1 hold at 46°C (>= 42°C release), got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Tier 1 Asymmetric Hold: 46°C (>= 42°C release) -> Faithfully holds 40% fan")
 
-    // D. Mac cools all the way down to 37°C (< 38°C shutoff threshold): MUST SHUT OFF COMPLETELY
-    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1003)
-    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off when Mac drops below 38°C shutoff threshold")
-    print("  ✅ Smart Max Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
+    // D. Normal Step-Down Dwell Timing: Die gently cools from 42.1°C to 41.8°C (dT/dt = -0.3°C/s > -1.0°C/s)
+    _ = engine.evaluate(thermalState: .nominal, dieC: 42.1, now: 1003)
+    dec = engine.evaluate(thermalState: .nominal, dieC: 41.8, now: 1004) // rate = -0.3°C/s -> normal 20s dwell armed!
+    assert(dec.tier.coolingTier == .tier1_low, "Expected Tier 1 to hold during dwell at t=1004")
+    print("  ✅ Step-Ladder Step-Down Dwell Hold: 41.8°C at t=1004s -> Holds Tier 1 pending 20s dwell")
 
-    // E. 5°C Hysteresis Protection: Mac warms to 41°C (< wake threshold 43°C) -> MUST REMAIN IN STANDBY (NO CHATTERING!)
-    dec = policy.evaluate(thermalState: .nominal, dieC: 41.0, now: 1004)
-    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler to hold Standby at 41°C (< 43°C wake)")
-    print("  ✅ 5°C Hysteresis Hold: 41°C (< 43°C wake) -> Holds Standby safely without chattering")
+    // At t = 1018 (elapsed = 14s < 20s): STILL holds Tier 1!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 41.8, now: 1018)
+    assert(dec.tier.coolingTier == .tier1_low, "Expected Tier 1 to hold at t=1018s (14s < 20s)")
+    print("  ✅ Step-Ladder Dwell in-flight: 14s elapsed (< 20s) -> Fan stays smooth, no premature drop")
 
-    // F. Wake Up at 43°C (38°C shutoff + 5°C hysteresis): Wakes up and engages configured min fan!
-    policy.setMinFanPercent(50)
-    dec = policy.evaluate(thermalState: .nominal, dieC: 43.0, now: 1005)
-    assert(dec.tier.fanPercent == 50, "Expected cooler to wake up at 43°C and hold 50% min power, got \(dec.tier.fanPercent)%")
-    print("  ✅ 5°C Hysteresis Wake-Up: 43°C (shutoff + 5°C) -> Wakes up smoothly at configured 50% fan")
+    // At t = 1025 (elapsed = 21s >= 20s): Dwell satisfied -> Transitions safely to Standby!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 41.8, now: 1025)
+    assert(dec.tier.coolingTier == .standby && dec.tier.fanPercent == 0, "Expected Standby after 20s dwell")
+    print("  ✅ Step-Ladder Dwell Complete: 21s elapsed (>= 20s) -> Smoothly steps down to Standby (0% fan)")
 
-    // G. While actively cooling, it continues cooling at 38°C (shutoff boundary) without premature cutoff:
-    dec = policy.evaluate(thermalState: .nominal, dieC: 38.0, now: 1006)
-    assert(dec.tier.fanPercent == 50, "Expected cooler to remain actively cooling down to 38°C")
-    print("  ✅ Active Cooling Hold: Continues cooling at 38°C down to shutoff threshold")
+    // E. Immediate Multi-Tier Thermal Spike Jump:
+    // Die suddenly spikes from Standby to 72.0°C (heavy workload compilation) -> JUMPS DIRECTLY TO TIER 4 TURBO!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 72.0, now: 1030)
+    assert(dec.tier.coolingTier == .tier4_turbo && dec.tier.fanPercent == 100 && dec.tier.mode == .max,
+           "Expected immediate jump to Tier 4 Turbo at 72°C, got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Spike Bypass: 41°C -> 72°C spike -> Instantly engages Tier 4 Turbo (100% fan / Max)")
 
-    // H. At 37°C (< 38°C), it safely shuts off again:
-    dec = policy.evaluate(thermalState: .nominal, dieC: 37.0, now: 1007)
-    assert(dec.tier.mode == .off && dec.tier.fanPercent == 0, "Expected cooler off below 38°C shutoff")
-    print("  ✅ Smart Max Shutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan)")
+    // F. Asymmetric Hold Tier 4: Die drops to 67.0°C (>= 66°C release threshold) -> MUST HOLD TIER 4 TURBO!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 67.0, now: 1035)
+    assert(dec.tier.coolingTier == .tier4_turbo && dec.tier.fanPercent == 100,
+           "Expected Tier 4 hold at 67°C (>= 66°C release), got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Tier 4 Asymmetric Hold: 67.0°C (>= 66°C release) -> Holds Tier 4 (100% fan)")
 
-    // 6. Test Balanced Dynamic Acoustic Ramp & Shutoff
-    print("\n🧠 Testing Autopilot Balanced Dynamic Acoustic Ramp & Shutoff...")
-    let balanced = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 40)
-    balanced.setProfile(.balanced)
+    // G. Step-Down from Tier 4 to Tier 3: Die drops to 63.0°C (< 66°C release, >= 61°C)
+    // After 20s dwell, it settles into Tier 3 (80% fan / .medium)
+    _ = engine.evaluate(thermalState: .nominal, dieC: 63.0, now: 1040)
+    dec = engine.evaluate(thermalState: .nominal, dieC: 63.0, now: 1061)
+    assert(dec.tier.coolingTier == .tier3_high && dec.tier.fanPercent == 80,
+           "Expected Tier 3 (80% fan) at 63°C after dwell, got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Tier 4 -> Tier 3: 63.0°C (< 66°C) -> Settles into Tier 3 (80% fan)")
 
-    // A. Cold Mac (37°C < shutoff 38°C): MUST SHUT OFF COMPLETELY (0% fan)
-    var bDec = balanced.evaluate(thermalState: .nominal, dieC: 37.0)
-    assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off below shutoff threshold")
-    print("  ✅ Balanced Cold Cutoff: 37°C (< 38°C) -> Cooler shuts OFF completely (0% fan / Standby)")
+    // H. Step-Down from Tier 3 to Tier 2: Die drops to 57.0°C (< 61°C release, >= 55°C)
+    _ = engine.evaluate(thermalState: .nominal, dieC: 57.0, now: 1070)
+    dec = engine.evaluate(thermalState: .nominal, dieC: 57.0, now: 1091)
+    assert(dec.tier.coolingTier == .tier2_med && dec.tier.fanPercent == 60,
+           "Expected Tier 2 (60% fan) at 57°C after dwell, got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Tier 3 -> Tier 2: 57.0°C (< 61°C) -> Settles into Tier 2 (60% fan)")
 
-    // B. Wake up at 43°C (shutoff 38°C + 5°C hysteresis): starts at 40% fan (user-chosen min power)
-    bDec = balanced.evaluate(thermalState: .nominal, dieC: 43.0)
-    assert(bDec.tier.mode == .low && bDec.tier.fanPercent == 40, "Expected Balanced at 40% at 43°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Acoustic Floor: 43°C -> Wakes up gently at 40% fan")
+    // I. Thermal Velocity Bypass (dT/dt <= -1.0°C/s):
+    // Die rapidly plunges from 57°C to 45°C in 2 seconds (rate = -6.0°C/s)
+    // Normal dwell of 20s is bypassed; fast dwell of 3s allows immediate step-down to prevent chassis overcooling!
+    _ = engine.evaluate(thermalState: .nominal, dieC: 57.0, now: 1100)
+    _ = engine.evaluate(thermalState: .nominal, dieC: 45.0, now: 1102) // Rapid drop detected!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 45.0, now: 1106) // 4s elapsed >= 3s fast dwell
+    assert(dec.tier.coolingTier == .tier1_low && dec.tier.fanPercent == 40,
+           "Expected fast dwell bypass down to Tier 1 at 45°C, got \(dec.tier.label)")
+    print("  ✅ Thermal Velocity Bypass: Rapid cool (-6°C/s) -> Bypasses 20s dwell, steps down in 3s")
 
-    // C. Cooling back down at 41°C (below engage 50°C): MUST FAITHFULLY HOLD 40% MIN POWER!
-    bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(bDec.tier.fanPercent == 40, "Expected Balanced to hold 40% min power below engage 50°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Min Power Hold: 41°C (< 50°C) -> Faithfully holds 40% fan")
+    // 6. Universal Condensation Safety Governor Tests (< 36°C Cutoff & >= 38°C Re-arm)
+    print("\n🛡️ Testing Universal Condensation Safety Governor (< 36°C Cutoff & >= 38°C Re-Arm)...")
 
-    // D. User Case Replication: Engage 52°C, Shutoff 41°C, Min Power 40%, Die 48°C
-    // In previous buggy version, this produced 65% fan! In fixed version, it MUST BE EXACTLY 40%!
-    let userCase = AutopilotPolicy(engageC: 52.0, shutoffC: 41.0, minFanPercent: 40)
-    userCase.setProfile(.balanced)
-    let userDec = userCase.evaluate(thermalState: .nominal, dieC: 48.0)
-    assert(userDec.tier.fanPercent == 40, "User Case: 48°C (< 52°C engage) MUST hold 40% min power, got \(userDec.tier.fanPercent)%")
-    print("  ✅ User Case Verified: Mac at 48°C with Engage 52°C and Min Power 40% -> EXACTLY 40% fan (not 65%!)")
+    // A. Sub-36°C Die Temperature forces Standby immediately across ALL modes
+    let safetyPolicy = AutopilotPolicy()
+    safetyPolicy.setTier(.tier4_turbo) // Pretend it was running at max
+    let coldDec = safetyPolicy.evaluate(thermalState: .nominal, dieC: 35.5, now: 2000)
+    assert(coldDec.tier.coolingTier == .standby && coldDec.tier.fanPercent == 0 && coldDec.tier.mode == .off,
+           "Expected Safety Governor to force Standby at 35.5°C (< 36°C)")
+    print("  ✅ Universal Cutoff: Die 35.5°C (< 36.0°C) -> Hard cutoff to Standby (0% fan / 0W)")
 
-    // E. Progressive Acoustic Ramp above Engage (e.g. at 57.5°C with Engage 50°C and 40% min power):
-    // excess = 7.5°C, span = 15°C, progress = 0.5. raw = 40 + 0.5 * 60 = 70% fan!
-    bDec = balanced.evaluate(thermalState: .nominal, dieC: 57.5)
-    assert(bDec.tier.fanPercent == 70, "Expected Balanced ramp at 70% at 57.5°C, got \(bDec.tier.fanPercent)%")
-    print("  ✅ Balanced Post-Engage Ramp: 57.5°C (> 50°C) -> Smoothly ramping at 70% fan")
+    // B. Re-Arm Deadband: Die warms to 37.0°C (< 38.0°C re-arm threshold) -> MUST REMAIN IN STANDBY
+    let deadbandDec = safetyPolicy.evaluate(thermalState: .nominal, dieC: 37.0, now: 2001)
+    assert(deadbandDec.tier.coolingTier == .standby && deadbandDec.tier.fanPercent == 0,
+           "Expected Safety Governor to hold Standby at 37.0°C (< 38°C re-arm)")
+    print("  ✅ Anti-Hunting Deadband: Die 37.0°C (< 38.0°C) -> Retains Standby, no relay chattering")
 
-    // F. At 65°C (15°C above engage 50°C): 100% max fan
-    bDec = balanced.evaluate(thermalState: .nominal, dieC: 65.0)
-    assert(bDec.tier.mode == .max && bDec.tier.fanPercent == 100, "Expected Balanced 100% at 15°C above engage")
-    print("  ✅ Balanced Full Power: 65°C (engage + 15°C) -> 100% MAX fan")
+    // 7. Tri-Mode State Representation & Turbo Max Mode
+    print("\n⚡ Testing Tri-Mode Representation & Turbo Max...")
+    assert(AppMode(persisted: "auto") == .auto)
+    assert(AppMode(persisted: "manual") == .manual)
+    assert(AppMode(persisted: "turbo") == .turbo)
+    assert(AppMode(persisted: "off") == .manual) // Legacy fallback
+    print("  ✅ AppMode Serialization: auto, manual, turbo, legacy 'off' roundtrip correctly")
 
-    // G. Test Hardware Floor Clamping: legacy 20% or 30% safely clamps to real 40% physical floor
-    let legacyClamp = AutopilotPolicy(engageC: 50.0, shutoffC: 38.0, minFanPercent: 20)
-    assert(legacyClamp.minFanPercent == 40, "Expected minFanPercent to clamp to 40% hardware floor")
-    print("  ✅ Hardware Floor Clamping: Legacy 20%/30% safely clamped to 40% real floor")
+    // Turbo Max configuration check
+    assert(Config.Safety.turboDecaySeconds == 15.0 * 60.0, "Turbo decay must be exactly 15 minutes (900s)")
+    assert(Config.Safety.condensationCutoffC == 36.0, "Condensation cutoff must be 36.0°C")
+    assert(Config.Safety.condensationRearmC == 38.0, "Condensation re-arm must be 38.0°C")
+    print("  ✅ Safety Constants: 36.0°C Cutoff, 38.0°C Re-Arm, 15m Turbo Decay confirmed")
 
-    // E. Change shutoff threshold in Balanced to 42°C: at 41°C it MUST now be OFF!
-    balanced.setShutoff(42.0)
-    bDec = balanced.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(bDec.tier.mode == .off && bDec.tier.fanPercent == 0, "Expected Balanced to shut off at 41°C when shutoff is 42°C")
-    print("  ✅ Balanced Custom Shutoff: 41°C (< custom 42°C) -> Cooler immediately shuts OFF")
-
-    // F. Test Independent Clamping (No Unexpected Pushing):
-    // Setting Shutoff when Engage is 50°C clamps Shutoff to at most 48°C (Engage remains untouched at 50°C!)
-    balanced.setEngage(50.0)
-    balanced.setShutoff(55.0) // Attempts to push above engage - 2.0
-    assert(balanced.shutoffC == 48.0, "Expected shutoff clamped to engage - 2 (48°C), got \(balanced.shutoffC)°C")
-    assert(balanced.engageC == 50.0, "Expected engage to remain untouched at 50°C, got \(balanced.engageC)°C")
-    print("  ✅ Independent Clamping: Shutoff stops safely at 48°C (engage − 2°C) without altering Engage (50°C)")
-
-    // Setting Engage down towards Shutoff (48°C) clamps Engage to at least 50°C (Shutoff remains untouched at 48°C!)
-    balanced.setEngage(40.0) // Attempts to push below shutoff + 2.0
-    assert(balanced.engageC == 50.0, "Expected engage clamped to shutoff + 2 (50°C), got \(balanced.engageC)°C")
-    assert(balanced.shutoffC == 48.0, "Expected shutoff to remain untouched at 48°C, got \(balanced.shutoffC)°C")
-    print("  ✅ Independent Clamping: Engage stops safely at 50°C (shutoff + 2°C) without altering Shutoff (48°C)")
-
-    // G. Test 100% Min Power Option:
-    policy.resetStandby()
-    policy.setMinFanPercent(100)
-    let fullMinDec = policy.evaluate(thermalState: .nominal, dieC: 41.0)
-    assert(fullMinDec.tier.fanPercent == 100 && fullMinDec.tier.mode == .max, "Expected full 100% max mode with 100% min power")
-    print("  ✅ 100% Min Power: Holds 100% max cooling throughout nominal zone")
-
-    // Both sliders share 30°C...80°C range: Shutoff knob is ALWAYS physically to the left of Engage knob
-    let shutoffVisualX = (44.0 - Config.Autopilot.tempMinC) / (Config.Autopilot.tempMaxC - Config.Autopilot.tempMinC)
-    let engageVisualX = (46.0 - Config.Autopilot.tempMinC) / (Config.Autopilot.tempMaxC - Config.Autopilot.tempMinC)
-    assert(shutoffVisualX < engageVisualX, "Shutoff (44°C) must be physically to the left of Engage (46°C)")
-    print("  ✅ 1:1 Scale Alignment: Shutoff 44°C (\(Int(shutoffVisualX * 100))%) < Engage 46°C (\(Int(engageVisualX * 100))%) — strictly non-inverted!")
-
-    // 7. Test Mac Family-Aware LED Thermal Color Calibration
+    // 8. Mac Family Thermal LED Calibration
     print("\n🌈 Testing Mac Family-Aware LED Thermal Color Calibration...")
-    // A. MacBook Air:
-    let airCold = policy.heatColor(for: 41.0, macModel: "MacBook Air")
+    let airCold = engine.heatColor(for: 41.0, macModel: "MacBook Air")
     assert(airCold.r == 0 && airCold.g == 255 && airCold.b == 0, "Expected pure green for MacBook Air at 41°C")
     print("  ✅ MacBook Air: 41°C (nominal) -> Pure Green LED (R: \(airCold.r), G: \(airCold.g), B: \(airCold.b))")
 
-    let airWarm = policy.heatColor(for: 65.0, macModel: "MacBook Air")
+    let airWarm = engine.heatColor(for: 65.0, macModel: "MacBook Air")
     assert(airWarm.r > 150 && airWarm.g > 150, "Expected warm yellow for MacBook Air at 65°C")
     print("  ✅ MacBook Air: 65°C (moderate) -> Yellow/Amber LED (R: \(airWarm.r), G: \(airWarm.g), B: \(airWarm.b))")
 
-    let airHot = policy.heatColor(for: 82.0, macModel: "MacBook Air")
+    let airHot = engine.heatColor(for: 82.0, macModel: "MacBook Air")
     assert(airHot.r == 255 && airHot.g == 0, "Expected alert red for MacBook Air at 82°C")
     print("  ✅ MacBook Air: 82°C (hot/throttling) -> Pure Red LED (R: \(airHot.r), G: \(airHot.g), B: \(airHot.b))")
 
-    // B. Mac Studio (tighter thermal threshold):
-    let studioCold = policy.heatColor(for: 41.0, macModel: "Mac Studio")
+    let studioCold = engine.heatColor(for: 41.0, macModel: "Mac Studio")
     assert(studioCold.r == 0 && studioCold.g == 255, "Expected green for Mac Studio at 41°C")
-    let studioHot = policy.heatColor(for: 74.0, macModel: "Mac Studio")
+    let studioHot = engine.heatColor(for: 74.0, macModel: "Mac Studio")
     assert(studioHot.r == 255 && studioHot.g == 0, "Expected red for Mac Studio at 74°C")
     print("  ✅ Mac Studio: 41°C -> Green, 74°C -> Pure Red LED")
 
-    print("\n🎉 ALL TESTS PASSED! Multi-brand catalog, driver isolation, Smart Max baseline, Balanced acoustic ramp & Mac family thermal LED verified.")
+    print("\n🎉 ALL TESTS PASSED! Deterministic Step-Ladder, Asymmetric Hysteresis, Dwell & Velocity Bypass, Universal Condensation Safety Governor & Multi-Brand Isolation verified.")
 }
 
 @main

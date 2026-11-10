@@ -31,24 +31,38 @@ final class CoolerPanelView: PanelRowView {
         case autoWaiting(shutoffC: Int)
         /// The manual auto-off timer ran down and switched the cooler off.
         case manualTimedOut
+        /// Universal condensation safety barrier intercepted cooling.
+        case safetyIntercepted(cutoffC: Double, rearmC: Double)
+        /// Turbo Max active.
+        case turboMax(remainingMinutes: Int?)
 
         var text: String {
             switch self {
             case .switching:             return "Switching… please wait"
             case .manualStaysOn:         return "Manual stays on until you turn it off"
             case .powerSwitchOff:        return "Cooler is idle, unmounted, or switch is off"
-            case .autoWaiting(let shut): return "Standby: Mac below \(shut)°C shutoff threshold"
+            case .autoWaiting(let shut): return "Standby: Mac below \(shut)°C trigger threshold"
             case .manualTimedOut:        return "Auto-off timer ended Manual cooling"
+            case .safetyIntercepted(let cutoff, let rearm):
+                return "🛡️ Safety Cutoff: Mac < \(Int(round(cutoff)))°C (Re-arms ≥ \(Int(round(rearm)))°C)"
+            case .turboMax(let remaining):
+                if let remaining {
+                    return "Turbo Max (100% boost · \(remaining)m remaining)"
+                } else {
+                    return "Turbo Max (100% full cooling boost)"
+                }
             }
         }
 
         var symbol: String {
             switch self {
-            case .switching:      return "arrow.triangle.2.circlepath"
+            case .switching:         return "arrow.triangle.2.circlepath"
             case .manualStaysOn,
-                 .manualTimedOut: return "exclamationmark.triangle"
-            case .powerSwitchOff: return "power.circle.fill"
-            case .autoWaiting:    return "thermometer.medium"
+                 .manualTimedOut:    return "exclamationmark.triangle"
+            case .powerSwitchOff:    return "power.circle.fill"
+            case .autoWaiting:       return "thermometer.medium"
+            case .safetyIntercepted: return "shield.fill"
+            case .turboMax:          return "bolt.fill"
             }
         }
 
@@ -66,6 +80,8 @@ final class CoolerPanelView: PanelRowView {
             // Auto idling below its threshold is the autopilot working, not a
             // warning about it.
             case .autoWaiting: return .secondaryLabelColor
+            case .safetyIntercepted: return .systemTeal
+            case .turboMax: return .systemRed
             }
         }
     }
