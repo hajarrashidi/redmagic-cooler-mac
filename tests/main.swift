@@ -194,25 +194,29 @@ func runTests() {
     assert(medMatch == 6, "Expected 80% fan to match Step 6 (Med), got \(medMatch)")
     print("  ✅ Med-to-Max Bug Seam Fixed: 100% fan correctly matches Step 9 (Max) without snapping back to Med")
 
-    // 8. Mac Family Thermal LED Calibration
-    print("\n🌈 Testing Mac Family-Aware LED Thermal Color Calibration...")
+    // 8. Mac Family Thermal LED Calibration (Azul -> Amarelo -> Laranja -> Vermelho)
+    print("\n🌈 Testing Mac Family-Aware LED Thermal Color Calibration (Blue -> Yellow -> Orange -> Red)...")
     let airCold = engine.heatColor(for: 41.0, macModel: "MacBook Air")
-    assert(airCold.r == 0 && airCold.g == 255 && airCold.b == 0, "Expected pure green for MacBook Air at 41°C")
-    print("  ✅ MacBook Air: 41°C (nominal) -> Pure Green LED (R: \(airCold.r), G: \(airCold.g), B: \(airCold.b))")
+    assert(airCold.r == 0 && airCold.b == 255, "Expected pure blue for MacBook Air at 41°C (cold/minimum), got R:\(airCold.r) B:\(airCold.b)")
+    print("  ✅ MacBook Air: 41°C (nominal/minimum) -> Pure Blue LED (R: \(airCold.r), G: \(airCold.g), B: \(airCold.b))")
 
-    let airWarm = engine.heatColor(for: 65.0, macModel: "MacBook Air")
-    assert(airWarm.r > 150 && airWarm.g > 150, "Expected warm yellow for MacBook Air at 65°C")
-    print("  ✅ MacBook Air: 65°C (moderate) -> Yellow/Amber LED (R: \(airWarm.r), G: \(airWarm.g), B: \(airWarm.b))")
+    let airYellow = engine.heatColor(for: 60.0, macModel: "MacBook Air")
+    assert(airYellow.r == 255 && airYellow.g >= 200 && airYellow.b == 0, "Expected yellow for MacBook Air at 60°C, got R:\(airYellow.r) G:\(airYellow.g)")
+    print("  ✅ MacBook Air: 60°C (moderate) -> Yellow LED (R: \(airYellow.r), G: \(airYellow.g), B: \(airYellow.b))")
+
+    let airOrange = engine.heatColor(for: 70.0, macModel: "MacBook Air")
+    assert(airOrange.r == 255 && airOrange.g <= 120 && airOrange.b == 0, "Expected orange for MacBook Air at 70°C, got R:\(airOrange.r) G:\(airOrange.g)")
+    print("  ✅ MacBook Air: 70°C (sustained load) -> Orange LED (R: \(airOrange.r), G: \(airOrange.g), B: \(airOrange.b))")
 
     let airHot = engine.heatColor(for: 82.0, macModel: "MacBook Air")
-    assert(airHot.r == 255 && airHot.g == 0, "Expected alert red for MacBook Air at 82°C")
+    assert(airHot.r == 255 && airHot.g == 0 && airHot.b == 0, "Expected alert red for MacBook Air at 82°C")
     print("  ✅ MacBook Air: 82°C (hot/throttling) -> Pure Red LED (R: \(airHot.r), G: \(airHot.g), B: \(airHot.b))")
 
-    let studioCold = engine.heatColor(for: 41.0, macModel: "Mac Studio")
-    assert(studioCold.r == 0 && studioCold.g == 255, "Expected green for Mac Studio at 41°C")
+    let studioCold = engine.heatColor(for: 40.0, macModel: "Mac Studio")
+    assert(studioCold.r == 0 && studioCold.b == 255, "Expected blue for Mac Studio at 40°C")
     let studioHot = engine.heatColor(for: 74.0, macModel: "Mac Studio")
-    assert(studioHot.r == 255 && studioHot.g == 0, "Expected red for Mac Studio at 74°C")
-    print("  ✅ Mac Studio: 41°C -> Green, 74°C -> Pure Red LED")
+    assert(studioHot.r == 255 && studioHot.g == 0 && studioHot.b == 0, "Expected red for Mac Studio at 74°C")
+    print("  ✅ Mac Studio: 40°C -> Blue, 74°C -> Pure Red LED")
 
     print("\n🎉 ALL TESTS PASSED! Deterministic Step-Ladder, Asymmetric Hysteresis, Dwell & Velocity Bypass, Universal Condensation Safety Governor & Multi-Brand Isolation verified.")
 }

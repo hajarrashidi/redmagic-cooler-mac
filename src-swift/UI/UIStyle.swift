@@ -208,17 +208,15 @@ enum UIStyle {
         ]).draw(at: point)
     }
 
-    /// Heat-graded colour for a Mac die temperature (°C). Thresholds are
-    /// presentation-only and intentionally independent of the autopilot's
-    /// engage points — this is "how hot does this feel", not "what will we do".
+    /// Heat-graded colour for a Mac die temperature (°C).
+    /// Thermal scale: Azul (frio) -> Amarelo (moderado) -> Laranja (quente) -> Vermelho (crítico).
     static func heatColor(_ celsius: Double?) -> NSColor {
         guard let celsius else { return .secondaryLabelColor }
         switch celsius {
-        case ..<50: return NSColor(srgbRed: 0.28, green: 0.72, blue: 0.95, alpha: 1.0)
-        case ..<60: return .systemGreen
-        case ..<72: return .systemYellow
-        case ..<82: return .systemOrange
-        default:    return .systemRed
+        case ..<50: return NSColor(srgbRed: 0.10, green: 0.58, blue: 1.0, alpha: 1.0) // Azul
+        case ..<62: return .systemYellow                                            // Amarelo
+        case ..<74: return .systemOrange                                            // Laranja
+        default:    return .systemRed                                               // Vermelho
         }
     }
 

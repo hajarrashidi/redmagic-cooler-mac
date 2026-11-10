@@ -62,7 +62,9 @@ enum AutoProfile: String, CaseIterable {
 
 /// Thermal calibration thresholds for Mac families based on Apple Silicon thermal envelopes.
 struct MacThermalThresholds {
-    let greenMaxC: Double
+    let blueMaxC: Double
+    let yellowC: Double
+    let orangeC: Double
     let redMinC: Double
 }
 
@@ -71,15 +73,15 @@ enum MacThermalProfile {
         let lower = model.lowercased()
         if lower.contains("studio") || lower.contains("mini") || (lower.contains("pro") && !lower.contains("macbook")) {
             // Mac Studio / Mac mini / Mac Pro: massive active heatsinks, lower normal temp band
-            return MacThermalThresholds(greenMaxC: 50.0, redMinC: 72.0)
+            return MacThermalThresholds(blueMaxC: 42.0, yellowC: 52.0, orangeC: 62.0, redMinC: 72.0)
         } else if lower.contains("air") {
-            // MacBook Air: fanless passive chassis dissipation; 35-55°C is nominal idle/light work, >78°C is hot
-            return MacThermalThresholds(greenMaxC: 55.0, redMinC: 80.0)
+            // MacBook Air: fanless passive chassis; <48°C cold (blue), 48-60°C yellow, 60-70°C orange, >=80°C red
+            return MacThermalThresholds(blueMaxC: 48.0, yellowC: 60.0, orangeC: 70.0, redMinC: 80.0)
         } else if lower.contains("macbook") {
-            // MacBook Pro: internal fans idle/off until ~75°C; 38-58°C nominal, >82°C hot
-            return MacThermalThresholds(greenMaxC: 58.0, redMinC: 82.0)
+            // MacBook Pro: internal fans idle/off until ~75°C; <50°C cold (blue), 50-62°C yellow, 62-72°C orange, >=82°C red
+            return MacThermalThresholds(blueMaxC: 50.0, yellowC: 62.0, orangeC: 72.0, redMinC: 82.0)
         } else {
-            return MacThermalThresholds(greenMaxC: 55.0, redMinC: 80.0)
+            return MacThermalThresholds(blueMaxC: 48.0, yellowC: 60.0, orangeC: 70.0, redMinC: 80.0)
         }
     }
 }
@@ -342,18 +344,36 @@ final class AutopilotPolicy {
     }
 
     /// Calculates realistic thermal LED colour based on host Mac hardware family.
-    /// Green: cool / nominal idle; Yellow: moderate active load; Red: high heat / throttling.
+    /// Thermal scale: Azul (frio/mínimo) -> Amarelo (moderado) -> Laranja (sustentado) -> Vermelho (crítico).
     func heatColor(for dieC: Double?, macModel: String = SystemInfo.macModel) -> RGB {
-        guard let dieC else { return RGB(r: 0, g: 255, b: 0) }
         let t = MacThermalProfile.thresholds(for: macModel)
-        if dieC <= t.greenMaxC {
-            return RGB(r: 0, g: 255, b: 0)
-        } else if dieC >= t.redMinC {
-            return RGB(r: 255, g: 0, b: 0)
+        guard let dieC else {
+            return RGB(r: 0, g: 100, b: 255)
+        }
+
+        if dieC <= t.blueMaxC {
+            // 1. Azul Puro / Frio
+            return RGB(r: 0, g: 100, b: 255)
+        } else if dieC <= t.yellowC {
+            // 2. Transição Azul -> Amarelo
+            let f = (dieC - t.blueMaxC) / (t.yellowC - t.blueMaxC)
+            let r = UInt8((255.0 * f).rounded().clamped(to: 0...255))
+            let g = UInt8((100.0 + 120.0 * f).rounded().clamped(to: 0...255))
+            let b = UInt8((255.0 * (1.0 - f)).rounded().clamped(to: 0...255))
+            return RGB(r: r, g: g, b: b)
+        } else if dieC <= t.orangeC {
+            // 3. Transição Amarelo -> Laranja
+            let f = (dieC - t.yellowC) / (t.orangeC - t.yellowC)
+            let g = UInt8((220.0 - 120.0 * f).rounded().clamped(to: 0...255))
+            return RGB(r: 255, g: g, b: 0)
+        } else if dieC < t.redMinC {
+            // 4. Transição Laranja -> Vermelho
+            let f = (dieC - t.orangeC) / (t.redMinC - t.orangeC)
+            let g = UInt8((100.0 * (1.0 - f)).rounded().clamped(to: 0...255))
+            return RGB(r: 255, g: g, b: 0)
         } else {
-            let fraction = (dieC - t.greenMaxC) / (t.redMinC - t.greenMaxC)
-            let hue = (1.0 - fraction) * (120.0 / 360.0)
-            return RGB(hue: hue)
+            // 5. Vermelho Puro / Crítico
+            return RGB(r: 255, g: 0, b: 0)
         }
     }
 }
