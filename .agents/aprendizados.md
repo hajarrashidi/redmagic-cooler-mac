@@ -48,4 +48,12 @@
   3. `scheduleLedReassertion()` disparado em todas as transições de modo (`selectMode`, `applyManualStep`, `turnOff`).
   4. Adicionada re-afirmação periódica de LED no heartbeat de 30s (`led.reapply(dieC:autopilot:)`), tornando a recuperação de hardware 100% autônoma e imune a quedas ou resets de firmware.
 
+## [AL-COOLER-006] Calibração Realista do Envelope Térmico Apple Silicon (Amarelo apenas > 65°C)
+* **Erro:** No MacBook Air, temperaturas nominais de 50°C a 55°C (onde a ventoinha mal precisa rodar) exibiam texto e LED em Amarelo, gerando falsa sensação de alerta/aquecimento.
+* **Causa-Raiz:** O limiar inferior de Amarelo estava fixado muito baixo (48°C / 50°C). Em chips Apple Silicon (M1 a M4), 45°C a 60°C é operação de repouso / carga leve sem risco térmico.
+* **Solução Permanente:** 
+  1. Calibrado `MacThermalProfile` em `AutopilotPolicy.swift`: Azul (< 65°C), Amarelo (65°C – 75°C), Laranja (75°C – 85°C), Vermelho (≥ 88°C).
+  2. Alinhado `UIStyle.heatColor` para refletir estritamente essa regra: temperaturas até 64.9°C permanecem no Azul Puro / Nominal.
+
+
 
