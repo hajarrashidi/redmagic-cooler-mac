@@ -24,6 +24,8 @@ final class FlydigiDriver: CoolerDriver {
     private var characteristics: [CBUUID: CBCharacteristic] = [:]
     private var telemetryPollTimer: Timer?
     private weak var peripheral: CBPeripheral?
+    private var lastAppliedMode: CoolingMode?
+    private var lastAppliedFan: UInt8?
 
     init(profile: DeviceProfile) {
         self.profile = profile
@@ -58,6 +60,10 @@ final class FlydigiDriver: CoolerDriver {
 
     func apply(mode: CoolingMode, fanPercent: UInt8, peripheral: CBPeripheral) {
         guard let writeChar = characteristics[writeCharacteristicUUID] else { return }
+        let targetSpeed: UInt8 = mode.isOn ? min(fanPercent, 100) : 0
+        guard mode != lastAppliedMode || targetSpeed != lastAppliedFan else { return }
+        lastAppliedMode = mode
+        lastAppliedFan = targetSpeed
 
         if mode == .off {
             let offCmd = Data([0x20, 0x00, 0x00, 0x00, 0x00])
@@ -96,12 +102,14 @@ final class FlydigiDriver: CoolerDriver {
         let bytes = [UInt8](data)
 
         // Telemetry frame (20 bytes):
-        // byte 7 + byte 8/10.0: cold side temperature
-        // byte 9: hot side temperature
+        // byte 7 (signed Int8) + signed fractional byte 8/10.0: cold side temperature
+        // byte 9 (signed Int8): hot side temperature
         // bytes 12..13: fan RPM (b[12]*100 + b[13])
-        let coldDouble = Double(bytes[7]) + Double(bytes[8]) / 10.0
+        let coldWhole = Int(Int8(bitPattern: bytes[7]))
+        let fracMag = Double(min(bytes[8], 9)) / 10.0
+        let coldDouble = coldWhole < 0 ? (Double(coldWhole) - fracMag) : (Double(coldWhole) + fracMag)
         let coldC = Int(round(coldDouble))
-        let hotC = Int(bytes[9])
+        let hotC = Int(Int8(bitPattern: bytes[9]))
         let fanRPM = Int(bytes[12]) * 100 + Int(bytes[13])
 
         let telemetry = CoolerTelemetry(
@@ -116,6 +124,8 @@ final class FlydigiDriver: CoolerDriver {
     func disconnect() {
         telemetryPollTimer?.invalidate()
         telemetryPollTimer = nil
+        lastAppliedMode = nil
+        lastAppliedFan = nil
         characteristics.removeAll()
         peripheral = nil
     }

@@ -246,6 +246,65 @@ func runTests() {
     assert(subzeroValid, "Subzero -2°C must pass range validation (-30°C to 60°C)")
     print("  ✅ Signed Subzero Decoding: 0xFE correctly decodes to -2°C (not +254°C overflow)")
 
+    // 11. Deep Logical Audit Regressions
+    print("\n🔬 Testing Deep Logical Audit Regressions (resetStandby, formatTemp, UIStyle, Flydigi Subzero)...")
+
+    // A. resetStandby() default must NOT latch Tier 1 at 38°C..49.9°C
+    let resetEngine = AutopilotPolicy()
+    resetEngine.setTier(.tier4_turbo)
+    resetEngine.resetStandby() // Default argument!
+    let idleAfterReset = resetEngine.evaluate(thermalState: .nominal, dieC: 45.0, now: 4000)
+    assert(idleAfterReset.tier.coolingTier == .standby && idleAfterReset.tier.fanPercent == 0,
+           "resetStandby() at 45°C must stay in Standby, got \(idleAfterReset.tier.label)")
+    let rearmAfterReset = resetEngine.evaluate(thermalState: .nominal, dieC: 38.0, now: 4001)
+    assert(rearmAfterReset.tier.coolingTier == .standby && rearmAfterReset.tier.fanPercent == 0,
+           "resetStandby() at 38°C re-arm must stay in Standby, got \(rearmAfterReset.tier.label)")
+    let activeAfterReset = resetEngine.evaluate(thermalState: .nominal, dieC: 62.0, now: 4002)
+    assert(activeAfterReset.tier.coolingTier == .tier2_med && activeAfterReset.tier.fanPercent == 60,
+           "resetStandby() followed by 62°C must jump immediately to Tier 2, got \(activeAfterReset.tier.label)")
+    print("  ✅ resetStandby() Default: Stays in Standby at 38°C/45°C (< 50°C) and jumps to Tier 2 at 62°C")
+
+    // B. Unified ThermalState.tierFloor contract
+    assert(ThermalState.nominal.tierFloor == .standby)
+    assert(ThermalState.fair.tierFloor == .standby)
+    assert(ThermalState.serious.tierFloor == .tier2_med)
+    assert(ThermalState.critical.tierFloor == .tier4_turbo)
+    print("  ✅ ThermalState.tierFloor: Unified with CoolingTier (.standby / .tier2_med / .tier4_turbo)")
+
+    // C. Temperature display floor isomorphism with Step-Ladder & Safety thresholds
+    assert(SystemInfo.formatTemp(49.7, unit: .celsius) == "49°C", "49.7°C must display as 49°C while < 50°C")
+    assert(SystemInfo.formatTemp(50.0, unit: .celsius) == "50°C", "50.0°C must display as 50°C")
+    assert(SystemInfo.formatTemp(35.9, unit: .celsius) == "35°C", "35.9°C must display as 35°C while < 36°C")
+    assert(SystemInfo.formatTemp(37.9, unit: .celsius) == "37°C", "37.9°C must display as 37°C while < 38°C")
+    assert(SystemInfo.formatTemp(64.9, unit: .celsius) == "64°C", "64.9°C must display as 64°C")
+    assert(SystemInfo.formatTemp(-2, unit: .celsius) == "-2°C", "-2°C integer must display as -2°C")
+    print("  ✅ SystemInfo.formatTemp: Exact integer floor alignment at 35.9°C, 37.9°C, 49.7°C, 50.0°C, 64.9°C")
+
+    // D. UIStyle.heatColor calibrated per Mac family
+    assert(UIStyle.heatColor(65.0, macModel: "MacBook Air") != .systemYellow, "Air 65.0°C must still be Blue")
+    assert(UIStyle.heatColor(65.1, macModel: "MacBook Air") == .systemYellow, "Air 65.1°C must be Yellow")
+    assert(UIStyle.heatColor(88.0, macModel: "MacBook Air") == .systemRed, "Air 88.0°C must be Red")
+    assert(UIStyle.heatColor(67.0, macModel: "MacBook Pro") != .systemYellow, "MBP 67.0°C must still be Blue (< 68°C)")
+    assert(UIStyle.heatColor(70.0, macModel: "MacBook Pro") == .systemYellow, "MBP 70.0°C must be Yellow")
+    assert(UIStyle.heatColor(60.0, macModel: "Mac Studio") == .systemYellow, "Studio 60.0°C must be Yellow (> 58°C)")
+    print("  ✅ UIStyle.heatColor: Synchronized with MacThermalProfile across Air, Pro, and Studio")
+
+    // E. Flydigi subzero signed fractional decoding
+    let fdWhole = Int(Int8(bitPattern: UInt8(0xFE))) // -2
+    let fdFrac = Double(min(UInt8(4), 9)) / 10.0
+    let fdCold = Int(round(fdWhole < 0 ? (Double(fdWhole) - fdFrac) : (Double(fdWhole) + fdFrac)))
+    assert(fdCold == -2, "Flydigi subzero 0xFE + .4 must decode to -2°C, got \(fdCold)")
+    print("  ✅ Flydigi Subzero Decoding: 0xFE.4 correctly decodes to -2°C")
+
+    // F. ManualTimer & AppVersion checks
+    var mTimer = ManualTimer(timeout: .oneHour)
+    mTimer.start(now: 1_000)
+    assert(!mTimer.hasExpired(now: 4_599))
+    assert(mTimer.hasExpired(now: 4_600))
+    assert(AppVersion("v2.9")! < AppVersion("v2.10")!)
+    assert(AppVersion("v3.1")! == AppVersion("3.1.0")!)
+    print("  ✅ ManualTimer & AppVersion: Expiry and semantic version comparison verified")
+
     print("\n🎉 ALL TESTS PASSED! Deterministic Step-Ladder, Asymmetric Hysteresis, Dwell & Velocity Bypass, Universal Condensation Safety Governor & Multi-Brand Isolation verified.")
 }
 

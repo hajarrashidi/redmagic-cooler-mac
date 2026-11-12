@@ -48,6 +48,7 @@ final class RedMagicDriver: CoolerDriver {
     private var lastWrittenRawMode: UInt8?
     private var lastWrittenMode: CoolingMode?
     private var lastWrittenFan: UInt8?
+    private var lastReadFan: UInt8?
     private var lastReportedAttached: Bool?
 
     private var is5Pro: Bool {
@@ -73,13 +74,8 @@ final class RedMagicDriver: CoolerDriver {
             if str.contains("1016") { telemetryChar = char }
         }
 
-        // Seed initial values from hardware
-        if let modeChar {
-            peripheral.readValue(for: modeChar)
-        }
-        if let fanChar {
-            peripheral.readValue(for: fanChar)
-        }
+        // Seed Hall sensor status from hardware (mode & fan are authoritatively
+        // pushed by AppDelegate.onConnected() so initial reads cannot race writes).
         if let hallChar {
             peripheral.readValue(for: hallChar)
         }
@@ -129,9 +125,9 @@ final class RedMagicDriver: CoolerDriver {
         pendingFanWorkItem?.cancel()
 
         if modeByteChanged {
-            lastWrittenRawMode = rawByte
-            lastWrittenMode = mode
             if let modeChar {
+                lastWrittenRawMode = rawByte
+                lastWrittenMode = mode
                 EventLogger.record("REDMAGIC — writing mode 0x\(String(format: "%02X", rawByte)) to 1011")
                 peripheral.writeValue(Data([rawByte]), for: modeChar, type: .withResponse)
             } else {
@@ -208,6 +204,15 @@ final class RedMagicDriver: CoolerDriver {
             EventLogger.record("REDMAGIC — mode readback on 1011: 0x\(String(format: "%02X", raw))")
             if raw == 0x03 {
                 return .mode(.off)
+            } else if is5Pro {
+                // On 5 Pro, 0x02 is a binary ON switch — preserve the logical tier we commanded
+                // rather than clobbering .low (Tier 1) or .max (Tier 4 / Turbo) into .medium.
+                if let lastWrittenMode, lastWrittenMode.isOn {
+                    return .mode(lastWrittenMode)
+                }
+                let fan = lastReadFan ?? lastWrittenFan ?? 60
+                let inferred: CoolingMode = (fan >= 85) ? .max : (fan >= 65 ? .medium : .low)
+                return .mode(inferred)
             } else {
                 return .mode(CoolingMode(rawValue: raw))
             }
@@ -215,6 +220,7 @@ final class RedMagicDriver: CoolerDriver {
 
         // 3. Fan speed readback (0x1012)
         if uuidStr.contains("1012") {
+            lastReadFan = data[0]
             EventLogger.record("REDMAGIC — fan readback on 1012: \(data[0])%")
             return .fan(data[0])
         }
@@ -242,6 +248,8 @@ final class RedMagicDriver: CoolerDriver {
         lastWrittenRawMode = nil
         lastWrittenMode = nil
         lastWrittenFan = nil
+        lastReadFan = nil
+        lastReportedAttached = nil
         modeChar = nil
         fanChar = nil
         lightChar = nil

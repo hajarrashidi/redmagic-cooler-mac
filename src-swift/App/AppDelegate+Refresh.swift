@@ -58,10 +58,17 @@ extension AppDelegate {
         guard let update else { return }
         switch installer.state {
         case .idle:
-            updateBanner.configure(style: .info,
-                                   text: "Version \(update.displayVersion) — install now",
-                                   symbol: "arrow.down.circle.fill",
-                                   showSpinner: false)
+            if update.dmgURL != nil {
+                updateBanner.configure(style: .info,
+                                       text: "Version \(update.displayVersion) — install now",
+                                       symbol: "arrow.down.circle.fill",
+                                       showSpinner: false)
+            } else {
+                updateBanner.configure(style: .info,
+                                       text: "Version \(update.displayVersion) available — view release",
+                                       symbol: "arrow.up.right.circle.fill",
+                                       showSpinner: false)
+            }
         case .downloading:
             updateBanner.configure(style: .info,
                                    text: "Downloading version \(update.displayVersion)…",
@@ -140,12 +147,12 @@ extension AppDelegate {
         rows.turboStatus.isHidden = !connected || (appMode != .turbo)
         rows.coolingSlider.isHidden = !connected || (appMode != .manual)
         rows.manualTimer.isHidden = !connected || (appMode != .manual)
-        // LED controls only mean something while the cooler is running — its
-        // LED cannot show a colour when it isn't.
-        rows.ledHeader.isHidden = !coolerOn
-        rows.effect.isHidden = !coolerOn
-        rows.breathToggle.isHidden = !coolerOn || led.effect != .breath
-        rows.color.isHidden = !coolerOn || !led.usesPickedColor
+        // The cooler's RGB ring remains active while linked (including Auto Standby),
+        // so LED controls stay available whenever connected.
+        rows.ledHeader.isHidden = !connected
+        rows.effect.isHidden = !connected
+        rows.breathToggle.isHidden = !connected || led.effect != .breath
+        rows.color.isHidden = !connected || !led.usesPickedColor
 
         // Cooling and Light are separate panels now that each has a title of
         // its own above it. Membership within each follows the active mode and

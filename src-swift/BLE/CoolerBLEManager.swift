@@ -155,7 +155,11 @@ final class CoolerBLEManager: NSObject {
     /// The active hardware driver bound strictly to the selected profile.
     private var activeDriver: CoolerDriver?
 
-    private var characteristics: [CBUUID: CBCharacteristic] = [:]
+    /// Consecutive connection watchdog timeouts without reaching `didConnect`,
+    /// used to back off retries gently and suppress repetitive log flooding
+    /// while the cooler is powered off or unplugged.
+    private var consecutiveTimeouts = 0
+    private var cancellingTimedOutConnect = false
 
     // ── Permission ───────────────────────────────────────────────────────────
 
@@ -212,8 +216,12 @@ final class CoolerBLEManager: NSObject {
     ///
     /// Safe to call repeatedly; it will not disturb an attempt already in
     /// flight.
-    func startScanning() {
+    func startScanning(userInitiated: Bool = false) {
         connectionRequested = true
+        if userInitiated {
+            consecutiveTimeouts = 0
+            cancellingTimedOutConnect = false
+        }
         // This call supersedes any reconnect still queued; letting it fire too
         // would start a second attempt racing this one.
         pendingReconnect?.cancel()
@@ -267,7 +275,9 @@ final class CoolerBLEManager: NSObject {
             }
             if let profile {
                 activeDriver = profile.makeDriver()
-                EventLogger.record("BLE — reconnecting to selected peripheral (\(profile.modelName))")
+                if consecutiveTimeouts == 0 {
+                    EventLogger.record("BLE — reconnecting to selected peripheral (\(profile.modelName))")
+                }
                 beginConnect(to: known)
                 return
             }
@@ -292,14 +302,15 @@ final class CoolerBLEManager: NSObject {
     /// Ends the scan after a quiet period and hands the results to the picker.
     private func armScanSettleTimer() {
         scanSettleTimer?.invalidate()
-        scanSettleTimer = Timer.scheduledTimer(
-            withTimeInterval: Config.BLE.scanSettleWindow, repeats: false
-        ) { [weak self] _ in
+        let timer = Timer(timeInterval: Config.BLE.scanSettleWindow, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.central?.stopScan()
             self.setPhase(.idle)
             self.delegate?.bleManager(self, needsDeviceSelection: self.candidates)
         }
+        // .common so the scan settles even while the NSMenu stays open in event-tracking mode.
+        RunLoop.main.add(timer, forMode: .common)
+        scanSettleTimer = timer
     }
 
     /// The previously-connected peripheral, if one is saved and macOS still
@@ -326,6 +337,8 @@ final class CoolerBLEManager: NSObject {
         scanSettleTimer?.invalidate()
         scanSettleTimer = nil
         candidates = []
+        consecutiveTimeouts = 0
+        cancellingTimedOutConnect = false
         profile = chosen
         UserDefaults.standard.set(chosen.id, forKey: Config.Key.preferredDeviceProfileId)
         activeDriver = chosen.makeDriver()
@@ -346,15 +359,19 @@ final class CoolerBLEManager: NSObject {
         central?.connect(peripheral, options: nil)
 
         connectTimeoutTimer?.invalidate()
-        connectTimeoutTimer = Timer.scheduledTimer(
-            withTimeInterval: Config.BLE.connectTimeout, repeats: false
-        ) { [weak self] _ in
+        let timer = Timer(timeInterval: Config.BLE.connectTimeout, repeats: false) { [weak self] _ in
             guard let self else { return }
-            EventLogger.record("BLE — connect timed out, retrying")
+            self.consecutiveTimeouts += 1
+            if self.consecutiveTimeouts == 1 {
+                EventLogger.record("BLE — connect timed out; continuing silent background auto-reconnect")
+            }
+            self.cancellingTimedOutConnect = true
             self.central?.cancelPeripheralConnection(peripheral)
             self.setPhase(.reconnecting)
             self.scheduleReconnect()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        connectTimeoutTimer = timer
     }
 
     /// Drops the link but leaves automatic reconnection enabled.
@@ -370,11 +387,12 @@ final class CoolerBLEManager: NSObject {
         cancelTimers()
         central?.stopScan()
         candidates = []
+        consecutiveTimeouts = 0
+        cancellingTimedOutConnect = false
         profile = nil
         activeDriver?.disconnect()
         activeDriver = nil
         UserDefaults.standard.removeObject(forKey: Config.Key.preferredDeviceProfileId)
-        characteristics.removeAll()
 
         if let peripheral, peripheral.state != .disconnected {
             rescanAfterDisconnect = true
@@ -417,13 +435,15 @@ final class CoolerBLEManager: NSObject {
     /// the same failure can't stack two attempts that then race each other.
     private func scheduleReconnect() {
         pendingReconnect?.cancel()
+        let multiplier = min(Double(max(consecutiveTimeouts, 1)), 4.0)
+        let delay = Config.BLE.reconnectDelay * multiplier
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.pendingReconnect = nil
             self.startScanning()
         }
         pendingReconnect = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Config.BLE.reconnectDelay,
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay,
                                       execute: work)
     }
 
@@ -454,7 +474,7 @@ final class CoolerBLEManager: NSObject {
         self.mode = mode
         let target = mode.isOn ? min(fanPercent, 100) : 0
         self.fanPercent = target
-        if let activeDriver, let peripheral {
+        if isConnected, let activeDriver, let peripheral {
             activeDriver.apply(mode: mode, fanPercent: target, peripheral: peripheral)
         }
     }
@@ -466,7 +486,7 @@ final class CoolerBLEManager: NSObject {
 
     /// Writes the light characteristic using the active hardware driver.
     func setLight(effect: UInt8, color: RGB = .black) {
-        if let activeDriver, let peripheral {
+        if isConnected, let activeDriver, let peripheral {
             activeDriver.setLight(effect: effect, color: color, peripheral: peripheral)
         }
     }
@@ -564,11 +584,15 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         if activeDriver == nil {
             activeDriver = profile.makeDriver()
         }
+        let retries = consecutiveTimeouts
+        consecutiveTimeouts = 0
+        cancellingTimedOutConnect = false
         UserDefaults.standard.set(peripheral.identifier.uuidString,
                                   forKey: Config.Key.preferredDevice)
         UserDefaults.standard.set(profile.id,
                                   forKey: Config.Key.preferredDeviceProfileId)
-        EventLogger.record("BLE — connected to \(peripheral.name ?? profile.modelName)")
+        EventLogger.record("BLE — connected to \(peripheral.name ?? profile.modelName)"
+                         + (retries > 0 ? " (after \(retries) background retries)" : ""))
         setPhase(.discoveringServices)
         activeDriver?.didConnect(peripheral: peripheral)
         peripheral.discoverServices([profile.serviceUUID])
@@ -579,6 +603,7 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
                         error: Error?) {
         connectTimeoutTimer?.invalidate()
         connectTimeoutTimer = nil
+        cancellingTimedOutConnect = false
         activeDriver?.disconnect()
         activeDriver = nil
         EventLogger.record("BLE — connect failed: \(error?.localizedDescription ?? "unknown")")
@@ -597,9 +622,12 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
         connectTimeoutTimer = nil
         activeDriver?.disconnect()
         activeDriver = nil
-        characteristics.removeAll()
-        EventLogger.record("BLE — disconnected"
-                         + (error.map { ": \($0.localizedDescription)" } ?? " cleanly"))
+        let suppressLog = cancellingTimedOutConnect && consecutiveTimeouts >= 1 && error == nil
+        cancellingTimedOutConnect = false
+        if !suppressLog {
+            EventLogger.record("BLE — disconnected"
+                             + (error.map { ": \($0.localizedDescription)" } ?? " cleanly"))
+        }
 
         // Quit-time teardown: hand control back to the waiter and stop.
         if let completion = onDisconnect {
@@ -632,9 +660,16 @@ extension CoolerBLEManager: CBCentralManagerDelegate {
 extension CoolerBLEManager: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        if let error {
+            EventLogger.record("BLE — service discovery error: \(error.localizedDescription)")
+        }
         guard let profile else { return }
         guard let service = peripheral.services?.first(where: { $0.uuid == profile.serviceUUID })
-        else { return }
+        else {
+            let found = peripheral.services?.map(\.uuid.uuidString).joined(separator: ", ") ?? "none"
+            EventLogger.record("BLE — expected service \(profile.serviceUUID.uuidString) not found (saw: \(found))")
+            return
+        }
         setPhase(.discoveringCharacteristics)
         peripheral.discoverCharacteristics(nil, for: service)
     }
@@ -642,6 +677,9 @@ extension CoolerBLEManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral,
                     didDiscoverCharacteristicsFor service: CBService,
                     error: Error?) {
+        if let error {
+            EventLogger.record("BLE — characteristic discovery error: \(error.localizedDescription)")
+        }
         guard let activeDriver, let discovered = service.characteristics else { return }
 
         let notifying = activeDriver.notifyingUUIDs
@@ -654,9 +692,11 @@ extension CoolerBLEManager: CBPeripheralDelegate {
             let isNotifying = notifying.contains(uuid)
                 || uuidStr.contains("1015") || uuidStr.contains("1016")
                 || uuidStr.contains("a002") || uuidStr.contains("ffe4")
+                || uuidStr.contains("ffe2") || uuidStr.contains("36f6") || uuidStr.contains("fff2")
             let isWritable = writable.contains(uuid)
                 || uuidStr.contains("1011") || uuidStr.contains("1012") || uuidStr.contains("1013")
                 || uuidStr.contains("a001") || uuidStr.contains("ffe1")
+                || uuidStr.contains("36f5") || uuidStr.contains("fff1")
 
             guard isNotifying || isWritable else { continue }
             mapped[uuid] = characteristic

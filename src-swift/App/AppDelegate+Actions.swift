@@ -22,9 +22,9 @@ extension AppDelegate {
             // Auto backs itself off as the Mac cools, so it needs no deadline.
             manualTimer.stop()
             manualTimedOut = false
-            autopilot.resetStandby()
+            autopilot.resetStandby(isStandby: true)
             if !isSafetyGovernorActive {
-                runAutopilot()
+                runAutopilot(force: true)
             }
             scheduleLedReassertion()
 
@@ -197,7 +197,7 @@ extension AppDelegate {
     /// and start the cooler up again within seconds — which is the one outcome
     /// a user who set a one-hour limit did not ask for.
     func expireManualTimerIfDue() {
-        guard appMode == .manual, ble.mode.isOn, manualTimer.hasExpired() else { return }
+        guard appMode == .manual, manualTimer.hasExpired() else { return }
         manualTimer.stop()
         manualTimedOut = true
         UserDefaults.standard.set(0, forKey: Config.Key.manualStep)
@@ -271,7 +271,7 @@ extension AppDelegate {
         // known starting state — see `turnOffOnConnect`. Deliberately *not*
         // resetForRescan(), which forgets the device; that's "Change Device".
         prepareForExplicitConnection()
-        ble.startScanning()
+        ble.startScanning(userInitiated: true)
         EventLogger.record("connect requested")
         refresh()
     }
@@ -286,7 +286,7 @@ extension AppDelegate {
     func scanAgainForDevices() {
         isSelectingDevice = true
         ble.resetForRescan()
-        ble.startScanning()
+        ble.startScanning(userInitiated: true)
         EventLogger.record("device scan requested")
         refresh()
     }
@@ -349,8 +349,9 @@ extension AppDelegate {
     /// hardware — the same reason quitting turns it off.
     func installUpdateNow() {
         guard let update = updates.available else { return }
-        // Nothing left to install; the banner's remaining job is the notes.
-        if installer.state == .failed {
+        // Nothing left to install (or release ships without a DMG, e.g. ZIP);
+        // open the release page directly without shutting off the cooler.
+        if installer.state == .failed || update.dmgURL == nil {
             openReleasePage()
             return
         }

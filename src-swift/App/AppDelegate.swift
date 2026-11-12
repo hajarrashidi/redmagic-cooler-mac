@@ -141,6 +141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ble = CoolerBLEManager()
         ble.delegate = self
         led = LedController(ble: ble)
+        thermal = ThermalMonitor.read()
+        evaluateSafetyGovernor(reapplyOnClear: false)
 
         // Built before the menu, which wires a banner straight to them. A
         // noticed release starts installing at once — the banner narrates the
@@ -181,7 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        EventLogger.record("app start — mode=\(appMode.rawValue) engage=\(autopilot.engageC)°C")
+        EventLogger.record("app start — mode=\(appMode.rawValue) ladder=50/60/65/70°C safety=<36°C")
+        refresh()
 
         // The friendly Mac name needs system_profiler, which is far too slow to
         // block launch on; refresh the menu once it lands.
@@ -298,7 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Evaluates the universal condensation safety barrier across ALL modes.
     /// Trips at < 36.0°C and re-arms at >= 38.0°C.
-    private func evaluateSafetyGovernor() {
+    private func evaluateSafetyGovernor(reapplyOnClear: Bool = true) {
         guard let dieC = thermal.dieTemperatureC else { return }
 
         if !isSafetyGovernorActive {
@@ -314,7 +317,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if dieC >= Config.Safety.condensationRearmC {
                 isSafetyGovernorActive = false
                 EventLogger.record("🛡️ Safety Governor cleared: die temp \(String(format: "%.1f", dieC))°C >= \(Config.Safety.condensationRearmC)°C — re-arming \(appMode.rawValue) mode")
-                reapplyActiveMode()
+                if reapplyOnClear {
+                    reapplyActiveMode()
+                }
             } else {
                 // Ensure device remains off while governor is active
                 if ble != nil && ble.isConnected && (ble.mode != .off || ble.fanPercent != 0) {
@@ -327,27 +332,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Re-applies active mode settings when safety governor disengages.
     func reapplyActiveMode() {
         guard !isSafetyGovernorActive else { return }
+        if appMode == .auto {
+            autopilot.resetStandby(isStandby: true)
+        }
+        syncHardwareToActiveMode(force: true)
+    }
+
+    /// Synchronizes the connected cooler's hardware state with `appMode`
+    /// (on connect, reconnect, wake from sleep, or Safety Governor re-arm).
+    func syncHardwareToActiveMode(force: Bool = false) {
+        guard ble != nil, ble.isConnected else { return }
+        expireManualTimerIfDue()
+        let wasSafetyActive = isSafetyGovernorActive
+        evaluateSafetyGovernor(reapplyOnClear: false)
+        if wasSafetyActive && !isSafetyGovernorActive && appMode == .auto {
+            autopilot.resetStandby(isStandby: true)
+        }
+
+        if isSafetyGovernorActive {
+            ble.apply(mode: .off, fanPercent: 0)
+            scheduleLedReassertion()
+            return
+        }
+
         switch appMode {
         case .auto:
-            autopilot.resetStandby(isStandby: false)
-            runAutopilot()
+            runAutopilot(force: force)
         case .manual:
-            let step = UserDefaults.standard.object(forKey: Config.Key.manualStep) as? Int
-                ?? CoolingSliderView.defaultStep
-            applyManualStep(step, alreadySwitching: true)
+            let rawStep = UserDefaults.standard.object(forKey: Config.Key.manualStep) as? Int ?? 0
+            let index = rawStep.clamped(to: CoolingSliderView.indexRange)
+            let step = CoolingSliderView.steps[index]
+            if step.mode.isOn && !manualTimedOut {
+                if manualTimer.deadline == nil && manualTimer.timeout != .unlimited {
+                    manualTimer.start()
+                }
+                ble.apply(mode: step.mode, fanPercent: step.fanPercent)
+            } else {
+                ble.apply(mode: .off, fanPercent: 0)
+            }
+            scheduleLedReassertion()
         case .turbo:
             ble.apply(mode: .max, fanPercent: 100)
+            scheduleLedReassertion()
         }
     }
 
-    /// Evaluates the autopilot and applies its decision, if anything changed.
-    func runAutopilot() {
-        guard !isSafetyGovernorActive else { return }
+    /// Evaluates the autopilot and applies its decision, if anything changed (or if forced).
+    func runAutopilot(force: Bool = false) {
+        guard ble != nil, ble.isConnected, !isSafetyGovernorActive else { return }
         let decision = autopilot.evaluate(thermalState: thermal.thermalState,
                                           dieC: thermal.dieTemperatureC,
                                           now: Date().timeIntervalSince1970)
         let tier = decision.tier
-        guard tier.mode != ble.mode || tier.fanPercent != ble.fanPercent else { return }
+        guard force || tier.mode != ble.mode || tier.fanPercent != ble.fanPercent else { return }
 
         EventLogger.record("\(decision.reason)  → cooler \(tier.label), fan \(tier.fanPercent)%")
         ble.apply(mode: tier.mode, fanPercent: tier.fanPercent)
@@ -401,12 +438,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func macDidWake() {
-        EventLogger.record("system did wake — resuming thermal autopilot")
-        if ble != nil && ble.isConnected {
-            if appMode == .auto {
-                runAutopilot()
-            }
-        }
+        EventLogger.record("system did wake — restoring active cooling mode (\(appMode.rawValue))")
+        thermal = ThermalMonitor.read()
+        syncHardwareToActiveMode(force: true)
+        refresh()
     }
 
     @objc private func macWillPowerOff(_ notification: Notification) {

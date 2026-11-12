@@ -18,12 +18,16 @@ final class BlackSharkDriver: CoolerDriver {
     let writeCharacteristicUUID = CBUUID(string: "0000A001-3C17-D293-8E48-14FE2E4DA212")
     let readCharacteristicUUID  = CBUUID(string: "0000A002-3C17-D293-8E48-14FE2E4DA212")
 
-    var notifyingUUIDs: Set<CBUUID> { [readCharacteristicUUID] }
-    var writableUUIDs: Set<CBUUID> { [writeCharacteristicUUID] }
+    var notifyingUUIDs: Set<CBUUID> { [readCharacteristicUUID, CBUUID(string: "A002")] }
+    var writableUUIDs: Set<CBUUID> { [writeCharacteristicUUID, CBUUID(string: "A001")] }
 
-    private var characteristics: [CBUUID: CBCharacteristic] = [:]
+    private var writeChar: CBCharacteristic?
+    private var readChar: CBCharacteristic?
+    private var pendingWorkItem: DispatchWorkItem?
     private var telemetryPollTimer: Timer?
     private weak var peripheral: CBPeripheral?
+    private var lastAppliedMode: CoolingMode?
+    private var lastAppliedFan: UInt8?
 
     private var is5Pro: Bool {
         profile.id.contains("5pro") || profile.modelName.contains("5 Pro")
@@ -38,8 +42,12 @@ final class BlackSharkDriver: CoolerDriver {
     }
 
     func didDiscoverCharacteristics(characteristics: [CBUUID: CBCharacteristic], peripheral: CBPeripheral) {
-        self.characteristics = characteristics
         self.peripheral = peripheral
+        for (uuid, char) in characteristics {
+            let str = uuid.uuidString.lowercased()
+            if uuid == writeCharacteristicUUID || str.contains("a001") { writeChar = char }
+            if uuid == readCharacteristicUUID || str.contains("a002") { readChar = char }
+        }
 
         // Start active telemetry polling timer (every 2.0s)
         startTelemetryPolling()
@@ -57,7 +65,7 @@ final class BlackSharkDriver: CoolerDriver {
     }
 
     private func pollTelemetry() {
-        guard let peripheral, let writeChar = characteristics[writeCharacteristicUUID] else { return }
+        guard let peripheral, let writeChar else { return }
         let pollPayload: [UInt8]
         if is5Pro {
             // MagCooler 5 Pro query: [0x05, 0x06, 0x20, 0x00, 0x00]
@@ -70,7 +78,16 @@ final class BlackSharkDriver: CoolerDriver {
     }
 
     func apply(mode: CoolingMode, fanPercent: UInt8, peripheral: CBPeripheral) {
-        guard let writeChar = characteristics[writeCharacteristicUUID] else { return }
+        guard let writeChar else { return }
+        let targetSpeed: UInt8 = mode.isOn ? min(fanPercent, 100) : 0
+        guard mode != lastAppliedMode || targetSpeed != lastAppliedFan else { return }
+        lastAppliedMode = mode
+        lastAppliedFan = targetSpeed
+
+        // Cancel any in-flight deferred command so a rapid off-command cannot be
+        // overwritten 50ms later by an earlier power-on write.
+        pendingWorkItem?.cancel()
+        pendingWorkItem = nil
 
         if is5Pro {
             // Black Shark MagCooler 5 Pro (35W):
@@ -91,22 +108,25 @@ final class BlackSharkDriver: CoolerDriver {
                 case .off:
                     intensity = 1
                 case .low:
-                    intensity = (fanPercent > 50) ? 2 : 1
+                    intensity = (targetSpeed > 50) ? 2 : 1
                 case .medium:
-                    intensity = (fanPercent > 60) ? 4 : 3
+                    intensity = (targetSpeed > 60) ? 4 : 3
                 case .max:
                     intensity = 5 // Maximum 35W cooling power!
                 }
 
                 let customModeCommand = Data([0x06, 0x05, 0x00, 0x00, 0x04, intensity])
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                let work = DispatchWorkItem { [weak self, weak peripheral] in
+                    guard let self, let peripheral, let writeChar = self.writeChar else { return }
                     peripheral.writeValue(customModeCommand, for: writeChar, type: .withoutResponse)
                 }
+                pendingWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
             }
         } else {
             // Black Shark MagCooler 4 Pro (27W):
             // Independent Peltier power and fan speed (0-100 inverted, 0 = 0xFB)
-            let fanVal: UInt8 = (fanPercent == 0 || !mode.isOn) ? 0xFB : UInt8(100 - min(fanPercent, 100))
+            let fanVal: UInt8 = (targetSpeed == 0 || !mode.isOn) ? 0xFB : UInt8(100 - targetSpeed)
             let coolVal: UInt8
             if mode == .off {
                 coolVal = 0xFB
@@ -123,14 +143,17 @@ final class BlackSharkDriver: CoolerDriver {
             let coolCmd = Data([0x05, 0x05, 0x00, 0x00, coolVal])
 
             peripheral.writeValue(coolCmd, for: writeChar, type: .withoutResponse)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            let work = DispatchWorkItem { [weak self, weak peripheral] in
+                guard let self, let peripheral, let writeChar = self.writeChar else { return }
                 peripheral.writeValue(fanCmd, for: writeChar, type: .withoutResponse)
             }
+            pendingWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
         }
     }
 
     func setLight(effect: UInt8, color: RGB, peripheral: CBPeripheral) {
-        guard let writeChar = characteristics[writeCharacteristicUUID] else { return }
+        guard let writeChar else { return }
 
         let r = (effect == 0) ? 0 : color.r
         let g = (effect == 0) ? 0 : color.g
@@ -166,7 +189,9 @@ final class BlackSharkDriver: CoolerDriver {
     }
 
     func handleCharacteristicUpdate(characteristic: CBCharacteristic, peripheral: CBPeripheral) -> DriverUpdate {
-        guard characteristic.uuid == readCharacteristicUUID,
+        let isReadChar = characteristic.uuid == readCharacteristicUUID
+            || characteristic.uuid.uuidString.lowercased().contains("a002")
+        guard isReadChar,
               let data = characteristic.value,
               data.count > 2 else { return .none }
 
@@ -216,7 +241,12 @@ final class BlackSharkDriver: CoolerDriver {
     func disconnect() {
         telemetryPollTimer?.invalidate()
         telemetryPollTimer = nil
-        characteristics.removeAll()
+        pendingWorkItem?.cancel()
+        pendingWorkItem = nil
+        lastAppliedMode = nil
+        lastAppliedFan = nil
+        writeChar = nil
+        readChar = nil
         peripheral = nil
     }
 }

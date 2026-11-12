@@ -48,27 +48,20 @@ extension AppDelegate: CoolerBLEManagerDelegate {
     }
 
     private func onConnected() {
-        // When the user explicitly asked to connect, command the cooler off
-        // once so it never resumes a stale running state on link-up.
-        //
-        // Only the hardware is touched here — not `appMode`, and not the saved
-        // manual level — so switching to Manual still restores what the user
-        // had chosen, and Auto still engages on its own once the Mac heats up.
+        thermal = ThermalMonitor.read()
         if turnOffOnConnect {
             turnOffOnConnect = false
-            if appMode == .auto {
-                EventLogger.record("connected — running autopilot immediately")
-                runAutopilot()
-            } else {
-                EventLogger.record("connected in manual mode — holding initial state")
-            }
+            autopilot.resetStandby(isStandby: true)
         }
+        EventLogger.record("connected — syncing \(appMode.rawValue) mode to hardware")
+        syncHardwareToActiveMode(force: true)
 
-        // The cooler forgets its light state across a disconnect. Re-push it,
-        // but only once the link has settled — writes sent immediately after
-        // characteristic discovery are unreliable.
+        // The cooler forgets its light state across a disconnect. Re-push it
+        // again once the link has fully settled — writes sent immediately after
+        // characteristic discovery can occasionally be dropped by the MCU.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.led.reapply()
+            guard let self, self.ble.isConnected else { return }
+            self.led.reapply(dieC: self.thermal.dieTemperatureC, autopilot: self.autopilot)
         }
     }
 

@@ -75,5 +75,26 @@
   4. Registro explícito de todos os timers em `RunLoop.main, forMode: .common`.
   5. Enforced floor: `thermalState == .serious` garante no mínimo Tier 2 (Balanced, 60% fan).
 
+## [AL-COOLER-008] Auditoria Profunda de Ciclo de Vida BLE, Reset de Standby, Timers de Menu e Sincronização de Modos
+* **Erro:**
+  1. Entrar em `Auto` ou sair do Safety Governor abaixo de 50°C (ex: 38°C–49.9°C) ativava indevidamente o cooler em `Tier 1 (40%)` em vez de permanecer em `Standby`.
+  2. `runAutopilot()` executava desconectado ou no meio da descoberta GATT, gerando 32 erros `modeChar is nil` / `fanChar is nil` e dessincronizando `ble.mode`.
+  3. Loop de reconexão com o cooler desligado gravava 3 linhas a cada 13s (~2.328 linhas em < 3h), apagando o histórico real do `~/.cooler.log`.
+  4. `scanSettleTimer` e `connectTimeoutTimer` usavam `Timer.scheduledTimer` (modo `.default`), congelando o scan de dispositivos enquanto o `NSMenu` permanecia aberto.
+  5. Leitura de `0x1011` (`0x02` binário no REDMAGIC 5 Pro) sobrescrevia `ble.mode` para `.medium`, e `onConnected()` / `macDidWake()` falhavam em restaurar modos `.turbo`/`.manual` e o LED térmico (`autopilot: nil`).
+  6. Seção `Light` ficava oculta em `Auto Standby` mesmo com o anel RGB físico aceso, e `installUpdateNow()` desligava o cooler sem abrir o navegador quando a release continha apenas `.zip` (`dmgURL == nil`).
+* **Causa-Raiz:**
+  1. `AutopilotPolicy.resetStandby` tinha default `isStandby: Bool = false`, plantando `.tier1_low` abaixo do gatilho de 50°C.
+  2. Falta de guard `ble.isConnected` em `runAutopilot()` e em `CoolerBLEManager.apply` / `setLight`, somada a leituras iniciais concorrentes em `0x1011`/`0x1012`.
+  3. Ausência de backoff e supressão de logs repetitivos após o primeiro timeout de reconexão em background.
+  4. AppKit roda menus abertos em `RunLoop.Mode.eventTracking`, exigindo `RunLoop.main.add(..., forMode: .common)`.
+  5. Falta de helper unificado de restauração de hardware (`syncHardwareToActiveMode`) e de passagem de `dieC`/`autopilot` em `led.reapply`.
+* **Solução Permanente:**
+  1. Default `resetStandby(isStandby: Bool = true)` garantindo `Standby` abaixo de 50°C e step-up imediato apenas $\ge 50^\circ\text{C}$.
+  2. Guard estrito `ble.isConnected` em `runAutopilot` / `CoolerBLEManager`, preservação do modo lógico no readback `0x02` do 5 Pro e cancelamento de `DispatchWorkItem` pendente no `BlackSharkDriver`.
+  3. Backoff progressivo (5s -> 20s) e supressão silenciosa de logs repetitivos de timeout com o cooler desconectado da tomada.
+  4. Todos os timers de scan e watchdog registrados explicitamente em `RunLoop.Mode.common`.
+  5. `syncHardwareToActiveMode(force: true)` unificando `onConnected()`, `macDidWake()` e `reapplyActiveMode()`, controles `Light` visíveis sempre que `connected`, piso inteiro `floor` em `SystemInfo.formatTemp`, `UIStyle.heatColor` unificado ao `MacThermalProfile` e fallback limpo para `openReleasePage()` quando `dmgURL == nil`.
+
 
 

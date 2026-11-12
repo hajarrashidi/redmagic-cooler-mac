@@ -22,6 +22,8 @@ final class IQOODriver: CoolerDriver {
     private var characteristics: [CBUUID: CBCharacteristic] = [:]
     private var telemetryPollTimer: Timer?
     private weak var peripheral: CBPeripheral?
+    private var lastAppliedMode: CoolingMode?
+    private var lastAppliedFan: UInt8?
 
     init(profile: DeviceProfile) {
         self.profile = profile
@@ -56,6 +58,10 @@ final class IQOODriver: CoolerDriver {
 
     func apply(mode: CoolingMode, fanPercent: UInt8, peripheral: CBPeripheral) {
         guard let writeChar = characteristics[writeCharacteristicUUID] else { return }
+        let targetSpeed: UInt8 = mode.isOn ? min(fanPercent, 100) : 0
+        guard mode != lastAppliedMode || targetSpeed != lastAppliedFan else { return }
+        lastAppliedMode = mode
+        lastAppliedFan = targetSpeed
 
         if mode == .off {
             // Power off: [0xAA, 0x01, 0x00, 0x00, 0x55]
@@ -116,6 +122,8 @@ final class IQOODriver: CoolerDriver {
     func disconnect() {
         telemetryPollTimer?.invalidate()
         telemetryPollTimer = nil
+        lastAppliedMode = nil
+        lastAppliedFan = nil
         characteristics.removeAll()
         peripheral = nil
     }

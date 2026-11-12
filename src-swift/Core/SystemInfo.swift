@@ -29,9 +29,15 @@ enum SystemInfo {
                            unit: TempUnit? = nil) -> String {
         guard let celsius else { return "—" }
         let unit = unit ?? temperatureUnit()
-        let value = (unit == .fahrenheit) ? celsius * 9 / 5 + 32 : celsius
-        let rounded = Int(value.rounded())
-        return degreeOnly ? "\(rounded)°" : "\(rounded)\(unit.suffix)"
+        // Floor in °C keeps integer display strictly aligned with >= K°C Step-Ladder
+        // and < K°C Safety thresholds (e.g. 49.7°C shows 49°C while < 50°C Standby).
+        let displayInt: Int
+        if unit == .fahrenheit {
+            displayInt = Int((celsius * 9 / 5 + 32).rounded())
+        } else {
+            displayInt = Int(floor(celsius))
+        }
+        return degreeOnly ? "\(displayInt)°" : "\(displayInt)\(unit.suffix)"
     }
 
     static func formatTemp(_ celsius: Int?,

@@ -9,7 +9,7 @@ enum AppMode: String, CaseIterable {
     case auto
     /// The user's manual cooling setting is held until changed.
     case manual
-    /// Immediate 100% boost with 15-minute auto-decay back to auto.
+    /// Immediate continuous 100% boost (protected by the < 36°C Safety Governor).
     case turbo
 
     /// Decodes a persisted value, defaulting to `.auto`.
@@ -46,11 +46,11 @@ enum ThermalState: String {
     }
 
     /// The lowest cooling tier the autopilot may settle at in this state.
-    var tierFloor: Int {
+    var tierFloor: CoolingTier {
         switch self {
-        case .nominal, .fair: return 0
-        case .serious:        return 3
-        case .critical:       return 4
+        case .nominal, .fair: return .standby
+        case .serious:        return .tier2_med
+        case .critical:       return .tier4_turbo
         }
     }
 }

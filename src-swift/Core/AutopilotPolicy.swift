@@ -177,7 +177,7 @@ final class AutopilotPolicy {
         self.hysteresisC = max(0.0, celsius)
     }
 
-    func resetStandby(isStandby: Bool = false) {
+    func resetStandby(isStandby: Bool = true) {
         self.isStandby = isStandby
         self.currentTier = isStandby ? .standby : .tier1_low
         self.pendingTier = nil
@@ -292,10 +292,9 @@ final class AutopilotPolicy {
         // Determine Candidate Tier
         var candidate = candidateTier(for: dieC, current: currentTier)
 
-        // Enforce macOS thermal pressure floors:
-        // .serious forces at least Tier 2 (Balanced, 60% fan)
-        if thermalState == .serious && candidate < .tier2_med {
-            candidate = .tier2_med
+        // Enforce macOS thermal pressure floors (.serious -> Tier 2, .critical handled above)
+        if candidate < thermalState.tierFloor {
+            candidate = thermalState.tierFloor
         }
 
         if candidate > currentTier {
@@ -339,7 +338,7 @@ final class AutopilotPolicy {
             isStandby = (currentTier == .standby)
         }
 
-        let tempStr = String(format: "%.0f°C", dieC)
+        let tempStr = String(format: "%.1f°C", dieC)
         let tierObj = Tier(mode: currentTier.mode,
                            fanPercent: currentTier.fanPercent,
                            label: currentTier.label,

@@ -255,18 +255,25 @@ final class CoolerPanelView: PanelRowView {
 
     private func cleanDeviceName(_ raw: String?) -> String {
         guard let raw else { return "Cooler Inteligente" }
-        // Format shouting device names to title case
+        // Format shouting device names to concise title case while preserving model & wattage
         if raw.contains("REDMAGIC") || raw.contains("RM ") {
+            if raw.contains("6 Pro+") || raw.contains("6pro+") { return "REDMAGIC 6 Pro+ (40W)" }
             if raw.contains("5") { return "REDMAGIC 5 Pro (36W)" }
             if raw.contains("6") { return "REDMAGIC 6 Pro (36W)" }
-            if raw.contains("8") { return "REDMAGIC Cryo 8 Pro" }
-            if raw.contains("4") { return "REDMAGIC 4 Pro" }
+            if raw.contains("8") { return "REDMAGIC Cryo 8 Pro (36W)" }
+            if raw.contains("4") { return "REDMAGIC 4 Pro (27W)" }
             return "REDMAGIC Cooler"
         }
         if raw.contains("Black Shark") || raw.contains("BS ") {
+            if raw.contains("5") { return "Black Shark 5 Pro (35W)" }
+            if raw.contains("4") { return "Black Shark 4 Pro (27W)" }
             return "Black Shark MagCooler"
         }
-        if raw.contains("Flydigi") { return "Flydigi Cooler" }
+        if raw.contains("Flydigi") {
+            if raw.contains("B8X") { return "Flydigi B8X (30W)" }
+            if raw.contains("B7X") { return "Flydigi B7X (27W)" }
+            return "Flydigi Cooler"
+        }
         return raw
     }
 
