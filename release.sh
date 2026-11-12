@@ -36,8 +36,8 @@ if [[ -f .env ]]; then
     [[ -n "$NOTARY_FROM_ENV" ]] && NOTARY_KEYCHAIN_PROFILE="$NOTARY_FROM_ENV"
 fi
 
-APP="RedMagic Cooler.app"
-VOLUME="RedMagic Cooler"
+APP="Smart Cooler Control.app"
+VOLUME="Smart Cooler Control"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
@@ -47,8 +47,8 @@ trap 'rm -rf "$STAGE"' EXIT
 # Read the version *after* building, or the DMG would be named for whatever
 # stale bundle was lying around from a previous build.
 VERSION="${1:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-    "$APP/Contents/Info.plist" 2>/dev/null || echo dev)}"
-DMG="dist/RedMagic-Cooler-${VERSION}.dmg"
+    "/Applications/$APP/Contents/Info.plist" 2>/dev/null || echo dev)}"
+DMG="dist/Smart-Cooler-Control-${VERSION}.dmg"
 
 # ── 2. Sign ───────────────────────────────────────────────────────────────────
 # The hardened runtime is required for notarization. It's harmless without it.
