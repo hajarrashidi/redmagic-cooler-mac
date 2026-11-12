@@ -133,6 +133,7 @@ final class AutopilotPolicy {
     private var lastTierChangeTime: TimeInterval = 0
     private var lastEvaluatedTempC: Double? = nil
     private var lastEvaluatedTime: TimeInterval = 0
+    private var pendingWakeStartTime: TimeInterval = 0
 
     // Configuration / Compatibility
     private(set) var engageC: Double = Config.Autopilot.tier1TriggerC
@@ -182,6 +183,7 @@ final class AutopilotPolicy {
         self.currentTier = isStandby ? .standby : .tier1_low
         self.pendingTier = nil
         self.pendingTierStartTime = 0
+        self.pendingWakeStartTime = 0
     }
 
     func setTier(_ tier: CoolingTier) {
@@ -189,6 +191,7 @@ final class AutopilotPolicy {
         self.isStandby = (tier == .standby)
         self.pendingTier = nil
         self.pendingTierStartTime = 0
+        self.pendingWakeStartTime = 0
     }
 
     // ── Candidate Tier Calculation ───────────────────────────────────────────
@@ -298,44 +301,76 @@ final class AutopilotPolicy {
         }
 
         if candidate > currentTier {
-            // STEP-UP: Immediate execution (no dwell)
+            // Standby -> Tier 1 Anti-Spike Dwell:
+            // Require temperature >= 50.0°C to be confirmed for standbyWakeDwellSeconds (4.0s)
+            // before waking the cooler, rejecting transient 1-second micro-spikes on idle Mac.
+            // Urgent heat (>= 60°C or .serious/.critical) bypasses dwell immediately.
+            let isStandbyToTier1 = (currentTier == .standby && candidate == .tier1_low)
+            let isUrgent = (dieC >= Config.Autopilot.tier2TriggerC || thermalState == .serious || thermalState == .critical)
+
+            if isStandbyToTier1 && !isUrgent {
+                if pendingWakeStartTime == 0 {
+                    pendingWakeStartTime = currentTime
+                }
+                let elapsedWake = currentTime - pendingWakeStartTime
+                if elapsedWake < Config.Autopilot.standbyWakeDwellSeconds {
+                    // Hold Standby while confirming spike
+                    pendingTier = nil
+                    pendingTierStartTime = 0
+                    pendingIsFastDwell = false
+                    isStandby = true
+                    let tempStr = String(format: "%.1f°C", dieC)
+                    let tierObj = Tier(mode: currentTier.mode,
+                                       fanPercent: currentTier.fanPercent,
+                                       label: currentTier.label,
+                                       coolingTier: currentTier)
+                    return Decision(tier: tierObj,
+                                    reason: "Mac \(tempStr) (confirming standby wake \(String(format: "%.0fs", max(0, Config.Autopilot.standbyWakeDwellSeconds - elapsedWake))))")
+                }
+            }
+
+            // STEP-UP: Immediate execution once confirmed or urgent
+            pendingWakeStartTime = 0
             currentTier = candidate
             pendingTier = nil
             pendingTierStartTime = 0
             pendingIsFastDwell = false
             lastTierChangeTime = currentTime
             isStandby = (currentTier == .standby)
-        } else if candidate < currentTier {
-            // STEP-DOWN: Enforce dwell unless rapid cooling bypasses it
-            if isRapidlyCooling {
-                pendingIsFastDwell = true
-            }
-
-            if pendingTier != candidate {
-                pendingTier = candidate
-                pendingTierStartTime = currentTime
+        } else {
+            pendingWakeStartTime = 0
+            if candidate < currentTier {
+                // STEP-DOWN: Enforce dwell unless rapid cooling bypasses it
                 if isRapidlyCooling {
                     pendingIsFastDwell = true
                 }
-            }
 
-            let requiredDwell = pendingIsFastDwell ? Config.Autopilot.fastDwellSeconds : Config.Autopilot.stepDownDwellSeconds
-            let elapsed = currentTime - pendingTierStartTime
-            if elapsed >= requiredDwell {
-                currentTier = candidate
+                if pendingTier != candidate {
+                    pendingTier = candidate
+                    pendingTierStartTime = currentTime
+                    if isRapidlyCooling {
+                        pendingIsFastDwell = true
+                    }
+                }
+
+                let requiredDwell = pendingIsFastDwell ? Config.Autopilot.fastDwellSeconds : Config.Autopilot.stepDownDwellSeconds
+                let elapsed = currentTime - pendingTierStartTime
+                if elapsed >= requiredDwell {
+                    currentTier = candidate
+                    pendingTier = nil
+                    pendingTierStartTime = 0
+                    pendingIsFastDwell = false
+                    lastTierChangeTime = currentTime
+                    isStandby = (currentTier == .standby)
+                }
+                // While dwelling, currentTier is held!
+            } else {
+                // Equal: No change, clear any stale pending step-down
                 pendingTier = nil
                 pendingTierStartTime = 0
                 pendingIsFastDwell = false
-                lastTierChangeTime = currentTime
                 isStandby = (currentTier == .standby)
             }
-            // While dwelling, currentTier is held!
-        } else {
-            // Equal: No change, clear any stale pending step-down
-            pendingTier = nil
-            pendingTierStartTime = 0
-            pendingIsFastDwell = false
-            isStandby = (currentTier == .standby)
         }
 
         let tempStr = String(format: "%.1f°C", dieC)

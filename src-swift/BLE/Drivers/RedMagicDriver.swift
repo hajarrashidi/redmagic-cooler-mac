@@ -79,6 +79,9 @@ final class RedMagicDriver: CoolerDriver {
         if let hallChar {
             peripheral.readValue(for: hallChar)
         }
+        if let lightChar, lightChar.properties.contains(.read) {
+            peripheral.readValue(for: lightChar)
+        }
 
         // Start periodic polling for telemetry & hall sensor (every 2s) to ensure
         // frames arrive even if firmware notification stream idles
@@ -235,6 +238,12 @@ final class RedMagicDriver: CoolerDriver {
                 EventLogger.record("REDMAGIC — hall sensor status changed: attached=\(attached) (raw: \(hex))")
             }
             return .mountAttached(attached)
+        }
+
+        // 5. Light effect readback (0x1013)
+        if uuidStr.contains("1013") {
+            let hexStr = data.map { String(format: "%02X", $0) }.joined(separator: " ")
+            EventLogger.record("REDMAGIC — light readback on 1013 [\(data.count)B]: \(hexStr)")
         }
 
         return .none

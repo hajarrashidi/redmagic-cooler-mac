@@ -29,7 +29,7 @@ The Step-Ladder replaces unpredictable continuous PIDs or legacy single-slider t
 | Stage | Trigger (Engage) | Power & Fan | Release (Disengage) | Primary Use Case |
 |---|---|---|---|---|
 | **Standby** | `< 50.0 °C` | 0% fan / 0W TEC | — | Idle, web browsing, word processing |
-| **Tier 1 (Quiet)** | `≥ 50.0 °C` | 40% fan (`.low`) | `< 42.0 °C` | Light multitasking, video playback |
+| **Tier 1 (Quiet)** | `≥ 50.0 °C` (sustained 4s) | 40% fan (`.low`) | `< 46.0 °C` | Light multitasking, video playback |
 | **Tier 2 (Balanced)**| `≥ 60.0 °C` | 60% fan (`.medium`)| `< 55.0 °C` | Sustained compilation, Xcode builds |
 | **Tier 3 (Boost)** | `≥ 65.0 °C` | 80% fan (`.medium`)| `< 61.0 °C` | Heavy 3D rendering, video export |
 | **Tier 4 (Turbo)** | `≥ 70.0 °C` | 100% fan (`.max`) | `< 66.0 °C` | Peak compute stress, gaming, thermal throttling defense |
@@ -40,12 +40,13 @@ The Step-Ladder replaces unpredictable continuous PIDs or legacy single-slider t
 
 Peltier semiconductors degrade rapidly if cycled on/off repeatedly. Autopilot implements two layers of physical protection:
 
-### Immediate Step-Up
-When temperature spikes due to sudden compute demand (e.g. initiating a build or running local AI models), the engine steps up **immediately without delay**. Multi-tier jumps are permitted (e.g., from Standby straight to Tier 4 Turbo if die temp exceeds 70°C).
+### Step-Up with Standby Anti-Spike Dwell
+- **Standby to Tier 1 Filter:** To reject 1-second transient micro-spikes (e.g. momentarily opening a browser tab on a cold/idle MacBook Air), `≥ 50.0 °C` must be confirmed across a 4-second dwell before the physical cooler powers on.
+- **Urgent Heat Immediate Step-Up:** If temperature reaches `≥ 60.0 °C` (Tier 2+) or macOS thermal pressure reaches `.serious` or `.critical`, the engine steps up **immediately (0s dwell)** without delay. Multi-tier jumps are permitted (e.g., from Standby straight to Tier 4 Turbo if die temp exceeds 70°C).
 
 ### Asymmetric Hold & Dwell Buffer
 To drop a tier, two criteria must be satisfied:
-1. **Asymmetric Release Point:** The temperature must drop completely below the tier's release threshold (e.g. Tier 1 requires `< 42°C`, providing an 8°C anti-hunting band).
+1. **Asymmetric Release Point:** The temperature must drop completely below the tier's release threshold (e.g. Tier 1 disengages at `< 46°C`, allowing an idle Mac running at 43°C–45°C to cleanly release back to Standby).
 2. **20-Second Cooldown Dwell:** The lower temperature must remain stable for at least 20 continuous seconds before lowering fan speed.
 
 ### Thermal Velocity Bypass

@@ -130,13 +130,15 @@ enum Config {
         static let tier4TriggerC: Double = 70.0 // Full Turbo limit (100% fan)
 
         /// Asymmetric Anti-Chattering Release Thresholds (°C)
-        static let tier1ReleaseC: Double = 42.0 // 8°C wide buffer below 50°C
+        static let tier1ReleaseC: Double = 46.0 // 4°C buffer below 50°C (allows fanless idle Mac at 43-45°C to release to Standby)
         static let tier2ReleaseC: Double = 55.0 // 5°C buffer below 60°C
         static let tier3ReleaseC: Double = 61.0 // 4°C buffer below 65°C
         static let tier4ReleaseC: Double = 66.0 // 4°C buffer below 70°C
 
         /// Step-down anti-chattering dwell time (seconds)
         static let stepDownDwellSeconds: TimeInterval = 20.0
+        /// Standby-to-Tier 1 wake confirmation dwell (seconds) to reject transient 1-second micro-spikes
+        static let standbyWakeDwellSeconds: TimeInterval = 4.0
         /// Thermal velocity drop threshold (°C/s): if die drops faster than this, compress dwell to 3s
         static let velocityBypassRateCPerSec: Double = -1.0
         static let fastDwellSeconds: TimeInterval = 3.0

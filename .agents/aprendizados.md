@@ -96,5 +96,20 @@
   4. Todos os timers de scan e watchdog registrados explicitamente em `RunLoop.Mode.common`.
   5. `syncHardwareToActiveMode(force: true)` unificando `onConnected()`, `macDidWake()` e `reapplyActiveMode()`, controles `Light` visíveis sempre que `connected`, piso inteiro `floor` em `SystemInfo.formatTemp`, `UIStyle.heatColor` unificado ao `MacThermalProfile` e fallback limpo para `openReleasePage()` quando `dmgURL == nil`.
 
+## [AL-COOLER-009] Calibração de Liberação de Standby do Mac Air, Filtro Anti-Spike de Standby (4s) e Desacoplamento de Colisão GATT do LED RGB (0x1013)
+* **Erro:**
+  1. O cooler ficava preso em `Tier 1 (40%)` indefinidamente em repouso mesmo com o Mac estável a 46°C–49°C após qualquer pico térmico anterior.
+  2. Micro-picos transitórios de 1 segundo (ex: 50.1°C ao abrir uma aba de navegador) ativavam imediatamente o cooler de Standby para Tier 1.
+  3. LED físico do REDMAGIC 5 Pro acendia no vermelho padrão de boot ao ligar o cooler, mesmo com o software comandando azul `RGB(0, 100, 255)`.
+* **Causa-Raiz:**
+  1. `tier1ReleaseC` estava configurado em `42.0°C` (histerese excessivamente ampla de 8°C). Em Macs de refrigeração passiva (MacBook Air), a temperatura die estabiliza naturalmente entre 43°C e 47°C em repouso ambiente, tornando 42.0°C inalcançável e aprisionando o cooler ligado para sempre.
+  2. Ausência de filtro temporal de confirmação no gatilho Standby -> Tier 1 (0s dwell no step-up imediato para qualquer amostra transitória $\ge 50^\circ\text{C}$).
+  3. `scheduleLedReassertion()` invalidava o cache do LED (`lastWrittenColor = nil`) dentro de `runAutopilot()`. Logo em seguida em `tick()`, `led.updateAutoColor()` via `lastWrittenColor == nil` e disparava `0x1013` concorrentemente no mesmo milissegundo em que `0x1011` era escrito. O MCU do 5 Pro recebia `0x1011` (power ON), reiniciava o anel RGB para o vermelho padrão de fábrica e descartava a escrita simultânea de `0x1013`. Além disso, faltava readback em `0x1013` para inspecionar os bytes gravados no hardware.
+* **Solução Permanente:**
+  1. Ajustado `tier1ReleaseC = 46.0°C` em `Config.Autopilot` (faixa de histerese limpa de 4°C: liga a 50°C, desliga abaixo de 46°C, liberando perfeitamente o MacBook Air em idle).
+  2. Adicionado `standbyWakeDwellSeconds = 4.0s` no gatilho Standby -> Tier 1: temperaturas de 50°C–59.9°C devem se sustentar por 4 segundos antes de ligar o hardware. Cargas quentes urgentes ($\ge 60^\circ\text{C}$ ou `thermalState >= .serious`) continuam ativando imediatamente (0s dwell).
+  3. Desacoplamento temporal estrito do LED: supressão de `updateAutoColor` em `tick()` enquanto `pendingLedWorkItem != nil`, atraso de re-afirmação aumentado para `0.45s` (após os `0.20s` do PWM de ventoinha) com limpeza de `pendingLedWorkItem = nil` na conclusão, e leitura/log de retorno em `0x1013` no `RedMagicDriver` e `CoolerBLEManager`.
+
+
 
 

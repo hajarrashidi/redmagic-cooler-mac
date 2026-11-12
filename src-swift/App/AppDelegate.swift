@@ -276,7 +276,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runAutopilot()
             }
         }
-        led.updateAutoColor(dieC: thermal.dieTemperatureC, autopilot: autopilot)
+        if pendingLedWorkItem == nil {
+            led.updateAutoColor(dieC: thermal.dieTemperatureC, autopilot: autopilot)
+        }
 
         // The cooler occasionally drops a write, so re-assert periodically —
         // cheap insurance against the UI and the hardware silently diverging.
@@ -417,12 +419,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Invalidates LED cache and schedules a clean re-assertion after BLE mode/fan writes settle.
     /// This cures hardware firmware resets that revert the LED to default red on mode switches.
-    func scheduleLedReassertion(delay: TimeInterval = 0.35) {
+    func scheduleLedReassertion(delay: TimeInterval = 0.45) {
         pendingLedWorkItem?.cancel()
         led.invalidateCache()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.led.reapply(dieC: self.thermal.dieTemperatureC, autopilot: self.autopilot)
+            self.pendingLedWorkItem = nil
         }
         pendingLedWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)

@@ -87,32 +87,37 @@ func runTests() {
            "Expected Standby at 45°C, got \(dec.tier.label)")
     print("  ✅ Step-Ladder Idle: 45°C (< 50°C) -> Standby (0% fan / OFF)")
 
-    // B. Trigger Tier 1: Die reaches 50.0°C (>= 50°C) -> Immediate Step-Up to Tier 1 (40% fan / .low)
+    // B. Trigger Tier 1: Die reaches 50.0°C (>= 50°C)
+    // Anti-spike dwell arms at t=1001 (holds Standby to reject 1-second transient spikes)
     dec = engine.evaluate(thermalState: .nominal, dieC: 50.0, now: 1001)
+    assert(dec.tier.coolingTier == .standby && dec.tier.fanPercent == 0,
+           "Expected Standby confirming wake at t=1001 (0s < 4s), got \(dec.tier.label)")
+    // After 5s sustained >= 50.0°C (elapsed 5s >= 4s dwell), steps up to Tier 1 (40% fan / .low)
+    dec = engine.evaluate(thermalState: .nominal, dieC: 50.0, now: 1006)
     assert(dec.tier.coolingTier == .tier1_low && dec.tier.fanPercent == 40 && dec.tier.mode == .low,
-           "Expected Tier 1 at 50°C, got \(dec.tier.label)")
-    print("  ✅ Step-Ladder Tier 1 Trigger: 50.0°C -> Immediate Step-Up to Tier 1 (40% fan / Low)")
+           "Expected Tier 1 at 50°C after dwell, got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Tier 1 Trigger: 50.0°C -> Confirmed after 4s dwell -> Step-Up to Tier 1 (40% fan / Low)")
 
-    // C. Asymmetric Hysteresis Hold Tier 1: Die drops to 46°C (>= 42°C release threshold) -> STILL HOLDS Tier 1!
+    // C. Asymmetric Hysteresis Hold Tier 1: Die drops to 47°C (>= 46°C release threshold) -> STILL HOLDS Tier 1!
     // No chattering loop!
-    dec = engine.evaluate(thermalState: .nominal, dieC: 46.0, now: 1002)
+    dec = engine.evaluate(thermalState: .nominal, dieC: 47.0, now: 1007)
     assert(dec.tier.coolingTier == .tier1_low && dec.tier.fanPercent == 40,
-           "Expected Tier 1 hold at 46°C (>= 42°C release), got \(dec.tier.label)")
-    print("  ✅ Step-Ladder Tier 1 Asymmetric Hold: 46°C (>= 42°C release) -> Faithfully holds 40% fan")
+           "Expected Tier 1 hold at 47°C (>= 46°C release), got \(dec.tier.label)")
+    print("  ✅ Step-Ladder Tier 1 Asymmetric Hold: 47°C (>= 46°C release) -> Faithfully holds 40% fan")
 
-    // D. Normal Step-Down Dwell Timing: Die gently cools from 42.1°C to 41.8°C (dT/dt = -0.3°C/s > -1.0°C/s)
-    _ = engine.evaluate(thermalState: .nominal, dieC: 42.1, now: 1003)
-    dec = engine.evaluate(thermalState: .nominal, dieC: 41.8, now: 1004) // rate = -0.3°C/s -> normal 20s dwell armed!
-    assert(dec.tier.coolingTier == .tier1_low, "Expected Tier 1 to hold during dwell at t=1004")
-    print("  ✅ Step-Ladder Step-Down Dwell Hold: 41.8°C at t=1004s -> Holds Tier 1 pending 20s dwell")
+    // D. Normal Step-Down Dwell Timing: Die gently cools from 46.5°C to 45.8°C (< 46.0°C release, dT/dt = -0.7°C/s > -1.0°C/s)
+    _ = engine.evaluate(thermalState: .nominal, dieC: 46.5, now: 1008)
+    dec = engine.evaluate(thermalState: .nominal, dieC: 45.8, now: 1009) // rate = -0.7°C/s -> normal 20s dwell armed!
+    assert(dec.tier.coolingTier == .tier1_low, "Expected Tier 1 to hold during dwell at t=1009")
+    print("  ✅ Step-Ladder Step-Down Dwell Hold: 45.8°C at t=1009s -> Holds Tier 1 pending 20s dwell")
 
-    // At t = 1018 (elapsed = 14s < 20s): STILL holds Tier 1!
-    dec = engine.evaluate(thermalState: .nominal, dieC: 41.8, now: 1018)
-    assert(dec.tier.coolingTier == .tier1_low, "Expected Tier 1 to hold at t=1018s (14s < 20s)")
-    print("  ✅ Step-Ladder Dwell in-flight: 14s elapsed (< 20s) -> Fan stays smooth, no premature drop")
+    // At t = 1019 (elapsed = 10s < 20s): STILL holds Tier 1!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 45.8, now: 1019)
+    assert(dec.tier.coolingTier == .tier1_low, "Expected Tier 1 to hold at t=1019s (10s < 20s)")
+    print("  ✅ Step-Ladder Dwell in-flight: 10s elapsed (< 20s) -> Fan stays smooth, no premature drop")
 
-    // At t = 1025 (elapsed = 21s >= 20s): Dwell satisfied -> Transitions safely to Standby!
-    dec = engine.evaluate(thermalState: .nominal, dieC: 41.8, now: 1025)
+    // At t = 1030 (elapsed = 21s >= 20s): Dwell satisfied -> Transitions safely to Standby!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 45.8, now: 1030)
     assert(dec.tier.coolingTier == .standby && dec.tier.fanPercent == 0, "Expected Standby after 20s dwell")
     print("  ✅ Step-Ladder Dwell Complete: 21s elapsed (>= 20s) -> Smoothly steps down to Standby (0% fan)")
 
@@ -145,14 +150,14 @@ func runTests() {
     print("  ✅ Step-Ladder Tier 3 -> Tier 2: 57.0°C (< 61°C) -> Settles into Tier 2 (60% fan)")
 
     // I. Thermal Velocity Bypass (dT/dt <= -1.0°C/s):
-    // Die rapidly plunges from 57°C to 45°C in 2 seconds (rate = -6.0°C/s)
+    // Die rapidly plunges from 57°C to 48°C in 2 seconds (rate = -4.5°C/s)
     // Normal dwell of 20s is bypassed; fast dwell of 3s allows immediate step-down to prevent chassis overcooling!
     _ = engine.evaluate(thermalState: .nominal, dieC: 57.0, now: 1100)
-    _ = engine.evaluate(thermalState: .nominal, dieC: 45.0, now: 1102) // Rapid drop detected!
-    dec = engine.evaluate(thermalState: .nominal, dieC: 45.0, now: 1106) // 4s elapsed >= 3s fast dwell
+    _ = engine.evaluate(thermalState: .nominal, dieC: 48.0, now: 1102) // Rapid drop detected!
+    dec = engine.evaluate(thermalState: .nominal, dieC: 48.0, now: 1106) // 4s elapsed >= 3s fast dwell
     assert(dec.tier.coolingTier == .tier1_low && dec.tier.fanPercent == 40,
-           "Expected fast dwell bypass down to Tier 1 at 45°C, got \(dec.tier.label)")
-    print("  ✅ Thermal Velocity Bypass: Rapid cool (-6°C/s) -> Bypasses 20s dwell, steps down in 3s")
+           "Expected fast dwell bypass down to Tier 1 at 48°C, got \(dec.tier.label)")
+    print("  ✅ Thermal Velocity Bypass: Rapid cool (-4.5°C/s) -> Bypasses 20s dwell, steps down to Tier 1 in 3s")
 
     // 6. Universal Condensation Safety Governor Tests (< 36°C Cutoff & >= 38°C Re-arm)
     print("\n🛡️ Testing Universal Condensation Safety Governor (< 36°C Cutoff & >= 38°C Re-Arm)...")
