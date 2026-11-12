@@ -161,7 +161,11 @@ final class RedMagicDriver: CoolerDriver {
 
     func setLight(effect: UInt8, color: RGB, peripheral: CBPeripheral) {
         guard let lightChar else { return }
-        let payload = [effect] + color.bytes
+        // REDMAGIC Cooler 5 Pro hardware uses BGR wire byte order [effect, B, G, R].
+        // Sending standard RGB [R, G, B] causes cold temperatures (Blue: R=0, G=100, B=255)
+        // to map byte 3 (Red channel) to 255, displaying physically bright Red on hardware!
+        let colorBytes: [UInt8] = is5Pro ? [color.b, color.g, color.r] : [color.r, color.g, color.b]
+        let payload = [effect] + colorBytes
         let hexStr = payload.map { String(format: "%02X", $0) }.joined(separator: " ")
         EventLogger.record("REDMAGIC — setLight effect \(effect), RGB(\(color.r),\(color.g),\(color.b)) -> bytes: [\(hexStr)]")
         peripheral.writeValue(Data(payload), for: lightChar, type: .withResponse)

@@ -17,7 +17,7 @@ cd "$(dirname "$0")"
 APP="Smart Cooler Control.app"
 BUNDLE_ID="com.smartcooler.mac"
 VERSION="3.1"
-BUILD="19"
+BUILD="20"
 
 RUN_AFTER_BUILD=false
 WITH_PROBES=false
