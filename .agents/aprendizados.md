@@ -110,6 +110,20 @@
   2. Adicionado `standbyWakeDwellSeconds = 4.0s` no gatilho Standby -> Tier 1: temperaturas de 50°C–59.9°C devem se sustentar por 4 segundos antes de ligar o hardware. Cargas quentes urgentes ($\ge 60^\circ\text{C}$ ou `thermalState >= .serious`) continuam ativando imediatamente (0s dwell).
   3. Desacoplamento temporal estrito do LED: supressão de `updateAutoColor` em `tick()` enquanto `pendingLedWorkItem != nil`, atraso de re-afirmação aumentado para `0.45s` (após os `0.20s` do PWM de ventoinha) com limpeza de `pendingLedWorkItem = nil` na conclusão, e leitura/log de retorno em `0x1013` no `RedMagicDriver` e `CoolerBLEManager`.
 
+## [AL-COOLER-010] Protocolo BGR na Característica 0x1013 do REDMAGIC 5 Pro e Remoção de Telemetria Fictícia
+* **Erro:**
+  1. O LED físico do cooler REDMAGIC 5 Pro permanecia aceso em vermelho vivo no modo automático mesmo com o Mac frio (38°C–50°C), onde a cor calculada pelo Autopilot é Azul Puro `RGB(0, 100, 255)`.
+  2. Questionamento sobre colisão GATT ou necessidade de re-enviar comandos de cor com mais frequência e se isso afetaria a rotação da ventoinha.
+  3. Screenshots antigos continham uma linha de telemetria mockada (`❄️ 10°C · 🔥 38°C · ⚡️ 6200 RPM`) inexistente no hardware real.
+* **Causa-Raiz:**
+  1. Na característica GATT `0x1013`, o microcontrolador de LED do REDMAGIC 5 Pro mapeia os canais de cor na ordem BGR (`[effect, Blue, Green, Red]`). Ao enviar em RGB direto `[04, R=00, G=64, B=FF]`, o byte 3 (`0xFF` = 255) caía no canal Vermelho físico e o byte 1 (Azul) ficava em 0, acendendo o LED em vermelho a 100% de brilho.
+  2. A característica de ventoinha `0x1012` é independente da característica de luz `0x1013`. O motor mantém seu PWM ininterrupto. O log já confirmava entregas a cada 30s (`write confirmed`), logo o problema não era falta de repetição nem colisão, e sim os bytes trocados.
+  3. O REDMAGIC 5 Pro tem `hasTelemetryStream: false` (não expõe RPM nem sonda térmica interna via BLE).
+* **Solução Permanente:**
+  1. Ajustado `RedMagicDriver.swift` para enviar bytes em ordem BGR `[effect, color.b, color.g, color.r]` no modelo 5 Pro. Azul `RGB(0, 100, 255)` passa a enviar `[04, FF, 64, 00]`, ativando o canal azul a 100% no hardware.
+  2. Telemetria mockada removida definitivamente da interface e dos screenshots oficiais no commit `ea5f4fa4`.
+
+
 
 
 
